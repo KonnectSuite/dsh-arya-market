@@ -56,6 +56,21 @@ export function validateAryaRegistry(registry: Registry): Registry {
   return registry
 }
 
+/** Combine community browsing with validated Arya releases; Arya owns duplicate names.
+ * @param community - Third-party catalog without Arya release authority.
+ * @param arya - Catalog whose packaged releases must pass Arya validation.
+ * @returns Community entries and authoritative Arya packages with combined categories.
+ */
+export function mergeMarketRegistries(community: Registry, arya: Registry): Registry {
+  validateAryaRegistry(arya)
+  const aryaNames = new Set(arya.plugins.map(plugin => plugin.name))
+  const plugins = [
+    ...community.plugins.filter(plugin => !aryaNames.has(plugin.name)).map(plugin => ({ ...plugin, arya: false, releases: undefined })),
+    ...arya.plugins,
+  ]
+  return { updated: [community.updated, arya.updated].sort().at(-1) ?? '', count: plugins.length, categories: { ...community.categories, ...arya.categories }, plugins }
+}
+
 /** Download limits resolved from the host's validated market configuration. */
 export interface AryaDownloadLimits {
   maxBytes: number

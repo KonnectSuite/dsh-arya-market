@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { load as loadYaml } from 'js-yaml'
-import { AryaReleaseCancelled, aryaReleaseTarget, bundledAryaVersion, stageAryaRelease, resolveAryaDownloadLimits, validateAryaRegistry, validateCatalogUrl } from './arya.ts'
+import { AryaReleaseCancelled, aryaReleaseTarget, bundledAryaVersion, stageAryaRelease, resolveAryaDownloadLimits, mergeMarketRegistries, validateCatalogUrl } from './arya.ts'
 import { isAryaReleaseSpec } from './arya-release-spec.ts'
 import type { RegistryPlugin } from './registry.ts'
 import { forgetCatalog, loadRegistry as loadCommunityRegistry, pluginCategories } from './registry.ts'
@@ -383,8 +383,9 @@ export function mountMarketRoutes(
   const releaseLimits = resolveAryaDownloadLimits(config)
   const loadRegistry = async () => {
     const configuredCatalog = process.env.DSHM_REGISTRY_URL === undefined ? config.catalogUrl : undefined
-    const registry = await loadCommunityRegistry(undefined, configuredCatalog)
-    return configuredCatalog === undefined ? registry : validateAryaRegistry(registry)
+    if (configuredCatalog === undefined) return loadCommunityRegistry()
+    const [community, arya] = await Promise.all([loadCommunityRegistry(), loadCommunityRegistry(undefined, configuredCatalog)])
+    return mergeMarketRegistries(community, arya)
   }
   let disposed = false
   // An ordinary profile must resolve under DSH_HOME by the same rules as the
@@ -3639,6 +3640,7 @@ export function mountMarketRoutes(
             const registry = await loadRegistry()
             const installed = readInstalled(config.profile, activeProfileDir)
             for (const plugin of registry.plugins) {
+              if (plugin.arya !== true) continue
               const spec = installed[plugin.name]
               if (spec === undefined) continue
               const version = readInstalledVersion(config.profile, plugin.name, activeProfileDir)
@@ -3959,7 +3961,7 @@ sendJson(response, 200, { updates })
             let selectedReleaseVersion: string | null = null
             let selectedPlugin: RegistryPlugin | undefined
             if (config.catalogUrl !== undefined) {
-              const entry = (await loadRegistry()).plugins.find(plugin => plugin.name === name)
+              const entry = (await loadRegistry()).plugins.find(plugin => plugin.arya === true && plugin.name === name)
               if (entry !== undefined) {
                 selectedPlugin = entry
                 const managedRelease = isAryaReleaseSpec(entry, spec)

@@ -41,3 +41,7 @@ Run `npm run typecheck`, `npm run build`, and the focused Arya host, catalog, an
 ```sh
 npx vitest run tests/arya.spec.ts tests/arya-routes.spec.ts tests/client/arya-versions.client.spec.tsx
 ```
+
+## Combined catalog
+
+The All plugins view combines the community catalog with validated Arya releases. Arya entries win duplicate package names; community entries retain their normal install and update paths. Community records do not acquire Arya release authority. Both sets of categories are available.

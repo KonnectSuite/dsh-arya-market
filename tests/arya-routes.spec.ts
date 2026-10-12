@@ -13,7 +13,7 @@ const versions = ['0.2.0', '0.1.0']
 const target = (version: string) => `https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v${version}/dsh-example-${version}.tgz`
 vi.mock('../src/registry.ts', async importOriginal => {
   const original = await importOriginal<typeof import('../src/registry.ts')>()
-  return { ...original, loadRegistry: async () => ({ updated: '', count: 1, categories: {}, plugins: [{ name: 'dsh-example', owner: 'KonnectSuite', url: 'https://github.com/KonnectSuite/dsh-example', arya: true, category: 'arya', description: {}, install: '', added: '', releases: versions.map(version => ({ version, sha256: '0'.repeat(64), tarball: target(version) })) }] }) }
+  return { ...original, loadRegistry: async (_region?: unknown, catalogUrl?: string) => catalogUrl === undefined ? ({ updated: '', count: 1, categories: { tools: { en: 'Tools' } }, plugins: [{ name: 'community-example', owner: 'Community', url: 'https://github.com/example/community-example', category: 'tools', description: {}, install: 'npm:community-example', npm: 'community-example', added: '' }] }) : ({ updated: '', count: 1, categories: {}, plugins: [{ name: 'dsh-example', owner: 'KonnectSuite', url: 'https://github.com/KonnectSuite/dsh-example', arya: true, category: 'arya', description: {}, install: '', added: '', releases: versions.map(version => ({ version, sha256: '0'.repeat(64), tarball: target(version) })) }] }) }
 })
 vi.mock('../src/arya.ts', async importOriginal => {
   const original = await importOriginal<typeof import('../src/arya.ts')>()
@@ -84,4 +84,13 @@ it('cancels release preparation before any package command starts', async () => 
   expect(cancelled.status).toBe(200)
   expect(await (await updating).json()).toMatchObject({ ok: false, cancelled: true })
   expect(runPlugin).not.toHaveBeenCalled()
+})
+
+it('lists community plugins alongside Arya releases without granting release controls', async () => {
+  const response = await fetch(`${base}/dsh-market/registry`)
+  expect(response.status).toBe(200)
+  const body = await response.json()
+  expect(body.registry.count).toBe(2)
+  expect(body.registry.plugins.map((p: { name: string }) => p.name)).toEqual(['community-example', 'dsh-example'])
+  expect((await fetch(`${base}/dsh-market/arya-versions?name=community-example`)).status).toBe(404)
 })

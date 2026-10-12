@@ -1,7 +1,7 @@
 {
   "name": "dshmarket",
   "description": "Arya Plugin Market: packaged releases, updates, and version restoration.",
-  "version": "1.66.14-arya.0.4",
+  "version": "1.66.14-arya.0.6",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

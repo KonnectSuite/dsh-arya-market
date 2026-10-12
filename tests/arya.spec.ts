@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { aryaReleaseTarget, bundledAryaVersion, validateAryaRegistry, validateCatalogUrl } from '../src/arya.ts'
+import { aryaReleaseTarget, bundledAryaVersion, validateAryaRegistry, validateCatalogUrl, mergeMarketRegistries } from '../src/arya.ts'
 import type { Registry } from '../src/registry.ts'
 
 function catalog(): Registry {
@@ -53,4 +53,35 @@ describe('Arya release catalog', () => {
     writeFileSync(join(path, 'package.json'), JSON.stringify({ name: 'other', version: '0.1.0' }))
     expect(bundledAryaVersion(directory, 'dsh-example')).toBeNull()
   })
+})
+
+describe('Combined Arya and community market', () => {
+  it('keeps community packages and categories while Arya owns duplicate package releases', () => {
+    const arya = catalog(); arya.categories = { arya: { en: 'Arya' } }
+    const community: Registry = { updated: '2026-10-10', count: 2, categories: { tools: { en: 'Tools' } }, plugins: [
+      { ...arya.plugins[0], owner: 'Community', arya: false, releases: undefined },
+      { ...arya.plugins[0], name: 'community-example', owner: 'Community', arya: false, releases: undefined },
+    ] }
+    const merged = mergeMarketRegistries(community, arya)
+    expect(merged.count).toBe(2)
+    expect(merged.plugins.find(p => p.name === 'dsh-example')).toEqual(arya.plugins[0])
+    expect(merged.plugins.find(p => p.name === 'community-example')?.arya).toBe(false)
+    expect(merged.categories).toEqual({ tools: { en: 'Tools' }, arya: { en: 'Arya' } })
+    expect(community.plugins[0].owner).toBe('Community')
+  })
+  it('does not grant Arya release authority to community records and rejects invalid Arya releases', () => {
+    const community = catalog(); community.plugins[0].name = 'community-example'
+    const entry = mergeMarketRegistries(community, catalog()).plugins.find(p => p.name === 'community-example')!
+    expect(entry.arya).toBe(false); expect(entry.releases).toBeUndefined()
+    const invalid = catalog(); invalid.plugins[0].releases![0].sha256 = 'invalid'
+    expect(() => mergeMarketRegistries(community, invalid)).toThrow('checksum')
+  })
+})
+
+it('preserves community entries from different publishers that share a display name', () => {
+  const community = catalog(); community.plugins = [
+    { ...community.plugins[0], name: 'shared-name', owner: 'first' },
+    { ...community.plugins[0], name: 'shared-name', owner: 'second' },
+  ]
+  expect(mergeMarketRegistries(community, catalog()).plugins.filter(p => p.name === 'shared-name')).toHaveLength(2)
 })
