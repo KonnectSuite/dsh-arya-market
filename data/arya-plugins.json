@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-12T13:03:40.483Z",
+  "updated": "2026-10-12T15:07:04.580Z",
   "count": 8,
   "categories": {
     "arya": {
@@ -64,6 +64,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.5.7",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.7/dsh-local-llm-0.5.7.tgz",
+          "sha256": "3ebac7eb33ecbd7c5ffe56fe9150e46c8b5aa8083daa43bdd540cf4c8e55e518"
+        },
+        {
           "version": "0.5.6",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.6/dsh-local-llm-0.5.6.tgz",
           "sha256": "a19620e9de9aacb3da2c4438567e87ee2163e9a7bb9aca20f9cc89139e2873f8"
@@ -79,8 +84,8 @@
           "sha256": "627f04f95b23f38f3c373416bacb8192b5101916447ad6596e73f2a1da3f7be3"
         }
       ],
-      "version": "0.5.6",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.6/dsh-local-llm-0.5.6.tgz"
+      "version": "0.5.7",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.7/dsh-local-llm-0.5.7.tgz"
     },
     {
       "name": "dsh-strata-agent",
