@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-12T15:07:04.580Z",
+  "updated": "2026-10-12T19:12:44.452Z",
   "count": 8,
   "categories": {
     "arya": {
@@ -64,6 +64,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.5.8",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.8/dsh-local-llm-0.5.8.tgz",
+          "sha256": "2877791e9205ae3852639b99b8a286b0aa804d4c4d9d7516fe31e9d8fb845dd9"
+        },
+        {
           "version": "0.5.7",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.7/dsh-local-llm-0.5.7.tgz",
           "sha256": "3ebac7eb33ecbd7c5ffe56fe9150e46c8b5aa8083daa43bdd540cf4c8e55e518"
@@ -84,8 +89,8 @@
           "sha256": "627f04f95b23f38f3c373416bacb8192b5101916447ad6596e73f2a1da3f7be3"
         }
       ],
-      "version": "0.5.7",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.7/dsh-local-llm-0.5.7.tgz"
+      "version": "0.5.8",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.5.8/dsh-local-llm-0.5.8.tgz"
     },
     {
       "name": "dsh-strata-agent",
@@ -100,6 +105,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.2.6",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.6/dsh-strata-agent-0.2.6.tgz",
+          "sha256": "f81f0ef632082134522f838f1e806961d031a410a3e86ca5651b8a7682751a49"
+        },
         {
           "version": "0.2.5",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.5/dsh-strata-agent-0.2.5.tgz",
@@ -116,8 +126,8 @@
           "sha256": "74923ef6303ce3a280172f7a2a5beceee44290de8993c98082103915096cfddc"
         }
       ],
-      "version": "0.2.5",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.5/dsh-strata-agent-0.2.5.tgz"
+      "version": "0.2.6",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.6/dsh-strata-agent-0.2.6.tgz"
     },
     {
       "name": "dsh-agent-learning",
