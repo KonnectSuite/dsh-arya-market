@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-16T15:53:02.910Z",
-  "count": 8,
+  "updated": "2026-10-16T23:27:53.585Z",
+  "count": 9,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -21,6 +21,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.2.6",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-native-window-v0.2.6/dsh-native-window-0.2.6.tgz",
+          "sha256": "de45370cc890fe0994cebed6cfe9d72dff7dccc688c7f9b666e6a8c60cff0808"
+        },
         {
           "version": "0.2.5",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-native-window-v0.2.5/dsh-native-window-0.2.5.tgz",
@@ -47,8 +52,8 @@
           "sha256": "4b72c5994c689eee949b71dd8b53464605457e953ffcaca9bb4e131cfb1db47e"
         }
       ],
-      "version": "0.2.5",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-native-window-v0.2.5/dsh-native-window-0.2.5.tgz"
+      "version": "0.2.6",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-native-window-v0.2.6/dsh-native-window-0.2.6.tgz"
     },
     {
       "name": "dsh-local-llm",
@@ -175,6 +180,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.1.7",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.7/dsh-factorytalk-view-use-0.1.7.tgz",
+          "sha256": "fb46b6da45146aea588a32ae6ec64ba0cba30fa03db7d741cada1c314d1f2eb0"
+        },
+        {
           "version": "0.1.6",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.6/dsh-factorytalk-view-use-0.1.6.tgz",
           "sha256": "0447cf4d564e6e2717434f5db42fe83a6972deca2d13eba418536110658ac89a"
@@ -190,8 +200,8 @@
           "sha256": "b753d5fd7d56747576a16d9fdd2a815f4bd70acb19931fbf3d11a0f2510fe411"
         }
       ],
-      "version": "0.1.6",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.6/dsh-factorytalk-view-use-0.1.6.tgz"
+      "version": "0.1.7",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.7/dsh-factorytalk-view-use-0.1.7.tgz"
     },
     {
       "name": "dsh-projects",
@@ -207,13 +217,23 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-projects-v0.2.1/dsh-projects-0.2.1.tgz",
+          "sha256": "2aa50688d023ab223660973c35709c54a39a00a3ad40ddbc7718186770834408"
+        },
+        {
+          "version": "0.2.0",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-projects-v0.2.0/dsh-projects-0.2.0.tgz",
+          "sha256": "72cf8cac604401f60232daddf0b5920cd5194f2fcb60343c1ec6cda9c2edc842"
+        },
+        {
           "version": "0.1.7",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-projects-v0.1.7/dsh-projects-0.1.7.tgz",
           "sha256": "53c740dd9523c36584117a7a737ce0ff0ad51d7dac0a393be4af5411d22719c0"
         }
       ],
-      "version": "0.1.7",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-projects-v0.1.7/dsh-projects-0.1.7.tgz"
+      "version": "0.2.1",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-projects-v0.2.1/dsh-projects-0.2.1.tgz"
     },
     {
       "name": "dsh-clear-light",
@@ -254,6 +274,26 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.3.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.3/dsh-tool-l5x-0.3.3.tgz",
+          "sha256": "c7e22ca20c3ad5ad27f0a968d10d8dc8a78e6b8567bfc8b4a345e977256bc7ca"
+        },
+        {
+          "version": "0.3.2",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.2/dsh-tool-l5x-0.3.2.tgz",
+          "sha256": "cbf64816e7fb5d9db08e5d69c06f4ff84a36c304f2a5ad88b3bbede8bdfa3de0"
+        },
+        {
+          "version": "0.3.1",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.1/dsh-tool-l5x-0.3.1.tgz",
+          "sha256": "6adec83d5873f46d6dd4876e94d037619b5c4e19745cda7173feb0594b62c36b"
+        },
+        {
+          "version": "0.3.0",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.0/dsh-tool-l5x-0.3.0.tgz",
+          "sha256": "ef8f55e2cc270f5b8c7bcc2119f4ce66d98d13cc79a07e07342c9b7d09f6610b"
+        },
+        {
           "version": "0.2.2",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.2.2/dsh-tool-l5x-0.2.2.tgz",
           "sha256": "b0c64c89195f004e39039cb4a1e069ba075a5072b43b28c53e3193871b065dcc"
@@ -269,8 +309,35 @@
           "sha256": "a8f68870232e894307307f092b56c1ea85033e191ccadf808ccaf05d2d3fdf27"
         }
       ],
-      "version": "0.2.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.2.2/dsh-tool-l5x-0.2.2.tgz"
+      "version": "0.3.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.3/dsh-tool-l5x-0.3.3.tgz"
+    },
+    {
+      "name": "dsh-motionworks-iec-use",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-motionworks-iec-use",
+      "category": "arya",
+      "description": {
+        "en": "MotionWorks IEC engineering tools for the Yaskawa IDE: staged projects, Structured Text editing, variable declarations, builds and compiler diagnostics.",
+        "zh": "面向 Yaskawa MotionWorks IEC 的工程工具：项目暂存、ST 编辑、变量声明、编译与编译器诊断。"
+      },
+      "added": "2026-10-16",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.5.7",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-motionworks-iec-use-v0.5.7/dsh-motionworks-iec-use-0.5.7.tgz",
+          "sha256": "3ad648091b3412b5b6c1039c5cab66986aba3165bfa0c21226aad11f8fac4099"
+        },
+        {
+          "version": "0.5.6",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-motionworks-iec-use-v0.5.6/dsh-motionworks-iec-use-0.5.6.tgz",
+          "sha256": "0211a06b00046d8d209f237b4264e6fd21cd940bfdc54c5e6e03756d1582831d"
+        }
+      ],
+      "version": "0.5.7",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-motionworks-iec-use-v0.5.7/dsh-motionworks-iec-use-0.5.7.tgz"
     }
   ]
 }
