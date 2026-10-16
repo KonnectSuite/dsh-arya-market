@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-12T19:51:18.154Z",
+  "updated": "2026-10-16T15:20:03.000Z",
   "count": 8,
   "categories": {
     "arya": {
@@ -170,6 +170,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.1.6",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.6/dsh-factorytalk-view-use-0.1.6.tgz",
+          "sha256": "0447cf4d564e6e2717434f5db42fe83a6972deca2d13eba418536110658ac89a"
+        },
+        {
           "version": "0.1.4",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.4/dsh-factorytalk-view-use-0.1.4.tgz",
           "sha256": "b9d877ee52096798b44ade5395e517a45690cd311b0a7dae4d013916a4b16f4a"
@@ -180,8 +185,8 @@
           "sha256": "b753d5fd7d56747576a16d9fdd2a815f4bd70acb19931fbf3d11a0f2510fe411"
         }
       ],
-      "version": "0.1.4",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.4/dsh-factorytalk-view-use-0.1.4.tgz"
+      "version": "0.1.6",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-factorytalk-view-use-v0.1.6/dsh-factorytalk-view-use-0.1.6.tgz"
     },
     {
       "name": "dsh-projects",
