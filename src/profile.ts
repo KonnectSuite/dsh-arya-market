@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSy
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { resolveDshHome } from './home-paths.ts'
+import { createRequire } from 'node:module'
 import { githubRemoteIdentities, githubRepoIdentities, isGitHostedSpec, repoOfTarget } from './sources.ts'
 
 /**
@@ -52,15 +53,21 @@ export const INBOX_BUNDLES = new Set([
   '@deepseek-ai/dsh-headless',
 ])
 
-/** Community dependencies of the profile (in-box bundles filtered out). */
+/** Profile dependencies and selected installer bundles, excluding essential in-box bundles. */
 export function readInstalled(profile: string, explicitDir?: string): Record<string, string> {
   try {
     const manifest = JSON.parse(readFileSync(join(profileDir(profile, explicitDir), 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
+      dsh?: { profile?: { bundles?: unknown } }
     }
     const installed: Record<string, string> = {}
     for (const [name, spec] of Object.entries(manifest.dependencies ?? {})) {
       if (!INBOX_BUNDLES.has(name)) installed[name] = spec
+    }
+    for (const name of bundleNames(manifest.dsh?.profile?.bundles)) {
+      if (INBOX_BUNDLES.has(name) || Object.hasOwn(installed, name)) continue
+      const metadata = readInstalledManifest(profile, name, explicitDir) as { version?: unknown; dsh?: { bundle?: unknown } } | null
+      if (metadata?.dsh?.bundle !== undefined && typeof metadata.version === 'string') installed[name] = metadata.version
     }
     return installed
   } catch {
@@ -347,11 +354,59 @@ export function dropFromManifest(profile: string, name: string, explicitDir?: st
   return true
 }
 
-/** The version actually present in the profile's node_modules, or null. */
+const installerDirectories = new Map<string, Map<symbol, string>>()
+
+/** Bind an explicit Host installation to profile reads until the owning routes unload. */
+export function useInstallerDirectory(directory: string, installation: string | undefined): () => void {
+  if (installation === undefined) return () => {}
+  const key = resolve(directory)
+  const sources = installerDirectories.get(key) ?? new Map<symbol, string>()
+  const owner = Symbol()
+  sources.set(owner, installation)
+  installerDirectories.set(key, sources)
+  return () => {
+    sources.delete(owner)
+    if (sources.size === 0) installerDirectories.delete(key)
+  }
+}
+
+/** Resolve a selected installer bundle without projecting files into the profile. */
+function installedManifestPath(profile: string, name: string, explicitDir?: string): string {
+  const dir = profileDir(profile, explicitDir)
+  const local = join(dir, 'node_modules', name, 'package.json')
+  if (Object.hasOwn(readManifestDeps(profile, explicitDir), name) || !readProfileBundles(dir).includes(name)) return local
+  const installation = [...installerDirectories.get(resolve(dir))?.values() ?? []].at(-1)
+  const require = createRequire(join(installation ?? dir, 'package.json'))
+  try { return require.resolve(name + '/package.json') } catch { /* The package may hide its manifest export. */ }
+  try {
+    let candidate = dirname(require.resolve(name))
+    for (;;) {
+      const path = join(candidate, 'package.json')
+      if (existsSync(path)) {
+        const manifest = JSON.parse(readFileSync(path, 'utf8')) as { name?: unknown }
+        if (manifest.name === name) return path
+      }
+      const parent = dirname(candidate)
+      if (parent === candidate) break
+      candidate = parent
+    }
+  } catch { /* An unavailable installer bundle remains absent. */ }
+  return local
+}
+
+/** Whether this selected bundle uses the installer copy rather than a profile dependency. */
+export function isInstallerBundle(profile: string, name: string, explicitDir?: string): boolean {
+  const dir = profileDir(profile, explicitDir)
+  return !Object.hasOwn(readManifestDeps(profile, explicitDir), name)
+    && readProfileBundles(dir).includes(name)
+    && installedManifestPath(profile, name, explicitDir) !== join(dir, 'node_modules', name, 'package.json')
+}
+
+/** The selected profile or installer package version, or null. */
 export function readInstalledVersion(profile: string, name: string, explicitDir?: string): string | null {
   try {
     const manifest = JSON.parse(
-      readFileSync(join(profileDir(profile, explicitDir), 'node_modules', name, 'package.json'), 'utf8'),
+      readFileSync(installedManifestPath(profile, name, explicitDir), 'utf8'),
     ) as { version?: string }
     return manifest.version ?? null
   } catch {
@@ -366,7 +421,7 @@ export function readInstalledVersion(profile: string, name: string, explicitDir?
 export function readInstalledPackageName(profile: string, name: string, explicitDir?: string): string | null {
   try {
     const manifest = JSON.parse(
-      readFileSync(join(profileDir(profile, explicitDir), 'node_modules', name, 'package.json'), 'utf8'),
+      readFileSync(installedManifestPath(profile, name, explicitDir), 'utf8'),
     ) as { name?: unknown }
     return typeof manifest.name === 'string' ? manifest.name : null
   } catch {
@@ -378,7 +433,7 @@ export function readInstalledPackageName(profile: string, name: string, explicit
 export function readInstalledManifest(profile: string, name: string, explicitDir?: string): unknown | null {
   try {
     return JSON.parse(
-      readFileSync(join(profileDir(profile, explicitDir), 'node_modules', name, 'package.json'), 'utf8'),
+      readFileSync(installedManifestPath(profile, name, explicitDir), 'utf8'),
     ) as unknown
   } catch {
     return null

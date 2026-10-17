@@ -34,7 +34,7 @@ import {
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
 import { packageOfEntryName } from './entry-identity.ts'
-import { addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, declareProfileDependency, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, isDshProfileName, profileDir, readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledPackageName, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileBundles, readProfileManifestSnapshot, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
+import { useInstallerDirectory, isInstallerBundle, addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, declareProfileDependency, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, isDshProfileName, profileDir, readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledPackageName, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileBundles, readProfileManifestSnapshot, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, corePackageNames, type DuplicateName } from './check.ts'
@@ -1955,6 +1955,7 @@ export function mountMarketRoutes(
   }
 
   const disposers = [
+    useInstallerDirectory(activeProfileDir, config.dshInstallDir),
     registerRoute({
       kind: 'exact',
       path: '/dsh-market/api/v1/capabilities',
@@ -3720,7 +3721,7 @@ sendJson(response, 200, { updates })
               })
               return
             }
-            const spec = manifestCapture.snapshot.dependencies[name]
+            const spec = manifestCapture.snapshot.dependencies[name] ?? readInstalled(config.profile, activeProfileDir)[name]
             if (spec === undefined) {
               sendJson(response, 400, { error: 'plugin is not installed' })
               return
@@ -3952,7 +3953,7 @@ sendJson(response, 200, { updates })
               })
               return
             }
-            let spec = manifestCapture.snapshot.dependencies[name]
+            let spec = manifestCapture.snapshot.dependencies[name] ?? readInstalled(config.profile, activeProfileDir)[name]
             if (spec === undefined || INBOX_BUNDLES.has(name)) {
               sendJson(response, 400, { error: 'plugin is not installed' })
               return
@@ -3972,7 +3973,7 @@ sendJson(response, 200, { updates })
                 const samePublishedSource = entry.releases?.some(release => release.tarball === spec) === true
                 const repo = repoOfTarget(spec)?.split('#')[0]?.toLowerCase()
                 const sameRepository = repo !== undefined && entry.url.toLowerCase() === `https://github.com/${repo}`
-                if (!isLocalSpec(spec) && !managedRelease && !samePublishedSource && !sameRepository && body.releaseVersion === undefined && body.bundled !== true && !restore) {
+                if (!isLocalSpec(spec) && !managedRelease && !samePublishedSource && !sameRepository && !isInstallerBundle(config.profile, name, activeProfileDir) && body.releaseVersion === undefined && body.bundled !== true && !restore) {
                   sendJson(response, 400, { error: 'Choose a released version explicitly to switch this plugin source' })
                   return
                 }

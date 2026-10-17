@@ -9,7 +9,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { resolveDshHome } from '../src/home-paths.ts'
 import {
-  addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, entryArtifactExists, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, pluginSubdirs, profileDir,
+  useInstallerDirectory, isInstallerBundle, addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, entryArtifactExists, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, pluginSubdirs, profileDir,
   readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledRepoIdentities, readInstalledVersion, readLockCommits,
   removeProfileBundle,
 } from '../src/profile.ts'
@@ -81,6 +81,29 @@ describe('profile names (#260)', () => {
 })
 
 describe('readInstalled', () => {
+  it('discovers selected installer bundles and prefers a profile override', () => {
+    const name = 'shipped-example'
+    const dir = writeProfile({ dependencies: {}, dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', name] } } })
+    const shipped = join(home, 'node_modules', name)
+    mkdirSync(shipped, { recursive: true })
+    writeFileSync(join(shipped, 'package.json'), JSON.stringify({ name, version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    expect(readInstalled('web')).toEqual({ [name]: '1.0.0' })
+    expect(readInstalledVersion('web', name)).toBe('1.0.0')
+    expect(isInstallerBundle('web', name)).toBe(true)
+    const local = join(dir, 'node_modules', name)
+    mkdirSync(local, { recursive: true })
+    writeFileSync(join(local, 'package.json'), JSON.stringify({ name, version: '2.0.0' }))
+    writeProfile({ dependencies: { [name]: '2.0.0' }, dsh: { profile: { bundles: [name] } } })
+    expect(readInstalled('web')).toEqual({ [name]: '2.0.0' })
+    expect(readInstalledVersion('web', name)).toBe('2.0.0')
+    expect(isInstallerBundle('web', name)).toBe(false)
+    const stop = useInstallerDirectory(dir, home)
+    try {
+      writeProfile({ dependencies: {}, dsh: { profile: { bundles: [name] } } })
+      expect(readInstalledVersion('web', name)).toBe('1.0.0')
+      expect(isInstallerBundle('web', name)).toBe(true)
+    } finally { stop() }
+  })
   it('filters exactly the in-box bundles — scoped COMMUNITY plugins stay (#28)', () => {
     expect(readInstalled('web')).toEqual({})
     writeProfile({ dependencies: {

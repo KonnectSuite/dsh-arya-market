@@ -94,3 +94,12 @@ it('lists community plugins alongside Arya releases without granting release con
   expect(body.registry.plugins.map((p: { name: string }) => p.name)).toEqual(['community-example', 'dsh-example'])
   expect((await fetch(`${base}/dsh-market/arya-versions?name=community-example`)).status).toBe(404)
 })
+
+it('updates an installer-selected plugin without requiring a profile dependency', async () => {
+  writeFileSync(join(directory, 'profile', 'package.json'), JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: ['dsh-example'] } } }))
+  writeFileSync(join(directory, 'node_modules', 'dsh-example', 'package.json'), JSON.stringify({ name: 'dsh-example', version: '0.1.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  const installed = await (await fetch(base + '/dsh-market/installed')).json()
+  expect(installed.installed).toMatchObject({ 'dsh-example': '0.1.0' })
+  await post({ name: 'dsh-example' })
+  expect(runPlugin).toHaveBeenCalledWith('web', ['add', target('0.2.0')])
+})

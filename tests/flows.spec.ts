@@ -148,7 +148,8 @@ const fake = vi.hoisted(() => ({
   calls: [] as string[][],
 }))
 
-vi.mock('../src/dsh-cli.ts', () => {
+vi.mock('../src/dsh-cli.ts', async importOriginal => {
+  const { isPluginTarget } = await importOriginal<typeof import('../src/dsh-cli.ts')>()
   function writePkg(name: string, manifest: unknown, artifacts: string[] = [], artifactContents: Record<string, string> = {}): void {
     const root = join(fake.profileDir, 'node_modules', name)
     // Replace, do not merge: pnpm swaps the package directory when the
@@ -571,6 +572,7 @@ vi.mock('../src/dsh-cli.ts', () => {
   return {
     TARGET_RE: /^[A-Za-z0-9@:./_#+~^=-]+$/,
     BOOT_ID: 'test-boot',
+    isPluginTarget,
     progress: {
       active: false, target: '', startedAt: 0, lastLine: '',
       phase: null, done: 0, total: null, currentPackage: null,
@@ -2335,7 +2337,7 @@ describe('update flow — no npm publishing required', () => {
     const updates = await bed.dispatch('GET', '/dsh-market/updates?force=1')
     expect(updates.json.updates['dsh-loop']).toMatchObject({ kind: 'npm', current: '1.0.0', latest: '1.2.0', updateAvailable: true })
     const r = await bed.dispatch('POST', '/dsh-market/update', { name: 'dsh-loop' })
-    expect(r.status).toBe(200)
+    expect(r.status, JSON.stringify(r.json)).toBe(200)
     expect(r.json.ok).toBe(true)
     expect(installedSpec('dsh-loop')).toBe('^1.2.0')
     // NOT 'live'. This expectation used to say so, and it was wrong in a way
