@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-17T02:26:42.647Z",
-  "count": 10,
+  "updated": "2026-10-17T02:41:36.836Z",
+  "count": 9,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -101,53 +101,6 @@
       ],
       "version": "0.6.0",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.0/dsh-local-llm-0.6.0.tgz"
-    },
-    {
-      "name": "dsh-strata-agent",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-strata-agent",
-      "category": "arya",
-      "description": {
-        "en": "Qwen and local-model agent preset with model-aware context budgets",
-        "zh": "具备模型上下文预算的 Qwen 与本地模型代理预设"
-      },
-      "added": "2026-10-09",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.9",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.9/dsh-strata-agent-0.2.9.tgz",
-          "sha256": "8622affabc7543fcc60353257e103bf3e3f773c9d5845c84e60eeba6a2a1666e"
-        },
-        {
-          "version": "0.2.7",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.7/dsh-strata-agent-0.2.7.tgz",
-          "sha256": "8e95ae4ec348894016c8dd6b04660a823a5c8bd1a5cc888c555465262b2a1227"
-        },
-        {
-          "version": "0.2.6",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.6/dsh-strata-agent-0.2.6.tgz",
-          "sha256": "f81f0ef632082134522f838f1e806961d031a410a3e86ca5651b8a7682751a49"
-        },
-        {
-          "version": "0.2.5",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.5/dsh-strata-agent-0.2.5.tgz",
-          "sha256": "259143ef8157259041327aa8511c142e8294b2507d4755bf7aabeeee5c8855ec"
-        },
-        {
-          "version": "0.2.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.1/dsh-strata-agent-0.2.1.tgz",
-          "sha256": "d3cfc6f6d0f091700f8e47946e7f7a8a682ebeb9a9c8f1a794a9aa3f9791f9c7"
-        },
-        {
-          "version": "0.2.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.0/dsh-strata-agent-0.2.0.tgz",
-          "sha256": "74923ef6303ce3a280172f7a2a5beceee44290de8993c98082103915096cfddc"
-        }
-      ],
-      "version": "0.2.9",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-agent-v0.2.9/dsh-strata-agent-0.2.9.tgz"
     },
     {
       "name": "dsh-agent-learning",
