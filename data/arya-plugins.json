@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-18T14:28:32.512Z",
-  "count": 10,
+  "updated": "2026-10-18T15:20:09.193Z",
+  "count": 9,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -61,13 +61,18 @@
       "url": "https://github.com/KonnectSuite/dsh-local-llm",
       "category": "arya",
       "description": {
-        "en": "AryaStrata Control Center: engine web UI and adjustable chat output limits; also install dsh-strata",
-        "zh": "AryaStrata 控制中心：引擎网页监控界面与可调聊天输出上限；请同时安装 dsh-strata"
+        "en": "AryaStrata Control Center with included engine controller, monitoring web UI and adjustable chat output limits. One package; no agent preset required.",
+        "zh": "AryaStrata 控制中心：内置引擎控制器、网页监控界面及可调聊天输出上限。只需一个插件，无需代理预设。"
       },
       "added": "2026-10-09",
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.7.0",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.0/dsh-local-llm-0.7.0.tgz",
+          "sha256": "f4e5a2234853eaeb635880c92c18a0e9a9b1b7e006e0c44a514c0b2a7c06daca"
+        },
         {
           "version": "0.6.2",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.2/dsh-local-llm-0.6.2.tgz",
@@ -109,8 +114,8 @@
           "sha256": "627f04f95b23f38f3c373416bacb8192b5101916447ad6596e73f2a1da3f7be3"
         }
       ],
-      "version": "0.6.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.2/dsh-local-llm-0.6.2.tgz"
+      "version": "0.7.0",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.0/dsh-local-llm-0.7.0.tgz"
     },
     {
       "name": "dsh-agent-learning",
@@ -328,28 +333,6 @@
       ],
       "version": "0.2.0-rc.2",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.0-rc.2/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.0-rc.2.tgz"
-    },
-    {
-      "name": "dsh-strata",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-strata",
-      "category": "arya",
-      "description": {
-        "en": "AryaStrata engine lifecycle controller; use with the AryaStrata Control Center (dsh-local-llm)",
-        "zh": "AryaStrata 引擎启停与重启控制器；搭配 AryaStrata 控制中心（dsh-local-llm）使用"
-      },
-      "added": "2026-10-18",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.1.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-v0.1.1/dsh-strata-0.1.1.tgz",
-          "sha256": "1ac92426bb1c5d884ec5ce24e666dd1c664df366979dc0d9f491f61dfb7e4bfa"
-        }
-      ],
-      "version": "0.1.1",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-v0.1.1/dsh-strata-0.1.1.tgz"
     }
   ]
 }
