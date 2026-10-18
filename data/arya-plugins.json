@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-17T16:23:38.665Z",
-  "count": 9,
+  "updated": "2026-10-18T14:28:32.512Z",
+  "count": 10,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -61,13 +61,18 @@
       "url": "https://github.com/KonnectSuite/dsh-local-llm",
       "category": "arya",
       "description": {
-        "en": "Local and paired remote LLM control center",
-        "zh": "本地与配对远程模型控制中心"
+        "en": "AryaStrata Control Center: engine web UI and adjustable chat output limits; also install dsh-strata",
+        "zh": "AryaStrata 控制中心：引擎网页监控界面与可调聊天输出上限；请同时安装 dsh-strata"
       },
       "added": "2026-10-09",
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.6.2",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.2/dsh-local-llm-0.6.2.tgz",
+          "sha256": "e58c069a1c8a8873d58a4b5f98b29372d88cd771e2440be203d20f479a1a6dbb"
+        },
         {
           "version": "0.6.1",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.1/dsh-local-llm-0.6.1.tgz",
@@ -104,8 +109,8 @@
           "sha256": "627f04f95b23f38f3c373416bacb8192b5101916447ad6596e73f2a1da3f7be3"
         }
       ],
-      "version": "0.6.1",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.1/dsh-local-llm-0.6.1.tgz"
+      "version": "0.6.2",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.6.2/dsh-local-llm-0.6.2.tgz"
     },
     {
       "name": "dsh-agent-learning",
@@ -323,6 +328,28 @@
       ],
       "version": "0.2.0-rc.2",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.0-rc.2/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.0-rc.2.tgz"
+    },
+    {
+      "name": "dsh-strata",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-strata",
+      "category": "arya",
+      "description": {
+        "en": "AryaStrata engine lifecycle controller; use with the AryaStrata Control Center (dsh-local-llm)",
+        "zh": "AryaStrata 引擎启停与重启控制器；搭配 AryaStrata 控制中心（dsh-local-llm）使用"
+      },
+      "added": "2026-10-18",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.1.1",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-v0.1.1/dsh-strata-0.1.1.tgz",
+          "sha256": "1ac92426bb1c5d884ec5ce24e666dd1c664df366979dc0d9f491f61dfb7e4bfa"
+        }
+      ],
+      "version": "0.1.1",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-strata-v0.1.1/dsh-strata-0.1.1.tgz"
     }
   ]
 }
