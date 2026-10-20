@@ -34,7 +34,8 @@
                     "check:web-auth-capture":  "node scripts/check-web-auth-capture.mjs",
                     "test:web":  "node scripts/check-web-auth-capture.mjs \u0026\u0026 vitest run --config vitest.web.config.ts",
                     "build:site":  "node scripts/build-site.mjs",
-                    "publish:arya":  "npm run build \u0026\u0026 node scripts/publish-arya-release.mjs"
+                    "publish:arya":  "npm run build \u0026\u0026 node scripts/publish-arya-release.mjs",
+                    "publish:arya:batch":  "node scripts/publish-arya-batch.mjs"
                 },
     "dependencies":  {
                          "js-yaml":  "^4.3.2",

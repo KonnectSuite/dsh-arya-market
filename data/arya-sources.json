@@ -1,0 +1,29 @@
+{
+  "comment": "Every Arya-authored plugin the Arya catalog may offer. publish-arya-batch.mjs matches packed tarballs by package name and publishes the ones this list names; a tarball whose name is absent here is reported instead of being guessed.",
+  "legacyNames": [
+    "dsh-factorytalk-view-use",
+    "dsh-motionworks-iec-use"
+  ],
+  "plugins": [
+    { "name": "@deepseek-ai/dsh-client-ui-images", "source": "KonnectSuite/dsh-client-ui-images", "description": { "en": "ComfyUI image generation and the local gallery", "zh": "ComfyUI 图像生成与本地画廊" } },
+    { "name": "@deepseek-ai/dsh-client-ui-arya-pet", "source": "KonnectSuite/dsh-client-ui-arya-pet", "description": { "en": "Arya's animated pet overlay", "zh": "Arya 的动画宠物浮层" } },
+    { "name": "@deepseek-ai/dsh-client-ui-skills-mcp", "source": "KonnectSuite/dsh-client-ui-skills-mcp", "description": { "en": "Manage skills and MCP servers, and add public MCP servers from a catalog", "zh": "管理技能与 MCP 服务器，并从目录添加公共 MCP 服务器" } },
+    { "name": "@deepseek-ai/dsh-client-ui-no-repo", "source": "KonnectSuite/dsh-client-ui-no-repo", "description": { "en": "Sidebar group for chats not attached to a workspace", "zh": "未关联工作区的会话分组" } },
+    { "name": "@deepseek-ai/dsh-github", "source": "KonnectSuite/dsh-github", "description": { "en": "Sign in to GitHub, list repositories, and clone one as a workspace", "zh": "登录 GitHub、列出仓库并克隆为工作区" } },
+    { "name": "@deepseek-ai/dsh-client-ui-mobile", "source": "KonnectSuite/dsh-client-ui-mobile", "description": { "en": "Phone shell and the Mobile & Remote pairing popover", "zh": "手机外壳与移动端配对面板" } },
+    { "name": "@deepseek-ai/dsh-client-ui-sidebar-switcher", "source": "KonnectSuite/dsh-client-ui-sidebar-switcher", "description": { "en": "Conversation-header buttons that open the right sidebar panels", "zh": "会话标题栏中打开右侧边栏面板的按钮" } },
+    { "name": "@deepseek-ai/dsh-client-ui-release-notes", "source": "KonnectSuite/dsh-client-ui-release-notes", "description": { "en": "Settings page listing AryaAI version history", "zh": "列出 AryaAI 版本历史的设置页面" } },
+    { "name": "@deepseek-ai/dsh-client-ui-logix-project-viewer", "source": "KonnectSuite/dsh-client-ui-logix-project-viewer", "description": { "en": "Studio 5000 L5X ladder viewer in the right sidebar", "zh": "右侧边栏中的 Studio 5000 L5X 梯形图查看器" } },
+    { "name": "@deepseek-ai/dsh-client-ui-deepseek-chat", "source": "KonnectSuite/dsh-client-ui-deepseek-chat", "description": { "en": "Optional DeepSeek Chat desktop page", "zh": "可选的 DeepSeek 对话桌面页面" } },
+    { "name": "@deepseek-ai/dsh-client-ui-googleremotedesktop", "source": "KonnectSuite/dsh-client-ui-googleremotedesktop", "description": { "en": "Google Remote Desktop sidebar page with a persistent sign-in", "zh": "带持久登录的 Google 远程桌面侧边栏页面" } },
+    { "name": "@deepseek-ai/dsh-tool-ft-optix", "source": "KonnectSuite/dsh-tool-ftoptix", "description": { "en": "FactoryTalk Optix authoring, preview and verification tools", "zh": "FactoryTalk Optix 编写、预览与校验工具" } },
+    { "name": "dsh-tool-motionworks-iec", "source": "KonnectSuite/dsh-tool-motionworks-iec", "description": { "en": "MotionWorks IEC engineering tools and skill", "zh": "MotionWorks IEC 工程工具与技能" } },
+    { "name": "dsh-tool-factorytalk-view", "source": "KonnectSuite/dsh-tool-factorytalk-view", "description": { "en": "FactoryTalk View ME engineering tools and skill", "zh": "FactoryTalk View ME 工程工具与技能" } },
+    { "name": "dsh-tool-l5x", "source": "KonnectSuite/dsh-tool-l5x", "description": { "en": "Studio 5000 L5X project tools", "zh": "Studio 5000 L5X 工程工具" } },
+    { "name": "dsh-projects", "source": "KonnectSuite/dsh-projects", "description": { "en": "Give one workspace several folders", "zh": "为一个工作区提供多个文件夹" } },
+    { "name": "dsh-native-window", "source": "KonnectSuite/dsh-native-window", "description": { "en": "Dock native Windows applications inside Arya", "zh": "在 Arya 中嵌入 Windows 本地应用" } },
+    { "name": "dsh-clear-light", "source": "KonnectSuite/dsh-clear-light", "description": { "en": "Clearer navigation, surfaces, selections and text", "zh": "更清晰的导航、界面、选中状态与文字" } },
+    { "name": "dsh-local-llm", "source": "KonnectSuite/dsh-local-llm", "description": { "en": "AryaStrata local model controls and monitoring", "zh": "AryaStrata 本地模型控制与监控" } },
+    { "name": "dsh-agent-learning", "source": "KonnectSuite/dsh-agent-learning", "description": { "en": "Agent learning surfaces", "zh": "智能体学习界面" } }
+  ]
+}

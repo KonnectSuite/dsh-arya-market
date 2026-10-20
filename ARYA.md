@@ -49,3 +49,21 @@ npx vitest run tests/arya.spec.ts tests/arya-routes.spec.ts tests/client/arya-ve
 ## Combined catalog
 
 The All plugins view combines the community catalog with validated Arya releases. Arya entries win duplicate package names; community entries retain their normal install and update paths. Community records do not acquire Arya release authority. Both sets of categories are available.
+
+## Publishing a batch
+
+Every Arya release publishes the plugin versions it ships. Pack the authored
+plugins into one directory, then publish them together; each entry is matched
+by package name against `data/arya-sources.json`, and a package without an
+entry is reported rather than published under a guessed source.
+
+```sh
+node scripts/publish-arya-batch.mjs --dir ../AryaAI/dist/arya-plugins --publish
+```
+
+The batch prints one line per plugin and a failure summary; it exits non-zero
+when any plugin failed, so a release can stop before it ships an installer whose
+plugins the catalog cannot offer. Re-running is safe: a version already present
+with the same bytes is reused, and a different tarball for an existing version
+is rejected rather than overwritten. Commit and push `data/arya-plugins.json`
+after a successful batch.
