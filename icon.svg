@@ -1,0 +1,11 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="market" x1="6" y1="7" x2="30" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AD0FF" />
+      <stop offset="1" stop-color="#3D8BFF" />
+    </linearGradient>
+  </defs>
+  <path d="M8.5 12.5H27.5L26 28H10L8.5 12.5Z" fill="url(#market)" />
+  <path d="M13.5 12.5V10A4.5 4.5 0 0 1 22.5 10V12.5" stroke="#3D8BFF" stroke-width="2.2" stroke-linecap="round" />
+  <circle cx="18" cy="20" r="2.4" fill="#FFFFFF" />
+</svg>

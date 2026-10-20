@@ -72,6 +72,8 @@
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
+    "icon.svg",
+    "locale/*.json",
     "locale",
     "lib",
     "src",
@@ -113,5 +115,6 @@
     "@deepseek-ai/schemastery": {
       "optional": true
     }
-  }
+  },
+  "icon": "./icon.svg"
 }

@@ -1,3 +1,6 @@
 {
-  "meta": {}
+  "meta": {
+    "title": "Plugin Market",
+    "description": "Browse, search and one-click install community plugins from market indexes."
+  }
 }
