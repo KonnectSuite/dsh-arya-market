@@ -1,0 +1,27 @@
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.ftview/
+*.tgz
+*.log
+*.mer
+*.med
+*.sed
+*.apa
+*.gfx
+*.ggfx
+*.mdf
+*.ldf
+*.L5X
+*.l5x
+ftview-pilot/
+# Workstation/pilot-specific original development helpers remain local.
+test/inspect-host.mjs
+test/manager-inspect.mjs
+test/pilot-import.mjs
+test/pilot-prepare.py
+test/pilot-review-receipt.mjs

@@ -1,0 +1,13 @@
+
+> dshmarket@1.66.14-arya.0.6 test
+> vitest run tests/arya.spec.ts tests/arya-download.spec.ts
+
+
+ RUN  v4.1.11 C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market
+
+
+ Test Files  2 passed (2)
+      Tests  16 passed (16)
+   Start at  09:03:59
+   Duration  526ms (transform 186ms, setup 57ms, import 367ms, tests 31ms, environment 0ms)
+

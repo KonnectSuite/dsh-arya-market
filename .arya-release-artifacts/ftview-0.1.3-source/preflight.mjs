@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { apply, defineTools, pythonExe, runProcess } from './index.js';
+const here = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8'));
+assert.ok(readFileSync(join(here, pkg.dsh.bundle.patch), 'utf8').includes(pkg.name));
+for (const file of ['index.js', 'engine.py', 'bridge/discover.ps1', 'SKILL.md', 'references/engineering.md', 'references/formats.md', 'references/studio.md']) assert.ok(existsSync(join(here, file)), file);
+const tools = [], skills = [];
+apply({ get: n => n === 'skills' ? { register: x => skills.push(x) } : undefined, tools: { register: x => tools.push(x) } });
+assert.equal(tools.length, defineTools().length); assert.equal(skills.length, 1);
+const runtime = await runProcess(pythonExe(), ['-c', 'import sys, lxml; print(sys.version); print(lxml.__version__)']);
+assert.equal(runtime.code, 0, runtime.stderr);
+console.log(JSON.stringify({ passed: true, package: pkg.name, version: pkg.version, tools: tools.map(t => t.name), skill: skills[0].name, python: pythonExe(), runtime: runtime.stdout.trim(), native_pilot: 'See local validation report; preflight does not exercise Studio', live_host_catalog_verified: false }, null, 2));

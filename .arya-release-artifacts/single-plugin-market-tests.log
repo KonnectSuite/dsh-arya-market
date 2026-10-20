@@ -1,0 +1,19 @@
+
+ RUN  v4.1.11 C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market
+
+11:20:02 AM [vite] (client) Failed to load source map for C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/@deepseek-ai+dsh-client-ui-_bb963b4cb0c21f92d59d71741ebb9b5f/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js.
+Error: An error occurred while trying to read the map file at index.js.map
+Error: ENOENT: no such file or directory, open 'C:\Users\KNPhu\.arya\github\KonnectSuite\dsh-market\node_modules\.pnpm\@deepseek-ai+dsh-client-ui-_bb963b4cb0c21f92d59d71741ebb9b5f\node_modules\@deepseek-ai\dsh-client-ui-primitives\lib\index.js.map'
+    at Object.readFileSync (node:fs:436:20)
+    at file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:17690:13
+    at readFromFileMap (file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:17388:13)
+    at exports.fromMapFileComment (file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:17483:12)
+    at exports.fromMapFileSource (file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:17494:22)
+    at extractSourcemapFromFile (file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:17676:87)
+    at loadAndTransform (file:///C:/Users/KNPhu/.arya/github/KonnectSuite/dsh-market/node_modules/.pnpm/vite@8.3.4_@types+node@26.6.4/node_modules/vite/dist/node/chunks/node.js:20150:22)
+
+ Test Files  3 passed (3)
+      Tests  22 passed (22)
+   Start at  11:19:50
+   Duration  14.43s (transform 954ms, setup 74ms, import 5.28s, tests 249ms, environment 9.34s)
+
