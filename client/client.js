@@ -2234,12 +2234,17 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 			for (const id of entryIdentities(plugin)) if (dep.has(id)) return true;
 			return false;
 		}
+		/** A dependency spec naming a managed version, not a checkout or remote source. */
+		function isManagedVersionSpec(spec) {
+			return !/^(?:link|file|github|git\+|https?|workspace|portal|patch):/i.test(spec);
+		}
 		/** The installed dependency name a registry entry corresponds to, or null. */
 		function matchInstalledName(plugin, installed, repoIdentities = {}, plugins, repoHints = {}) {
 			const ids = entryIdentities(plugin);
 			for (const [name, spec] of Object.entries(installed)) {
 				const specStr = String(spec);
 				if (plugin.arya === true && plugin.name === name && (plugin.releases?.some((release) => release.tarball === specStr) || isAryaReleaseSpec(plugin, specStr))) return name;
+				if (plugin.arya === true && plugin.name === name && isManagedVersionSpec(specStr)) return name;
 				const repos = repoIdentities[name] ?? [];
 				if (/^(?:link|file):/i.test(specStr)) {
 					if (plugins === void 0) continue;
@@ -2255,6 +2260,10 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 		}
 		/** The registry entry an installed dependency corresponds to, or undefined. */
 		function entryForDep(plugins, name, spec, repoIdentities = [], repoHints = []) {
+			if (isManagedVersionSpec(String(spec))) {
+				const managed = plugins.find((plugin) => plugin.arya === true && plugin.name.toLowerCase() === name.toLowerCase());
+				if (managed !== void 0) return managed;
+			}
 			if (depRepoIds(String(spec), repoIdentities).size === 0 && looseMatchCount(plugins, name) > 1) {
 				if (plugins.find((plugin) => repoHintMatches(plugin, repoHints) && looseMatches(plugin, name)) === void 0) return void 0;
 			}

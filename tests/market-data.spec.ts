@@ -48,6 +48,27 @@ describe('installedForCatalog', () => {
 })
 
 describe('matchInstalledName / isInstalled', () => {
+  it('an Arya catalog name is installed when the package is a managed dependency of that name', () => {
+    // Installer-shipped packages declare the upstream repository in their own
+    // manifest, while the Arya catalog lists the distribution source. The
+    // catalog owns the package name, so the managed version is enough; a source
+    // spec still has to prove its identity.
+    const entry = plugin({
+      name: '@deepseek-ai/dsh-client-ui-mobile',
+      url: 'https://github.com/KonnectSuite/dsh-client-ui-mobile',
+      arya: true,
+      releases: [{ version: '0.2.1-rc.2', tarball: 'https://github.com/KonnectSuite/dsh-market/releases/download/plugin-x/x.tgz', sha256: 'a'.repeat(64) }],
+    })
+    const installed = { '@deepseek-ai/dsh-client-ui-mobile': '0.2.1-rc.2' }
+    const identities = { '@deepseek-ai/dsh-client-ui-mobile': ['deepseek-ai/deepseek-harness'] }
+
+    expect(matchInstalledName(entry, installed, identities, [entry])).toBe('@deepseek-ai/dsh-client-ui-mobile')
+    expect(entryForDep([entry], '@deepseek-ai/dsh-client-ui-mobile', '0.2.1-rc.2', identities['@deepseek-ai/dsh-client-ui-mobile'])?.url).toBe(entry.url)
+    expect(matchInstalledName(entry, { '@deepseek-ai/dsh-client-ui-mobile': '*' }, identities, [entry])).toBe('@deepseek-ai/dsh-client-ui-mobile')
+    expect(matchInstalledName(entry, { '@deepseek-ai/dsh-client-ui-mobile': 'link:../ui-mobile' }, identities, [entry])).toBeNull()
+    expect(matchInstalledName(entry, { '@deepseek-ai/dsh-client-ui-mobile': 'file:./cached.tgz' }, identities, [entry])).toBeNull()
+  })
+
   it('a same-named entry is matched through manifest repo evidence; the other same-named entry is not (#544)', () => {
     // @QinYupan's shape: two catalog entries named dsh-mermaid, an ordinary
     // npm install, and the installed manifest's repository naming the

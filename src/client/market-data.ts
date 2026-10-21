@@ -861,6 +861,11 @@ function looseMatches(plugin: RegistryPlugin, name: string): boolean {
   return false
 }
 
+/** A dependency spec naming a managed version, not a checkout or remote source. */
+function isManagedVersionSpec(spec: string): boolean {
+  return !/^(?:link|file|github|git\+|https?|workspace|portal|patch):/i.test(spec)
+}
+
 /** The installed dependency name a registry entry corresponds to, or null. */
 export function matchInstalledName(
   plugin: RegistryPlugin,
@@ -873,6 +878,11 @@ export function matchInstalledName(
   for (const [name, spec] of Object.entries(installed)) {
     const specStr = String(spec)
     if (plugin.arya === true && plugin.name === name && (plugin.releases?.some(release => release.tarball === specStr) || isAryaReleaseSpec(plugin, specStr))) return name
+    // The Arya catalog owns its package names. An installer-shipped copy has no
+    // release spec until a catalog version is selected, so a managed version (or
+    // the presence-only `*`) under the catalog's own name is that copy. A source
+    // spec still has to prove its identity through the repository evidence below.
+    if (plugin.arya === true && plugin.name === name && isManagedVersionSpec(specStr)) return name
     const repos = repoIdentities[name] ?? []
     // Discover badges and theme cards share this helper. Local link:/file:
     // installs must use the same strict catalog row as restore and the
@@ -902,6 +912,13 @@ export function entryForDep(
   repoIdentities: readonly string[] = [],
   repoHints: readonly string[] = [],
 ): RegistryPlugin | undefined {
+  // The Arya catalog owns its package names; see matchInstalledName. A managed
+  // version spec identifies the catalog entry even when the installed manifest
+  // names the package's upstream repository rather than the distribution source.
+  if (isManagedVersionSpec(String(spec))) {
+    const managed = plugins.find(plugin => plugin.arya === true && plugin.name.toLowerCase() === name.toLowerCase())
+    if (managed !== undefined) return managed
+  }
   if (depRepoIds(String(spec), repoIdentities).size === 0 && looseMatchCount(plugins, name) > 1) {
     const hinted = plugins.find(plugin => repoHintMatches(plugin, repoHints) && looseMatches(plugin, name))
     if (hinted === undefined) return undefined

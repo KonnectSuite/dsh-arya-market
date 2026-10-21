@@ -165,16 +165,23 @@ export function aryaReleaseTarget(plugin: RegistryPlugin, version?: unknown): st
   return release.tarball
 }
 
-/** Read the installer-owned package version, independently of the active profile override. */
+/** Read the installer-owned package version, independently of the active profile override.
+ *
+ * `installDir` is the directory of the running dsh package itself, so a Desktop
+ * installer keeps its bundles either beside that package or at the runtime's
+ * hoisted node_modules root; both layouts are read.
+ */
 export function bundledAryaVersion(installDir: string | undefined, name: string): string | null {
   if (installDir === undefined || !NPM_NAME_RE.test(name)) return null
-  try {
-    const manifest: unknown = JSON.parse(readFileSync(join(installDir, 'node_modules', name, 'package.json'), 'utf8'))
-    if (manifest !== null && typeof manifest === 'object' && 'name' in manifest && manifest.name === name
-      && 'version' in manifest && typeof manifest.version === 'string') return manifest.version
-    return null
-  } catch (error) {
-    // An optional plugin can be absent from this installer or inaccessible on disk.
-    return null
+  for (const candidate of [join(installDir, 'node_modules', name), join(installDir, '..', '..', name)]) {
+    try {
+      const manifest: unknown = JSON.parse(readFileSync(join(candidate, 'package.json'), 'utf8'))
+      if (manifest !== null && typeof manifest === 'object' && 'name' in manifest && manifest.name === name
+        && 'version' in manifest && typeof manifest.version === 'string') return manifest.version
+    } catch (error) {
+      // An optional plugin can be absent from this installer layout.
+      continue
+    }
   }
+  return null
 }

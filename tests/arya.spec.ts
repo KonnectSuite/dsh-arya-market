@@ -42,6 +42,13 @@ describe('Arya release catalog', () => {
     expect(() => validateCatalogUrl('http://example.com/catalog.json')).toThrow()
     expect(() => validateCatalogUrl('https://secret@example.com/catalog.json')).toThrow()
   })
+  it('reads the installer version from the hoisted sibling layout', () => {
+    directory = mkdtempSync(join(tmpdir(), 'arya-market-hoisted-'))
+    const dshDir = join(directory, 'node_modules', '@deepseek-ai', 'dsh'); mkdirSync(dshDir, { recursive: true })
+    const bundleDir = join(directory, 'node_modules', 'dsh-example'); mkdirSync(bundleDir, { recursive: true })
+    writeFileSync(join(bundleDir, 'package.json'), JSON.stringify({ name: 'dsh-example', version: '0.3.0' }))
+    expect(bundledAryaVersion(dshDir, 'dsh-example')).toBe('0.3.0')
+  })
   it('reads the installer version without consulting the profile override', () => {
     directory = mkdtempSync(join(tmpdir(), 'arya-market-version-'))
     const path = join(directory, 'node_modules', 'dsh-example'); mkdirSync(path, { recursive: true })
