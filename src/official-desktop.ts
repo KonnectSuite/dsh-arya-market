@@ -26,6 +26,45 @@ function failure(message: string, exitCode = 1): InstallResult {
   return { exitCode, timedOut: false, stdout: '', stderr: message, cancelled: false }
 }
 
+/** A failure the manager reported instead of throwing. */
+function failureCode(result: ManagedResult): string | null {
+  const error = result.error
+  if (typeof error !== 'object' || error === null || !('code' in error)) return null
+  const code = (error as { code: unknown }).code
+  return typeof code === 'string' ? code : null
+}
+
+/** The registry package name a spec asks for, or null for a non-registry spec. */
+function packageNameOf(spec: string): string | null {
+  const match = /^(@[^/]+\/[^@]+|[^@/][^@]*)/.exec(spec.trim())
+  if (match === null || match[1].includes(':')) return null
+  return match[1]
+}
+
+/**
+ * Install a spec, replacing the installed copy when the manager refuses with
+ * `already-installed`. That refusal is the manager's HMR guard: it wants the old
+ * package removed first so its plugins stop before another version loads. An
+ * update from the market is exactly that replacement, so perform the removal
+ * and retry once; only the retry's result is reported.
+ * @param manager - the official in-process plugin manager.
+ * @param spec - the package spec to install.
+ * @param requestId - id the progress stream and cancellation name.
+ * @returns the observed manager result.
+ */
+async function installReplacingInstalled(
+  manager: OfficialPluginManagerLike, spec: string, requestId: string | undefined,
+): Promise<ManagedResult> {
+  const first = await manager.installBundle(spec, requestId === undefined ? {} : { requestId })
+  if (failureCode(first) !== 'already-installed') return first
+  const name = packageNameOf(spec)
+  if (name === null) return first
+  progress.lastLine = `replacing the installed copy of ${name}`
+  const removed = await manager.removeBundle(name)
+  if (removed.application !== 'applied' && removed.application !== 'restart-required' && removed.application !== 'overridden') return removed
+  return await manager.installBundle(spec, requestId === undefined ? {} : { requestId })
+}
+
 function detail(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
@@ -105,7 +144,7 @@ export function createOfficialDesktopRuntime(
     try {
       operation = command === 'remove'
         ? manager.removeBundle(target)
-        : manager.installBundle(spec, { requestId })
+        : installReplacingInstalled(manager, spec, requestId)
     } catch (error) {
       progress.active = false
       return Promise.resolve(failure(detail(error), 127))

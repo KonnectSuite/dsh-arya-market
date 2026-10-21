@@ -73,6 +73,29 @@ describe('official Electron profile runtime', () => {
     expect(service.removeBundle).toHaveBeenCalledWith('example')
   })
 
+  it('replaces the installed copy when the manager refuses an update as already installed', async () => {
+    const service = manager()
+    service.installBundle
+      .mockResolvedValueOnce({ application: 'failed', error: { code: 'already-installed' } })
+      .mockResolvedValueOnce({ application: 'restart-required', packageResult: { exitCode: 0, output: 'updated' } })
+    const runtime = createOfficialDesktopRuntime(() => service, 'desktop', profile())
+    await expect(runtime.runPlugin('desktop', ['add', 'example@2.0.0'])).resolves.toMatchObject({ exitCode: 0, stdout: 'updated' })
+    expect(service.installBundle).toHaveBeenNthCalledWith(1, 'example@2.0.0', { requestId: expect.any(String) })
+    expect(service.removeBundle).toHaveBeenCalledWith('example')
+    expect(service.installBundle).toHaveBeenNthCalledWith(2, 'example@2.0.0', { requestId: expect.any(String) })
+    await runtime.dispose()
+  })
+
+  it('keeps the manager failure when the removal itself fails', async () => {
+    const service = manager()
+    service.installBundle.mockResolvedValueOnce({ application: 'failed', error: { code: 'already-installed' } })
+    service.removeBundle.mockResolvedValueOnce({ application: 'failed', error: { code: 'not-removable' } })
+    const runtime = createOfficialDesktopRuntime(() => service, 'desktop', profile())
+    await expect(runtime.runPlugin('desktop', ['add', 'example@2.0.0'])).resolves.toMatchObject({ exitCode: 1 })
+    expect(service.installBundle).toHaveBeenCalledTimes(1)
+    await runtime.dispose()
+  })
+
   it('never reports exit 0 for a failed application, even after a successful pnpm step', async () => {
     // The official ChangeResult: "successful installation can proceed to
     // enablement" — so stage `enable` + application `failed` follows a pnpm
