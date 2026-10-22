@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-22T00:14:29.514Z",
-  "count": 20,
+  "updated": "2026-10-22T00:56:21.993Z",
+  "count": 21,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -284,13 +284,18 @@
       "url": "https://github.com/KonnectSuite/dsh-client-ui-deepseek-chat",
       "category": "arya",
       "description": {
-        "en": "Optional DeepSeek Chat and Rockwell Resources pages for AryaAI Desktop",
-        "zh": "AryaAI Desktop 的可选 DeepSeek Chat 和 Rockwell Resources 页面"
+        "en": "Optional DeepSeek Chat desktop page",
+        "zh": "可选的 DeepSeek 对话桌面页面"
       },
       "added": "2026-10-17",
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.1-rc.3.tgz",
+          "sha256": "7ae6d3ee2b354bf327f9ed5f663f8a013a53e8936fa3cefa5e41ee1c32897e0d"
+        },
         {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.1-rc.2.tgz",
@@ -302,8 +307,8 @@
           "sha256": "e22c2dc2446e273f1b9ee7edfe9e55db88927512fa93c1edd3f51b3466a7a4ee"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-deepseek-chat-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-deepseek-chat-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-arya-pet",
@@ -590,6 +595,28 @@
       ],
       "version": "0.7.0",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-motionworks-iec-v0.7.0/dsh-tool-motionworks-iec-0.7.0.tgz"
+    },
+    {
+      "name": "@deepseek-ai/dsh-client-ui-rockwell-resources",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-rockwell-resources",
+      "category": "arya",
+      "description": {
+        "en": "Optional Rockwell Resources desktop page with a retained sign-in",
+        "zh": "可选 Rockwell 资源桌面页面，保留登录状态"
+      },
+      "added": "2026-10-22",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-rockwell-resources-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-rockwell-resources-0.2.1-rc.3.tgz",
+          "sha256": "5f593dcf451709572bce39f2897c4b61d362adb3233e34028cfea3382067ea98"
+        }
+      ],
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-rockwell-resources-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-rockwell-resources-0.2.1-rc.3.tgz"
     }
   ]
 }
