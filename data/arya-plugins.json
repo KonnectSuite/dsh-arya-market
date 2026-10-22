@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-22T22:31:27.874Z",
+  "updated": "2026-10-22T22:51:09.757Z",
   "count": 21,
   "categories": {
     "arya": {
@@ -74,6 +74,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.7.6",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.6/dsh-local-llm-0.7.6.tgz",
+          "sha256": "936686ef2f3b7cd37f9b48e659dd1e9d068bd41e4a4ccbd1f79df0c3a19a672d"
+        },
+        {
           "version": "0.7.5",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.5/dsh-local-llm-0.7.5.tgz",
           "sha256": "c46b3fa62fb48570d02d7fc70c3c6158147fd3a663f17c4f19398cfe2b685d5b"
@@ -144,8 +149,8 @@
           "sha256": "627f04f95b23f38f3c373416bacb8192b5101916447ad6596e73f2a1da3f7be3"
         }
       ],
-      "version": "0.7.5",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.5/dsh-local-llm-0.7.5.tgz"
+      "version": "0.7.6",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-local-llm-v0.7.6/dsh-local-llm-0.7.6.tgz"
     },
     {
       "name": "dsh-agent-learning",
