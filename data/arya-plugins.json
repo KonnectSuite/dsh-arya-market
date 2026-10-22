@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-22T01:38:50.590Z",
+  "updated": "2026-10-22T03:27:53.013Z",
   "count": 21,
   "categories": {
     "arya": {
@@ -245,6 +245,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.6.0",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.0/dsh-tool-l5x-0.6.0.tgz",
+          "sha256": "9f5ff5870a6d7b0a1898e46ea01185df85c16e699f2fc1bcc39572336c140b08"
+        },
+        {
           "version": "0.5.0",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.5.0/dsh-tool-l5x-0.5.0.tgz",
           "sha256": "227dfedb8e51e6334a539f7651eddff285657584d5300e7e0b5d093b47b0303f"
@@ -285,8 +290,8 @@
           "sha256": "a8f68870232e894307307f092b56c1ea85033e191ccadf808ccaf05d2d3fdf27"
         }
       ],
-      "version": "0.5.0",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.5.0/dsh-tool-l5x-0.5.0.tgz"
+      "version": "0.6.0",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.0/dsh-tool-l5x-0.6.0.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-deepseek-chat",
