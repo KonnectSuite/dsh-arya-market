@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-23T01:39:11.905Z",
-  "count": 21,
+  "updated": "2026-10-23T14:38:12.877Z",
+  "count": 19,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -250,78 +250,6 @@
       ],
       "version": "0.1.1",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-clear-light-v0.1.1/dsh-clear-light-0.1.1.tgz"
-    },
-    {
-      "name": "dsh-tool-l5x",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-tool-l5x",
-      "category": "arya",
-      "description": {
-        "en": "Studio 5000 engineering: L5X analysis and drafts, official manual search, capability guidance and source-linked diagnostics.",
-        "zh": "Studio 5000 工程工具：L5X 分析与草稿、官方手册搜索、能力指导及关联源代码的诊断。"
-      },
-      "added": "2026-10-10",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.6.2",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.2/dsh-tool-l5x-0.6.2.tgz",
-          "sha256": "956c968bf653bf41ab168812b845d9c402ab8a506d74ea3595d7e8482a97dc48"
-        },
-        {
-          "version": "0.6.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.1/dsh-tool-l5x-0.6.1.tgz",
-          "sha256": "d2a2ce5e1998d4eec1b651310a9d134b988729a7001f136353d540f433220819"
-        },
-        {
-          "version": "0.6.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.0/dsh-tool-l5x-0.6.0.tgz",
-          "sha256": "9f5ff5870a6d7b0a1898e46ea01185df85c16e699f2fc1bcc39572336c140b08"
-        },
-        {
-          "version": "0.5.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.5.0/dsh-tool-l5x-0.5.0.tgz",
-          "sha256": "227dfedb8e51e6334a539f7651eddff285657584d5300e7e0b5d093b47b0303f"
-        },
-        {
-          "version": "0.3.3",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.3/dsh-tool-l5x-0.3.3.tgz",
-          "sha256": "c7e22ca20c3ad5ad27f0a968d10d8dc8a78e6b8567bfc8b4a345e977256bc7ca"
-        },
-        {
-          "version": "0.3.2",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.2/dsh-tool-l5x-0.3.2.tgz",
-          "sha256": "cbf64816e7fb5d9db08e5d69c06f4ff84a36c304f2a5ad88b3bbede8bdfa3de0"
-        },
-        {
-          "version": "0.3.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.1/dsh-tool-l5x-0.3.1.tgz",
-          "sha256": "6adec83d5873f46d6dd4876e94d037619b5c4e19745cda7173feb0594b62c36b"
-        },
-        {
-          "version": "0.3.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.3.0/dsh-tool-l5x-0.3.0.tgz",
-          "sha256": "ef8f55e2cc270f5b8c7bcc2119f4ce66d98d13cc79a07e07342c9b7d09f6610b"
-        },
-        {
-          "version": "0.2.2",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.2.2/dsh-tool-l5x-0.2.2.tgz",
-          "sha256": "b0c64c89195f004e39039cb4a1e069ba075a5072b43b28c53e3193871b065dcc"
-        },
-        {
-          "version": "0.2.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.2.1/dsh-tool-l5x-0.2.1.tgz",
-          "sha256": "b6318d0203cc0db66ec85d96dc9e7162333749403f3249ba8d56656499f8d6e6"
-        },
-        {
-          "version": "0.2.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.2.0/dsh-tool-l5x-0.2.0.tgz",
-          "sha256": "a8f68870232e894307307f092b56c1ea85033e191ccadf808ccaf05d2d3fdf27"
-        }
-      ],
-      "version": "0.6.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-l5x-v0.6.2/dsh-tool-l5x-0.6.2.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-deepseek-chat",
@@ -601,28 +529,6 @@
       ],
       "version": "0.2.1-rc.2",
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-tool-ft-optix-v0.2.1-rc.2/deepseek-ai-dsh-tool-ft-optix-0.2.1-rc.2.tgz"
-    },
-    {
-      "name": "dsh-tool-factorytalk-view",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-tool-factorytalk-view",
-      "category": "arya",
-      "description": {
-        "en": "FactoryTalk View ME engineering tools and skill",
-        "zh": "FactoryTalk View ME 工程工具与技能"
-      },
-      "added": "2026-10-20",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.3.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-factorytalk-view-v0.3.0/dsh-tool-factorytalk-view-0.3.0.tgz",
-          "sha256": "a68b477282c670e2a7720873a07d69cee992f180081c480a814d3c11c7f9dd59"
-        }
-      ],
-      "version": "0.3.0",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-factorytalk-view-v0.3.0/dsh-tool-factorytalk-view-0.3.0.tgz"
     },
     {
       "name": "dsh-tool-motionworks-iec",
