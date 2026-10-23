@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-22T23:24:18.399Z",
+  "updated": "2026-10-23T01:39:11.905Z",
   "count": 21,
   "categories": {
     "arya": {
@@ -413,13 +413,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-images-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-images-0.2.1-rc.3.tgz",
+          "sha256": "e27db3e708b4a68f2e63c642509b4f990663c9b5bb7286d3184d24ddc129591a"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-images-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-images-0.2.1-rc.2.tgz",
           "sha256": "3ea3886869a09d8c3444197e77a4f42a728e822b3ef7d39203405b36be281a49"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-images-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-images-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-client-ui-images-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-images-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-logix-project-viewer",
