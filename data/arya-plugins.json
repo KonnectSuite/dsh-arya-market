@@ -531,28 +531,6 @@
       "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-deepseek-ai-dsh-tool-ft-optix-v0.2.1-rc.2/deepseek-ai-dsh-tool-ft-optix-0.2.1-rc.2.tgz"
     },
     {
-      "name": "dsh-tool-motionworks-iec",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-tool-motionworks-iec",
-      "category": "arya",
-      "description": {
-        "en": "MotionWorks IEC engineering tools and skill",
-        "zh": "MotionWorks IEC 工程工具与技能"
-      },
-      "added": "2026-10-20",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.7.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-motionworks-iec-v0.7.0/dsh-tool-motionworks-iec-0.7.0.tgz",
-          "sha256": "d1c19245ab1bea50c8ff4b4463cc163f123ae649c012ad48aaba0b1e159e592a"
-        }
-      ],
-      "version": "0.7.0",
-      "tarball": "https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-tool-motionworks-iec-v0.7.0/dsh-tool-motionworks-iec-0.7.0.tgz"
-    },
-    {
       "name": "@deepseek-ai/dsh-client-ui-rockwell-resources",
       "owner": "KonnectSuite",
       "url": "https://github.com/KonnectSuite/dsh-client-ui-rockwell-resources",

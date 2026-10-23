@@ -2,7 +2,8 @@
   "comment": "Every Arya-authored plugin the Arya catalog may offer. publish-arya-batch.mjs matches packed tarballs by package name and publishes the ones this list names; a tarball whose name is absent here is reported instead of being guessed.",
   "legacyNames": [
     "dsh-factorytalk-view-use",
-    "dsh-motionworks-iec-use"
+    "dsh-motionworks-iec-use",
+    "dsh-tool-motionworks-iec"
   ],
   "plugins": [
     { "name": "@deepseek-ai/dsh-client-ui-images", "source": "KonnectSuite/dsh-client-ui-images", "description": { "en": "ComfyUI image generation and the local gallery", "zh": "ComfyUI 图像生成与本地画廊" } },
@@ -18,7 +19,6 @@
     { "name": "@deepseek-ai/dsh-client-ui-rockwell-resources", "source": "KonnectSuite/dsh-client-ui-rockwell-resources", "description": { "en": "Optional Rockwell Resources desktop page with a retained sign-in", "zh": "可选 Rockwell 资源桌面页面，保留登录状态" } },
     { "name": "@deepseek-ai/dsh-client-ui-googleremotedesktop", "source": "KonnectSuite/dsh-client-ui-googleremotedesktop", "description": { "en": "Google Remote Desktop sidebar page with a persistent sign-in", "zh": "带持久登录的 Google 远程桌面侧边栏页面" } },
     { "name": "@deepseek-ai/dsh-tool-ft-optix", "source": "KonnectSuite/dsh-tool-ftoptix", "description": { "en": "FactoryTalk Optix authoring, preview and verification tools", "zh": "FactoryTalk Optix 编写、预览与校验工具" } },
-    { "name": "dsh-tool-motionworks-iec", "source": "KonnectSuite/dsh-tool-motionworks-iec", "description": { "en": "MotionWorks IEC engineering tools and skill", "zh": "MotionWorks IEC 工程工具与技能" } },
     { "name": "dsh-tool-factorytalk-view", "source": "KonnectSuite/dsh-tool-factorytalk-view", "description": { "en": "FactoryTalk View ME engineering tools and skill", "zh": "FactoryTalk View ME 工程工具与技能" } },
     { "name": "dsh-tool-l5x", "source": "KonnectSuite/dsh-tool-l5x", "description": { "en": "Studio 5000 L5X project tools", "zh": "Studio 5000 L5X 工程工具" } },
     { "name": "dsh-projects", "source": "KonnectSuite/dsh-projects", "description": { "en": "Give one workspace several folders", "zh": "为一个工作区提供多个文件夹" } },
