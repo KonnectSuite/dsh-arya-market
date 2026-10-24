@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-24T03:57:22.235Z",
+  "updated": "2026-10-24T05:50:17.905Z",
   "count": 16,
   "categories": {
     "arya": {
@@ -312,13 +312,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-arya-pet-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-arya-pet-0.2.1-rc.3.tgz",
+          "sha256": "5d25d9c7c5cfbac54dcc01299af50afa1445f07959ff7952fa05d701a81cdb3b"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-arya-pet-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-arya-pet-0.2.1-rc.2.tgz",
           "sha256": "04d16be4c5f694f58da77630a09be15070c7cf1c34cacedb6d828c6a3a0e7e24"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-arya-pet-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-arya-pet-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-arya-pet-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-arya-pet-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-googleremotedesktop",
@@ -383,13 +388,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-mobile-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-mobile-0.2.1-rc.3.tgz",
+          "sha256": "e57dd450034e06b49a625bcbd92976f4738fac83b41b8d2783f0aa8e5f5b077f"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-mobile-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-mobile-0.2.1-rc.2.tgz",
           "sha256": "d218321c5e613148599fde64de24accc8e22218b2f98ddf35e4c80ecae84e1f5"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-mobile-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-mobile-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-mobile-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-mobile-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-no-repo",
@@ -405,13 +415,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-no-repo-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-no-repo-0.2.1-rc.3.tgz",
+          "sha256": "7d12e582c709992a697e252acb444430ebe01f2230114694be2b1089e78894fb"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-no-repo-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-no-repo-0.2.1-rc.2.tgz",
           "sha256": "a9c49b8f66de8715869557f2e7721f7da5f3f930ea3fa8e34987309e8c2ea744"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-no-repo-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-no-repo-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-no-repo-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-no-repo-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-release-notes",
@@ -427,13 +442,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-release-notes-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-release-notes-0.2.1-rc.3.tgz",
+          "sha256": "c02d6b31f6474eb435ad7c9fe36f50fdb4774e24976705ebc9c911a8b084cbde"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-release-notes-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-release-notes-0.2.1-rc.2.tgz",
           "sha256": "d6e184f12499ece10c6b30c0c2f77f0dff66f1275bfb7bc3f6a609c4ed85d8f0"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-release-notes-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-release-notes-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-release-notes-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-release-notes-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-sidebar-switcher",
@@ -449,13 +469,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-sidebar-switcher-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-sidebar-switcher-0.2.1-rc.3.tgz",
+          "sha256": "56e052e1ed57da6daf04f10aaa9dde88c41889f9b3a8335e7348e1b11fd0a23d"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-sidebar-switcher-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-sidebar-switcher-0.2.1-rc.2.tgz",
           "sha256": "64a97d22e01de6370630f0949195e6cda1b3779f9ede5d1b5fa5934e6ac6cd10"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-sidebar-switcher-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-sidebar-switcher-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-sidebar-switcher-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-sidebar-switcher-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-skills-mcp",
@@ -471,13 +496,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-skills-mcp-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-skills-mcp-0.2.1-rc.3.tgz",
+          "sha256": "5c8486cf18eda88dcb0605f98aae49391bfe5e95ea4232bc708ec1b54ee1696f"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-skills-mcp-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-skills-mcp-0.2.1-rc.2.tgz",
           "sha256": "045eb76226e0df5d1d50e07409b116060da804cf83e6e093176fe20749731180"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-skills-mcp-v0.2.1-rc.2/deepseek-ai-dsh-client-ui-skills-mcp-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-client-ui-skills-mcp-v0.2.1-rc.3/deepseek-ai-dsh-client-ui-skills-mcp-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-github",
@@ -493,13 +523,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.2.1-rc.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-github-v0.2.1-rc.3/deepseek-ai-dsh-github-0.2.1-rc.3.tgz",
+          "sha256": "9ab50949e1c71d896296b6c2ad3e0bd3a5caef01857126990bcb24625ab7d523"
+        },
+        {
           "version": "0.2.1-rc.2",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-github-v0.2.1-rc.2/deepseek-ai-dsh-github-0.2.1-rc.2.tgz",
           "sha256": "b1d8e7d9ad7e848ff2c6161ac2a5f4a35d6062be2fee2e4531ecb7924b416cae"
         }
       ],
-      "version": "0.2.1-rc.2",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-github-v0.2.1-rc.2/deepseek-ai-dsh-github-0.2.1-rc.2.tgz"
+      "version": "0.2.1-rc.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-deepseek-ai-dsh-github-v0.2.1-rc.3/deepseek-ai-dsh-github-0.2.1-rc.3.tgz"
     },
     {
       "name": "@deepseek-ai/dsh-client-ui-rockwell-resources",
