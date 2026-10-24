@@ -15,66 +15,21 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { Marked } from 'marked'
 import LOCALES from '../site/locales.mjs'
-import COMMENTS from '../site/comments.mjs'
 
 const ORIGIN = 'https://dshmarket.com'
 const CATALOG = 'https://awesome-dsh-plugin.com'
 const REGISTRY_FILE = 'data/registry-snapshot.json'
-const READMES_FILE = 'data/readmes-snapshot.json'
 const OUT = 'docs'
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const ldSafe = (s) => s.replaceAll('<', '\\u003c')
-
-// ── advertising ─────────────────────────────────────────────────────────────
-// One AdSense head tag, gated behind a build variable. Unset — the default —
-// emits nothing at all, so an unconfigured build is byte-identical to an
-// ad-free one and no third-party script is requested.
-//
-// Auto ads decide placement from this tag alone, so there is no slot markup to
-// write and no reserved height to get wrong. The publisher id is a `vars`
-// entry rather than a secret because it ships in the HTML either way.
-const ADSENSE_CLIENT = process.env.ADSENSE_CLIENT || ''
-const adHead = () =>
-  ADSENSE_CLIENT
-    ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${esc(ADSENSE_CLIENT)}" crossorigin="anonymous"></script>\n`
-    : ''
-// The token sits on its own line in every template, so the match takes the
-// newline with it. Otherwise an unconfigured build leaves a blank line behind
-// and "identical to an ad-free build" stops being literally true — which is
-// the one claim about this feature worth being able to check by diffing.
-const AD_HEAD_TOKEN = '__AD_HEAD__\n'
-
-// A missing id here does not fail the build, it ships 1884 pages whose comment
-// box silently talks to the wrong repository — so check the shape up front and
-// stop, rather than discovering it from a user's report.
-if (typeof COMMENTS.enabled !== 'boolean') {
-  console.error('site/comments.mjs: `enabled` must be a boolean')
-  process.exit(1)
-}
-if (COMMENTS.enabled) {
-  for (const key of ['repo', 'repoId', 'category', 'categoryId']) {
-    if (typeof COMMENTS[key] !== 'string' || !COMMENTS[key]) {
-      console.error(`site/comments.mjs: \`${key}\` must be a non-empty string when comments are enabled`)
-      process.exit(1)
-    }
-  }
-}
 
 if (!fs.existsSync(REGISTRY_FILE)) {
   console.error(`${REGISTRY_FILE} is missing — run \`npm run snapshot\` first`)
   process.exit(1)
 }
 const registry = JSON.parse(fs.readFileSync(REGISTRY_FILE, 'utf8'))
-// Optional: without it, pages still build, they just carry no README body.
-// Missing is a warning rather than an error so a catalog outage degrades the
-// pages instead of failing the deploy that would have refreshed them.
-const readmes = fs.existsSync(READMES_FILE)
-  ? JSON.parse(fs.readFileSync(READMES_FILE, 'utf8')).readmes ?? {}
-  : (console.warn(`${READMES_FILE} is missing — building without README bodies`), {})
-
 const plugins = registry.plugins ?? []
 if (!plugins.length) {
   console.error(`${REGISTRY_FILE} lists no plugins — refusing to build an empty site`)
@@ -105,17 +60,11 @@ for (const f of fs.readdirSync('site/assets')) {
   fs.mkdirSync(`${OUT}/assets`, { recursive: true })
   fs.copyFileSync(`site/assets/${f}`, `${OUT}/assets/${f}`)
 }
-// ads.txt ships unconditionally, unlike the ad tag above. It is a claim about
-// who is allowed to sell this domain's inventory, which stays true whether or
-// not a tag is currently live, and AdSense verifies site ownership from it — so
-// it has to exist before the review, not after.
-for (const f of ['CNAME', 'robots.txt', 'ads.txt']) fs.copyFileSync(`site/${f}`, `${OUT}/${f}`)
+for (const f of ['CNAME', 'robots.txt']) fs.copyFileSync(`site/${f}`, `${OUT}/${f}`)
 
-// ── README rendering ────────────────────────────────────────────────────────
-// Same image policy as the catalog site, for the same reason: a README is
-// third-party markdown, and an <img> in it is a request the visitor's browser
-// makes to a host we do not control. Restricted to GitHub's own hosting, which
-// adds nobody new — these pages are served from GitHub Pages already.
+// A plugin's screenshots come from the catalog, and an <img> is a request the
+// visitor's browser makes to a host we do not control. Same allowlist the
+// catalog site uses: GitHub's own hosting, which these pages already rely on.
 const IMG_HOSTS = new Set([
   'raw.githubusercontent.com',
   'user-images.githubusercontent.com',
@@ -125,40 +74,6 @@ const IMG_HOSTS = new Set([
 const imgAllowed = (href) => {
   if (/^data:/i.test(href)) return true
   try { return IMG_HOSTS.has(new URL(href).hostname) } catch { return false }
-}
-function renderReadme(rm) {
-  const abs = (href, base, allowData = false) => {
-    if (!href || /^(https?:|mailto:|#)/i.test(href)) return href
-    if (/^data:/i.test(href)) return allowData ? href : '#'
-    return base + href.replace(/^\.\//, '').replace(/^\//, '')
-  }
-  const md = new Marked({
-    walkTokens(t) {
-      if (t.type === 'heading') t.depth = Math.min(t.depth + 1, 6)
-      else if (t.type === 'image') t.href = abs(t.href, rm.base, true)
-      else if (t.type === 'link') t.href = abs(t.href, rm.blobBase)
-    },
-    renderer: {
-      html: () => '',
-      image({ href, title, text }) {
-        if (!href || !imgAllowed(href)) return ''
-        const t = title ? ` title="${esc(title)}"` : ''
-        return `<img src="${esc(href)}" alt="${esc(text ?? '')}"${t} loading="lazy" decoding="async" referrerpolicy="no-referrer">`
-      },
-    },
-  })
-  try {
-    let html = md.parse(rm.md.replace(/^\s*# .*\n/, ''))
-    // Dropping an image can empty the link that wrapped it and then the
-    // paragraph that held the link; loop until nothing more collapses.
-    for (let prev = null; prev !== html;) {
-      prev = html
-      html = html.replace(/<a\b[^>]*>\s*<\/a>/g, '').replace(/<p>\s*<\/p>\s*/g, '')
-    }
-    return html
-  } catch {
-    return null
-  }
 }
 
 // ── shared page furniture ───────────────────────────────────────────────────
@@ -178,7 +93,8 @@ const write = (urlPath, html) => {
   fs.writeFileSync(path.join(dir, 'index.html'), html)
 }
 
-const pluginPath = (loc, slug) => `${loc.urlPath}p/${slug}/`
+// Plugin pages live on the catalog site; every link from this site goes there.
+const pluginPath = (loc, slug) => `${CATALOG}${loc.urlPath}p/${slug}/`
 
 // ── landing-page catalog ────────────────────────────────────────────────────
 // The front door used to be a 1.4 KB marketing page while /browse/ carried the
@@ -310,11 +226,28 @@ for (const loc of LOCALES) {
       .replaceAll('__BROWSE__', () => loc.browsePath)
       .replaceAll('__HOME_CSS__', () => (landing ? homeCss() : ''))
       .replaceAll('__HOME_CATALOG__', () => (landing ? homeCatalog(loc) : ''))
-      .replaceAll(AD_HEAD_TOKEN, () => (landing ? adHead() : ''))
     page = applyStrings(page, loc)
     if (urlPath === '/') fs.writeFileSync(`${OUT}/index.html`, page)
     else write(urlPath, page)
   }
+}
+
+// ── install page ────────────────────────────────────────────────────────────
+// Instructions, not a second catalog: the plugin pages carry each plugin, and
+// this page answers the one question they cannot — what to do with the command
+// they show, and what the four common failures mean. The body is per-locale
+// HTML, the way index and privacy are.
+for (const loc of LOCALES) {
+  if (!fs.existsSync(loc.install)) { console.error(`${loc.install} is missing`); process.exit(1) }
+  const url = ORIGIN + loc.installPath
+  let page = fs.readFileSync(loc.install, 'utf8')
+    .replaceAll('__URL__', () => url)
+    .replaceAll('__HREFLANGS__', () => hreflangs((l) => l.installPath))
+    .replaceAll('__BROWSE__', () => loc.browsePath)
+    .replaceAll('__HOME__', () => loc.urlPath)
+    .replaceAll('__PRIVACY__', () => loc.privacyPath)
+    .replaceAll('__LOCALE_LINKS__', () => localeLinks(loc, (l) => l.installPath))
+  write(loc.installPath, applyStrings(page, loc))
 }
 
 // ── browse index ────────────────────────────────────────────────────────────
@@ -329,7 +262,7 @@ for (const loc of LOCALES) {
   const sections = byCat.map((c) => `<section class="cat" id="${c.id}">
   <h2>${esc(c.name)}<small>${c.items.length}</small></h2>
   <ul class="list">
-${c.items.map((p) => `    <li><a href="${pluginPath(loc, p.slug)}"><span class="owner">${esc(p.owner)}/</span>${esc(p.name)}</a><p>${esc(p.description?.[loc.code] ?? p.description?.en ?? '')}</p></li>`).join('\n')}
+${c.items.map((p) => `    <li><a href="${pluginPath(loc, p.slug)}"><span class="owner">${esc(p.owner)}/</span>${esc(p.name)}</a></li>`).join('\n')}
   </ul>
 </section>`).join('\n')
 
@@ -341,161 +274,32 @@ ${c.items.map((p) => `    <li><a href="${pluginPath(loc, p.slug)}"><span class="
     .replaceAll('__HREFLANGS__', () => hreflangs((l) => l.browsePath))
     .replaceAll('__OG_IMAGE__', () => `${ORIGIN}/assets/demo-${loc.code}.png`)
     .replaceAll('__HOME__', () => loc.urlPath)
+    .replaceAll('__INSTALL__', () => loc.installPath)
     .replaceAll('__PRIVACY__', () => loc.privacyPath)
     .replaceAll('__LOCALE_LINKS__', () => localeLinks(loc, (l) => l.browsePath))
     .replaceAll('__JUMP__', () => jump)
     .replaceAll('__SECTIONS__', () => sections)
-    .replaceAll(AD_HEAD_TOKEN, () => adHead())
   write(loc.browsePath, applyStrings(page, loc))
 }
 
-// ── plugin pages ────────────────────────────────────────────────────────────
-const pluginMaster = fs.readFileSync('site/plugin-template.html', 'utf8')
-let readmeCount = 0
-let mismatchCount = 0
+// ── plugin redirects ────────────────────────────────────────────────────────
+// This site used to render its own copy of every plugin page: the same catalog
+// content as awesome-dsh-plugin.com, canonicalised to it. The result was 2,954
+// URLs parked as "alternate page with proper canonical" and 212 MB of
+// duplicated third-party text in the deploy — the profile of a mirror, not of
+// a market. The list owns the plugin pages; this site sends people there and
+// keeps the old /p/ URLs working, because posts and issues link to them.
+const redirectMaster = fs.readFileSync('site/plugin-redirect.html', 'utf8')
 for (const loc of LOCALES) {
   for (const p of plugins) {
-    const url = ORIGIN + pluginPath(loc, p.slug)
-    const desc = p.description?.[loc.code] ?? p.description?.en ?? ''
-    const metaDesc = desc.length > 155 ? desc.slice(0, 152).trimEnd() + '…' : desc
-
-    const facts = [
-      p.stars != null ? `<span>${loc.strings.P_STARS} <b>★ ${p.stars}</b></span>` : '',
-      `<span>${loc.strings.P_CAT} <b>${esc(catName(p.category, loc))}</b></span>`,
-      p.added ? `<span>${loc.strings.P_ADDED} <b>${esc(p.added)}</b></span>` : '',
-      p.npm ? `<span>${loc.strings.P_NPM} <b>${esc(p.npm)}</b></span>` : '',
-    ].filter(Boolean).join('\n    ')
-
-    const cmd = (c, note) => `<p class="note">${note}</p>
-      <div class="cmd"><pre>${esc(c)}</pre><button type="button" data-cmd="${esc(c)}" data-copied="${esc(loc.strings.COPIED)}">${esc(loc.strings.COPY)}</button></div>`
-    const install = [
-      cmd('dsh plugin --profile web add dshmarket', loc.strings.P_INSTALL_MARKET),
-      cmd(p.install, loc.strings.P_INSTALL_CLI),
-    ].join('\n      ')
-
-    const shots = (p.screenshots ?? []).filter((s) => imgAllowed(s))
-    const shotSection = shots.length ? `<section class="panel">
-      <h2>${loc.strings.P_SHOTS}</h2>
-      <div class="shots">
-${shots.map((s) => `        <img src="${esc(s)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`).join('\n')}
-      </div>
-    </section>` : ''
-
-    const links = [
-      `<p><a href="${esc(p.url)}" rel="noopener">${loc.strings.P_GH}</a></p>`,
-      p.npm ? `<p><a href="https://www.npmjs.com/package/${esc(p.npm)}" rel="noopener">${loc.strings.P_NPM_LINK}</a></p>` : '',
-      `<p><a href="${CATALOG}${loc.urlPath}p/${p.slug}/" rel="noopener">${loc.strings.P_CATALOG}</a></p>`,
-    ].filter(Boolean).join('\n      ')
-
-    // Cut the sidebar blurbs at a word rather than mid-token: "cloudflared
-    // tunne" reads as a broken page, not as a shortened sentence. CJK has no
-    // spaces, so there the hard cut stands and an ellipsis carries the meaning.
-    const blurb = (s, n = 90) => {
-      if (s.length <= n) return s
-      const head = s.slice(0, n)
-      const sp = head.lastIndexOf(' ')
-      return (sp > n * 0.6 ? head.slice(0, sp) : head).trimEnd() + '…'
-    }
-    const related = plugins
-      .filter((r) => r.category === p.category && r.url !== p.url)
-      .sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1))
-      .slice(0, 6)
-    const relSection = related.length ? `<section class="panel">
-      <h2>${loc.strings.P_RELATED}</h2>
-      <ul class="rel">
-${related.map((r) => `        <li><a href="${pluginPath(loc, r.slug)}">${esc(r.displayName)}</a><p>${esc(blurb(r.description?.[loc.code] ?? r.description?.en ?? ''))}</p></li>`).join('\n')}
-      </ul>
-    </section>` : ''
-
-    // README: prefer this page's language, fall back to whatever exists, and
-    // mark the block with its real lang when they differ. A page that claims
-    // lang="en" around Chinese prose misinforms every consumer that reads it.
-    const entry = readmes[p.url]
-    let rm = null
-    let rmLang = null
-    if (entry) {
-      for (const code of [loc.code, ...LOCALES.map((l) => l.code)]) {
-        if (entry[code]) { rm = entry[code]; rmLang = code; break }
-      }
-    }
-    const readmeHtml = rm ? renderReadme(rm) : null
-    const mismatch = rm != null && rmLang !== loc.code
-    if (readmeHtml) readmeCount++
-    if (mismatch) mismatchCount++
-    const rmLocale = LOCALES.find((l) => l.code === rmLang)
-    const readmeSection = readmeHtml ? `<section class="panel">
-      <h2>${loc.strings.P_README}</h2>${mismatch ? `\n      <p class="note">${esc(loc.strings.P_README_ONLY.replace('{LANG}', loc.langNames[rmLang] ?? rmLang))}</p>` : ''}
-      <div class="md" lang="${rmLocale?.htmlLang ?? loc.htmlLang}">
-${readmeHtml}
-      </div>
-      <p class="note"><a href="${esc(rm.htmlUrl)}" rel="noopener">${loc.strings.P_README_SRC}</a></p>
-    </section>` : ''
-
-    // `mapping: specific` with the shared slug is what makes this page, the
-    // catalog's page and the market's drawer land on one discussion instead of
-    // three. `strict` hashes the term, so a slug that merely contains another
-    // cannot collide with it.
-    const commentsId = `comments-${p.slug.replace(/[^a-z0-9-]/gi, '-')}`
-    const commentsConfig = {
-      repo: COMMENTS.repo,
-      repoId: COMMENTS.repoId,
-      category: COMMENTS.category,
-      categoryId: COMMENTS.categoryId,
-      term: `plugin:${p.slug}`,
-      lang: loc.giscusLang,
-    }
-    const commentsSection = COMMENTS.enabled ? `<section class="panel" aria-labelledby="${commentsId}-title">
-      <h2 id="${commentsId}-title">${loc.strings.P_COMMENTS}</h2>
-      <p class="note">${loc.strings.P_COMMENTS_NOTE}</p>
-      <p class="comments-status" role="status" aria-live="polite"></p>
-      <div class="comments-mount giscus" id="${commentsId}-mount" data-comments="${esc(JSON.stringify(commentsConfig))}" data-loading="${esc(loc.strings.P_COMMENTS_LOADING)}" data-ready="${esc(loc.strings.P_COMMENTS_READY)}" data-error="${esc(loc.strings.P_COMMENTS_ERROR)}" data-retry="${esc(loc.strings.P_COMMENTS_RETRY)}"></div>
-      <noscript><p class="note"><a href="https://github.com/${COMMENTS.repo}/discussions" rel="noopener">${loc.strings.P_COMMENTS_FALLBACK}</a></p></noscript>
-    </section>` : ''
-
-    const jsonld = JSON.stringify([{
-      '@context': 'https://schema.org',
-      '@type': 'SoftwareApplication',
-      name: p.displayName,
-      url,
-      description: desc,
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: 'DeepSeek Harness',
-      offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD' },
-      sameAs: [p.url, p.npm ? `https://www.npmjs.com/package/${p.npm}` : null].filter(Boolean),
-    }, {
-      '@context': 'https://schema.org',
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: loc.strings.CRUMB_HOME, item: ORIGIN + loc.urlPath },
-        { '@type': 'ListItem', position: 2, name: loc.strings.CRUMB_BROWSE, item: ORIGIN + loc.browsePath },
-        { '@type': 'ListItem', position: 3, name: p.displayName, item: url },
-      ],
-    }])
-
-    let page = pluginMaster
-      .replaceAll('__P_README_SECTION__', () => readmeSection)
-      .replaceAll('__P_COMMENTS__', () => commentsSection)
+    const target = pluginPath(loc, p.slug)
+    const page = redirectMaster
       .replaceAll('__LANG__', () => loc.htmlLang)
-      .replaceAll('__TITLE__', () => esc(loc.P_TITLE.replace('{NAME}', p.displayName)))
-      .replaceAll('__DESC__', () => esc(metaDesc))
-      .replaceAll('__URL__', () => url)
-      .replaceAll('__CANONICAL__', () => CATALOG + pluginPath(loc, p.slug))
-      .replaceAll('__OG_IMAGE__', () => `${ORIGIN}/assets/demo-${loc.code}.png`)
-      .replaceAll('__JSONLD__', () => ldSafe(jsonld))
-      .replaceAll('__HOME__', () => loc.urlPath)
-      .replaceAll('__BROWSE__', () => loc.browsePath)
-      .replaceAll('__PRIVACY__', () => loc.privacyPath)
-      .replaceAll('__LOCALE_LINKS__', () => localeLinks(loc, (l) => pluginPath(l, p.slug)))
-      .replaceAll('__P_SHORT__', () => esc(p.name))
-      .replaceAll('__P_H1__', () => `<span class="owner">${esc(p.owner)}/</span>${esc(p.name)}`)
-      .replaceAll('__P_DESC__', () => esc(desc))
-      .replaceAll('__P_FACTS__', () => facts)
-      .replaceAll('__P_INSTALL__', () => install)
-      .replaceAll('__P_SHOTS__', () => shotSection)
-      .replaceAll('__P_LINKS__', () => links)
-      .replaceAll('__P_RELATED__', () => relSection)
-      .replaceAll(AD_HEAD_TOKEN, () => adHead())
-    write(pluginPath(loc, p.slug), applyStrings(page, loc))
+      .replaceAll('__TITLE__', () => esc(`${p.displayName} — ${loc.strings.REDIRECT_TITLE}`))
+      .replaceAll('__TARGET__', () => esc(target))
+      .replaceAll('__TARGET_JS__', () => ldSafe(JSON.stringify(target)))
+      .replaceAll('__LEAD__', () => esc(loc.strings.REDIRECT_LEAD))
+    write(`${loc.urlPath}p/${p.slug}/`, page)
   }
 }
 
@@ -514,21 +318,49 @@ const urlEntry = (pathFor, lastmod, freq) => LOCALES.map((l) => `  <url>
 ${alt(pathFor)}
   </url>`).join('\n')
 
-// Plugin pages are deliberately absent. They canonicalize to
-// awesome-dsh-plugin.com (see plugin-template.html), and a sitemap is a list
-// of URLs we claim as canonical — submitting 4,900 URLs whose canonical says
-// "not this site" is what kept 920 of them parked in Search Console's
-// "Discovered - currently not indexed" bucket. The pages still exist and are
-// reachable from /browse/; they just are not put forward for indexing.
+// Plugin URLs are absent on purpose. They are redirect stubs to the catalog
+// and carry noindex, so a sitemap — a list of URLs a site claims as its own —
+// has no business naming them. /browse/ links straight to the catalog pages.
 const updated = registry.updated ?? new Date().toISOString().slice(0, 10)
 fs.writeFileSync(`${OUT}/sitemap.xml`, `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urlEntry((l) => l.urlPath, updated, 'weekly')}
 ${urlEntry((l) => l.browsePath, updated, 'daily')}
+${urlEntry((l) => l.installPath, updated, 'monthly')}
 ${urlEntry((l) => l.privacyPath, updated, 'yearly')}
 </urlset>
 `)
 
-const pages = plugins.length * LOCALES.length + LOCALES.length * 3
-console.log(`site built: ${plugins.length} plugins × ${LOCALES.length} locales = ${pages} pages`)
-console.log(`  README bodies rendered: ${readmeCount} (${mismatchCount} in a fallback language)`)
+// The plugin market index, mirrored so dshmarket.com answers the same URL as
+// the list it comes from. One source of truth: the document is generated and
+// validated upstream (awesome-dsh-plugin.com/index.json) and copied here at
+// build time — this site never derives a second one. A deploy without it (the
+// fetch failed, or the upstream was mid-rebuild) still ships the pages; it
+// just does not claim an index it does not have.
+const INDEX_FILE = 'data/market-index.json'
+let indexMirrored = false
+if (fs.existsSync(INDEX_FILE)) {
+  try {
+    // Written back verbatim, not re-serialized: the document is fetched by a
+    // host whose fetch budget is fixed (15 s), and upstream already ships it
+    // minified for that reason. Pretty-printing here added 20% to the wire.
+    const raw = fs.readFileSync(INDEX_FILE, 'utf8')
+    const mirrored = JSON.parse(raw)
+    if (mirrored?.format === 1 && Array.isArray(mirrored.plugins) && mirrored.plugins.length > 0) {
+      fs.writeFileSync(`${OUT}/index.json`, raw.endsWith('\n') ? raw : `${raw}\n`)
+      indexMirrored = true
+      console.log(`index mirrored: ${mirrored.plugins.length} plugins`)
+    } else {
+      console.log('index not mirrored: upstream document is empty or not format 1')
+    }
+  } catch (error) {
+    console.log(`index not mirrored: ${error instanceof Error ? error.message : String(error)}`)
+  }
+} else {
+  console.log('index not mirrored: data/market-index.json was not fetched')
+}
+
+// Real pages only: the stubs are redirects, not content, and counting them as
+// pages is how the deploy looked four times larger than it is.
+const pages = LOCALES.length * 4 // index, browse, install, privacy
+console.log(`site built: ${pages} pages, ${plugins.length} redirect stubs × ${LOCALES.length} locales`)

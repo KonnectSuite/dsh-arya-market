@@ -88,6 +88,20 @@ describe('createSectionGate', () => {
     expect(gate.visible()).toBe(false)
   })
 
+  it('can start hidden, for an entry the user opts into (#846)', () => {
+    let live = 0
+    const gate = createSectionGate(() => {
+      live += 1
+      return () => { live -= 1 }
+    }, false)
+    gate.available()
+    expect(live).toBe(0)
+    gate.setVisible(true)
+    expect(live).toBe(1)
+    gate.setVisible(false)
+    expect(live).toBe(0)
+  })
+
   it('honours a hide that arrives after a removal as a no-op', () => {
     const { gate, registrations } = harness()
     gate.available()

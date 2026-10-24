@@ -12,6 +12,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { hotMount, hotUnmount, listHotMounts, mountClientOnlyDeps, parseSimplePatch, resolveProfileEntry } from '../src/hot.ts'
+import { configurePersistentLog, readPersistentLog } from '../src/log.ts'
 
 // The harness-vendored Include class is not importable in the unit lane;
 // a minimal stand-in lets hotMount succeed so the skip logic is observable.
@@ -487,6 +488,64 @@ describe('failed hotMount cleanup — no leftover file, no wedged fiber', () => 
     } finally {
       vi.doUnmock('@deepseek-ai/cordis-plugin-include')
       vi.resetModules()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a teardown that never finishes cannot hold the market open (#582)', () => {
+  /** Mount one client-only package through the stand-in inclusion plugin. */
+  async function mounted(dir: string, name: string, plugin: (options?: unknown) => unknown): Promise<void> {
+    clientOnlyPkg(dir, name)
+    writeFileSync(join(dir, 'cordis.patch.yml'), `- insert:\n    - id: ${name}\n      name: '${name}'\n`)
+    const result = await hotMount({ plugin } as never, dir, name)
+    expect(result.ok).toBe(true)
+  }
+
+  it('gives up on a hanging teardown at the same ceiling as mounting, and says it could not be confirmed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-hot-'))
+    vi.useFakeTimers()
+    const logFile = join(dir, 'log.ndjson')
+    configurePersistentLog(logFile)
+    const logged = (): string => readPersistentLog(logFile).join('\n')
+    try {
+      let rejectsLate: (error: unknown) => void = () => {}
+      await mounted(dir, 'stuck-plugin', () => ({
+        await: () => Promise.resolve(),
+        dispose: () => new Promise<void>((_resolve, reject) => { rejectsLate = reject }),
+      }))
+      const pending = hotUnmount('stuck-plugin')
+      // Not resolved yet: the teardown is still hanging.
+      let settled: boolean | null = null
+      void pending.then(value => { settled = value })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(settled).toBeNull()
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(await pending).toBe(false)
+      // The package is no longer registered, so a later attempt starts clean
+      // rather than reusing a handle already being disposed.
+      expect(listHotMounts()).not.toContain('stuck-plugin')
+      expect(logged()).toContain('could not be confirmed stopped')
+      // A late settlement is reported, not thrown: this rejection arrives
+      // after the market has already answered.
+      rejectsLate(new Error('teardown finally gave up'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(logged()).toContain('dispose failed after the wait')
+    } finally {
+      configurePersistentLog(null)
+      vi.useRealTimers()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still reports a teardown that fails at once, and one that succeeds', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-hot-'))
+    try {
+      await mounted(dir, 'failing-plugin', () => ({ await: () => Promise.resolve(), dispose: () => Promise.reject(new Error('nope')) }))
+      expect(await hotUnmount('failing-plugin')).toBe(false)
+      await mounted(dir, 'fine-plugin', () => ({ await: () => Promise.resolve(), dispose: () => {} }))
+      expect(await hotUnmount('fine-plugin')).toBe(true)
+    } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   })

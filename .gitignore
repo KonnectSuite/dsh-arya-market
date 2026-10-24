@@ -20,3 +20,7 @@ data/registry-snapshot.json
 data/arya-plugins.json
 
 .arya-release-artifacts/
+
+# The plugin market index dshmarket.com mirrors (generated upstream at
+# awesome-dsh-plugin.com/index.json), fetched by the site build.
+data/market-index.json

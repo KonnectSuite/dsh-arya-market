@@ -215,6 +215,31 @@ describe('trialValidate (#98 trial boot)', () => {
     expect(result.duplicates[0]?.layers).toEqual(['beta', 'alpha'])
   })
 
+  it('downgrades a shared id to a warning on a loader that folds it (#853)', () => {
+    // The trial gate is what rolled the update back: the same pair the check
+    // report calls an override also failed here, so the market refused to
+    // install over a profile whose boot was fine. Same version gate, same
+    // evidence: only the published 1.0.4+ fold the array instead of throwing.
+    const dir = pdir('trial-fold')
+    writeProfile(dir, ['alpha', 'beta'])
+    writeBundle(dir, 'alpha', '1.0.0', [{ insert: [{ id: 'dup-entry', name: 'alpha' }] }])
+    writeBundle(dir, 'beta', '1.0.0', [{ insert: [{ id: 'dup-entry', name: 'beta' }] }])
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      'packages:',
+      "  '@deepseek-ai/cordis-plugin-loader@1.0.5':",
+      '    version: 1.0.5',
+      '',
+    ].join('\n'))
+
+    const result = trialValidate(dir, ['beta', 'alpha'])
+    expect(result.ok).toBe(true)
+    expect(result.errors.some(e => e.message.includes('duplicate'))).toBe(false)
+    // Still reported — the earlier row silently loses, the user should know.
+    expect(result.warnings.some(w => w.message.includes('duplicate'))).toBe(true)
+    expect(result.duplicates).toHaveLength(1)
+  })
+
   it('flags a bundle whose package is listed but not installed', () => {
     const dir = pdir()
     writeProfile(dir, ['alpha', 'beta'])

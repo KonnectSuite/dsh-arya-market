@@ -8,8 +8,8 @@
  * same-origin POSTs and only sources present in the curated registry.
  */
 
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { load as loadYaml } from 'js-yaml'
@@ -34,16 +34,18 @@ import {
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
 import { packageOfEntryName } from './entry-identity.ts'
-import { useInstallerDirectory, isInstallerBundle, addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, declareProfileDependency, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, isDshProfileName, profileDir, readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledPackageName, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileBundles, readProfileManifestSnapshot, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
+import { PendingRowJournal, repairOrphanedRows } from './pending-rows.ts'
+import { isInstallerBundle, useInstallerDirectory, addProfileBundle, bundleOptOutRowIds, bundlePatchInsertedIds, bundlesDroppedFromProfile, declareProfileDependency, dropFromManifest, generationManagedNames, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, isDshProfileName, profileDir, readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledPackageName, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileBundles, readProfileManifestSnapshot, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, corePackageNames, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
 import { applyPreset, deletePreset, listPresets, previewPreset, savePreset } from './presets.ts'
 import { createProfileSnapshot, DEFAULT_MAX_SNAPSHOTS, deleteSnapshot, listSnapshots, restoreSnapshot } from './snapshot.ts'
+import { readHostRecoveryView, restoreHostRecoveryBackup } from './host-recovery.ts'
 import { trialValidate } from './trial.ts'
-import { catalogRepoKey, codeloadAllowBuildsKey, findCatalogEntryForLocal, findInstalledAlias, gitCommitOfTarget, githubCommitOfTarget, githubTargetAtCommit, gitAllowBuildsKey, gitRefOfTarget, gitTargetAtCommit, gitUpdateTarget, hostedRepoKey, lookupRepoFromUrl, pinnedGitAllowBuildsKey, installTargetFor, isGenerationLink, isLocalSpec, NPM_NAME_RE, repoOfTarget, restoreBlockedByWorkspace, restoreTargetForLocal, sourceFallbackFor, workspaceProtocolDeps } from './sources.ts'
-import { failureDetail, groupConflictsByOwner, isStaleUpdate, parseIgnoredBuildEntries, parseIgnoredBuilds, parsePrepareKey, parsePrepareNotAllowed, pnpmBlockedByOpenFiles, pnpmNeverStarted, RELEASE_AGE_OVERRIDE, removeDanglingHostBridge, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
+import { catalogRepoKey, findCatalogEntryForLocal, findInstalledAlias, gitCommitOfTarget, githubCommitOfTarget, githubTargetAtCommit, gitAllowBuildsKey, gitRefOfTarget, gitTargetAtCommit, gitUpdateTarget, hostedRepoKey, lookupRepoFromUrl, pinnedAllowBuildsKeys, installTargetFor, isGenerationLink, isLocalSpec, NPM_NAME_RE, repoOfTarget, restoreBlockedByWorkspace, restoreTargetForLocal, sourceFallbackFor, workspaceProtocolDeps } from './sources.ts'
+import { failureDetail, groupConflictsByOwner, installApplied, isHostPortCollision, isStaleUpdate, parseIgnoredBuildEntries, parseIgnoredBuilds, parsePrepareKey, parsePrepareNotAllowed, pnpmBlockedByOpenFiles, pnpmNeverStarted, pnpmRefusedYoungRelease, RELEASE_AGE_OVERRIDE, removeDanglingHostBridge, retargetCollections, updateApplied, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { classifyPnpmFailure } from './pnpm-compat.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
 import {
@@ -56,15 +58,16 @@ import { updateNotesFor } from './changelog.ts'
 import { checkUpdates, isUpdatablePlugin, compareVersions, fetchNpmLatest, invalidateUpdates, resolveGitRemoteHead, isUpgrade, latestPublishedRecently, setUpdateRegistry, versionOnChannel } from './updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, refuseUnadmitted, sameOrigin, sendJson } from './http.ts'
-import { detectedDebugger, detectedSupervisor, restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest, type RecoveryHandoffConfig, restartReachableFrom } from './restart.ts'
+import { resolveDshHome } from './home-paths.ts'
+import { detectedDebugger, detectedSupervisor, restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest, trustedSelfUninstallRequest, selfUninstallReachableFrom, type RecoveryHandoffConfig, restartReachableFrom } from './restart.ts'
 import type { RecoveryPlugin } from './recovery.ts'
-import { activationAfterReplace, brokenClientBundles, checkClientBundle, defaultHostRuntimeFacts, hasHostHalf, hostPeerGate, newlyBrokenBundles, peerGateRemedy, verifyActivation } from './verify.ts'
+import { activationAfterReplace, brokenClientBundles, bundlePatchIsEmpty, checkClientBundle, defaultHostRuntimeFacts, findUnservedConfigNamespaces, hasHostHalf, hostPeerGate, isDeclaredLibraryDsh, newlyBrokenBundles, peerGateRemedy, verifyActivation } from './verify.ts'
 import {
-  carrierDisableIds, disableRow, enableRow, findUserPatchPath, foreignRowIds, isProtectedModule, packagePatchFlags,
+  carrierRowIds, disableRow, enableRow, findUserPatchPath, foreignRowIds, isProtectedModule, packagePatchFlags,
   readUserPatchState, removeRowBlocks, rowIdsForPackage, userPatchPackageReferences,
 } from './patch.ts'
 import {
-  createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps, uploadWebdav,
+  createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps, uploadWebdav, WebdavUrlError,
   type ProfileBackup,
 } from './backup.ts'
 import {
@@ -154,6 +157,15 @@ export interface MarketConfig {
    * no longer tells a desktop shell apart from an ordinary `dsh` run.
    */
   desktopHost?: boolean
+  /**
+   * How long to wait for the host's own replay of a fresh install before
+   * hot-mounting it (#814). A desktop shell that watches the profile replays
+   * the composition itself, about two seconds after the manifest lands; one
+   * that does not publish `pluginActivation` gives the market no way to ask,
+   * and mounting first made the host's replay fail as a duplicate. Unset,
+   * the wait follows the host's own profile watcher instead (#827).
+   */
+  hostReplayWaitMs?: number
   /** Detached self-restart is unsafe under systemd/launchd/pm2; operators can disable it (#14). */
   allowRestart?: boolean
   /** Which release channel the market offers ITSELF from; other plugins never follow it. */
@@ -310,6 +322,17 @@ function declaresBundle(profileDirectory: string, name: string): boolean {
 }
 
 /**
+ * The host's profile watcher (#827). While its entry is live, a change to
+ * `dsh.profile.bundles` makes the host compose the new bundle itself, about
+ * two seconds after the manifest settles — on a plain `dsh web` as much as on
+ * a desktop shell. A market mount made before that replay is a second copy of
+ * the same rows, and the replay then fails on the routes the copy holds.
+ */
+const PROFILE_HMR_ENTRY = '@deepseek-ai/dsh-hmr'
+/** How long to wait for that replay before mounting: the same ceiling as #814. */
+const PROFILE_HMR_REPLAY_WAIT_MS = 8000
+
+/**
  * The allowBuilds key pnpm itself printed when it refused a build, per package
  * name — from a prepare refusal that named one, or from an ignored-builds line
  * that named the dep path.
@@ -319,6 +342,51 @@ function declaresBundle(profileDirectory: string, name: string): boolean {
  * derived from the profile can answer during an update.
  */
 const printedBuildKeys = new Map<string, string | null>()
+
+// #784: pnpm's printed key is the most authoritative spelling of what the
+// PENDING install needs allowlisted, and it used to live only in the map
+// above — a DSH restart between the failure and the "allow build scripts"
+// click dropped it, leaving the button to derive keys from the OLD installed
+// pin and the retry to fail byte-identically. Persisted best-effort under the
+// Harness home; every failure here degrades to the in-memory behavior.
+//
+// The path is resolved lazily (not at module load) so the home in force when
+// the first failure is recorded is the one the file lands under. The load is
+// also lazy — but every reader (blockedBuilds before it records, printedKeysFor
+// before it answers) goes through printedBuildKeysFile() first, so a key from
+// a previous process is on the map before this one either adds to or reads it.
+// Stored keys never overwrite a fresher in-memory one, so the order of the
+// two calls cannot resurrect a stale entry either way.
+let printedBuildKeysHome: string | null = null
+let printedBuildKeysFilePath: string | null = null
+function printedBuildKeysFile(): string {
+  const home = resolveDshHome()
+  // Cached per home, not per process: the tests swap DSH_HOME per case, and
+  // a restart handoff can change it under a long-lived process too.
+  if (printedBuildKeysHome !== home) {
+    printedBuildKeysHome = home
+    printedBuildKeysFilePath = join(home, 'dsh-market', 'printed-build-keys.json')
+    try {
+      const stored = JSON.parse(readFileSync(printedBuildKeysFilePath, 'utf8')) as Record<string, unknown>
+      for (const [storedName, storedKey] of Object.entries(stored)) {
+        if (typeof storedKey === 'string' && !printedBuildKeys.has(storedName)) printedBuildKeys.set(storedName, storedKey)
+      }
+    } catch { /* absent or unreadable: start empty */ }
+  }
+  return printedBuildKeysFilePath!
+}
+
+function persistPrintedBuildKeys(): void {
+  try {
+    const file = printedBuildKeysFile()
+    // Bounded: one entry per package name that ever failed a build here.
+    while (printedBuildKeys.size > 500) {
+      printedBuildKeys.delete(printedBuildKeys.keys().next().value as string)
+    }
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify(Object.fromEntries(printedBuildKeys), null, 2))
+  } catch { /* best-effort: an unwritable home keeps the in-memory map */ }
+}
 
 function blockedBuilds(result: { ignoredBuilds?: unknown; stdout: string; stderr: string }): string[] | undefined {
   // Record pnpm's own dep path for every ignored build BEFORE deciding what to
@@ -330,16 +398,21 @@ function blockedBuilds(result: { ignoredBuilds?: unknown; stdout: string; stderr
   // back byte-identical.
   //
   // Only entries that name a source are worth recording: a registry dep's dep
-  // path IS its bare name, which the bare entry already authorizes.
+  // path IS its bare name, which the bare entry already authorizes. The
+  // persisted file is loaded FIRST (PR #822 review): a key recorded before
+  // the load ran would otherwise be replaced by the older one in the file.
+  printedBuildKeysFile()
   for (const entry of parseIgnoredBuildEntries(result.stdout, result.stderr)) {
     if (entry.key !== entry.name) printedBuildKeys.set(entry.name, entry.key)
   }
+  persistPrintedBuildKeys()
   if (Array.isArray(result.ignoredBuilds) && result.ignoredBuilds.length > 0) return result.ignoredBuilds as string[]
   const list = parseIgnoredBuilds(result.stdout, result.stderr)
   if (list.length > 0) return list
   const pending = parsePrepareNotAllowed(result.stdout, result.stderr)
   if (pending === null) return undefined
   printedBuildKeys.set(pending, parsePrepareKey(result.stdout, result.stderr))
+  persistPrintedBuildKeys()
   return [pending]
 }
 
@@ -364,6 +437,39 @@ function blockedBuilds(result: { ignoredBuilds?: unknown; stdout: string; stderr
 function failedOnBlockedBuilds(result: { exitCode: number | null; stdout: string; stderr: string }): boolean {
   const code = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`, result.exitCode)?.code
   return code === 'ignored-builds' || code === 'git-prepare-not-allowed'
+}
+
+/**
+ * The classifier's own sentence for a plain pnpm failure (#848).
+ *
+ * Both routes recognized failures only through the branches that DO something
+ * with them — a held release, a blocked build, a broken entry, a rename — and
+ * every other recognized failure had its message computed and then dropped on
+ * the floor. The client's fallback is the tail of pnpm's own output, so an
+ * expired `patchedDependencies` key (`ERR_PNPM_UNUSED_PATCH`) reached the user
+ * as a truncated Node stack while the one actionable sentence — which pnpm
+ * explained, in both languages, one call away — appeared only in the market's
+ * log. The reporter's guess was that install was wired and update was not; both
+ * routes were missing it, which is why this is a shared last resort rather than
+ * a branch in one of them.
+ *
+ * Blocked builds are the exception: their UI is the approve-and-retry banner,
+ * which names the action, and a second sentence beside that button says the
+ * same thing in different words (#754).
+ */
+function pnpmFailureMessage(result: { exitCode: number | null; stdout: string; stderr: string }): string | undefined {
+  const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`, result.exitCode)
+  if (failure === null) return undefined
+  if (failure.code === 'ignored-builds' || failure.code === 'git-prepare-not-allowed') return undefined
+  // Desktop release-age note is already the actionable sentence (#919). Do
+  // not cover it with the classifier's "market already retried" claim —
+  // install/uninstall fall through to stderr via failureText when error is
+  // undefined.
+  if (failure.code === 'release-age-violation'
+    && /没有自动重试|no automatic retry happens here/.test(`${result.stderr}\n${result.stdout}`)) {
+    return undefined
+  }
+  return failure.message
 }
 
 /**
@@ -421,6 +527,18 @@ export function mountMarketRoutes(
       if (releaseDownload === active) releaseDownload = undefined
       progress.active = false
     }
+  }
+  // #987: a remove that died between deleting the package and clearing the
+  // rows its bundle patch declares leaves an insert naming a missing module —
+  // and DSH's boot is all-or-nothing, so that row can keep the host from
+  // starting at all. The intent was journaled before the destructive step;
+  // settle it now, against what the profile actually holds.
+  try {
+    const settled = repairOrphanedRows({ profile: config.profile, profileDirectory: activeProfileDir })
+    if (settled.removed.length > 0) logEvent('info', 'uninstall', `cleared patch rows left by an interrupted uninstall: ${settled.removed.join(', ')}`)
+    if (settled.failed.length > 0) logEvent('warn', 'uninstall', `patch rows from an interrupted uninstall could not be cleared, will retry: ${settled.failed.join(', ')}`)
+  } catch (error) {
+    logEvent('warn', 'uninstall', `could not settle interrupted uninstall rows — ${error instanceof Error ? error.message : String(error)}`)
   }
   const analyzeActiveProfile = () => analyzeProfile(activeProfileDir, {
     ...(config.dshInstallDir === undefined ? {} : { dshInstallDir: config.dshInstallDir }),
@@ -640,6 +758,16 @@ export function mountMarketRoutes(
    * newer decision than the market's list (the market removes a name from
    * its list BEFORE writing its own enable row), so the list follows it.
    *
+   * Scoped to THIS profile's layer, deliberately (#519). DSH also composes a
+   * home-level layer, and a third-party manager that wrote its switches there
+   * asked us to follow that too. We do not: the market writes the profile
+   * layer and nothing else, so following a layer it cannot write would give
+   * the user a switch that appears to work and silently reverts at the next
+   * boot — worse than a boundary they can see. What a home-level decision
+   * DOES get is a name in the log when the market overrides it (see
+   * `noteHomeLayerConflict`), so nobody has to guess why a plugin came back
+   * off.
+   *
    * @returns true when the package was re-enabled elsewhere and has been
    *   dropped from the market's disable list.
    */
@@ -653,6 +781,27 @@ export function mountMarketRoutes(
     return true
   }
 
+  /**
+   * Say so when the market overrides an enable recorded in the HOME patch
+   * layer (#519).
+   *
+   * The market keeps a plugin off from its own record; a decision in the
+   * profile layer is followed instead (`followOutsideEnable`), but the home
+   * layer is not read for it — see there for why. The cost of that boundary
+   * is a plugin that turns off again on every boot while another manager's
+   * layer says it should be on: a perfectly reasonable thing for a user to be
+   * confused by, and its only explanation today was silence.
+   */
+  function noteHomeLayerConflict(name: string): void {
+    const homePatchPath = join(resolveDshHome(), 'cordis.patch.yml')
+    const home = readUserPatchState(homePatchPath)
+    if (home.forced.length === 0) return
+    const flags = packagePatchFlags(host, activeProfileDir, [name], home)
+    if (!flags.forced.includes(name) || flags.disabled.includes(name)) return
+    logEvent('warn', 'toggle',
+      `${name}: kept off by this market's own record, while ${homePatchPath} enables it — that layer is not the one the market writes, so the market will not follow it. Move the row into this profile's cordis.patch.yml to make it stick (#519)`)
+  }
+
   // Client-only packages (dsh.client without dsh.bundle) are invisible to the
   // bundle layer in every boot; the market shim-mounts them so their client
   // bundles are actually served.
@@ -664,6 +813,7 @@ export function mountMarketRoutes(
     // shims for disabled plugins were already skipped by mountClientOnlyDeps.
     for (const name of [...disabled]) {
       if (followOutsideEnable(name)) continue
+      noteHomeLayerConflict(name)
       if (await themes.setEntryDisabled(name, true)) logEvent('info', 'boot', `plugin kept off: ${name}`)
     }
   })
@@ -841,8 +991,11 @@ export function mountMarketRoutes(
     ok: boolean
     reason: string | undefined
     patchRows: string[]
+    /** The subset a user decision can be read from (#876). */
+    userRows: string[]
     patchWrite: { ok: boolean; reason: string | null } | null
-    disablesOthers: string[]
+    /** Foreign rows this bundle rewires: disabled or given a new inject (#224, #938). */
+    carrierRows: string[]
     isCarrier: boolean
     bundleSwitch: { ok: boolean; reason: string | null }
   }> {
@@ -854,6 +1007,18 @@ export function mountMarketRoutes(
     // every boot. Client-only packages have no bundle rows — the
     // market's own state.json replay covers those.
     const patchRows = rowIdsForPackage(host, activeProfileDir, name)
+    // Rows the package ships switched off are the bundle's own default, not
+    // the user's decision (#876). Turning a package ON must not force those
+    // opt-in rows open — `enableRow` answers a row with no `disabled` block
+    // by appending `disabled: false`, and the user layer sits on top, so the
+    // plugin's "stays off until selected" rows would come on silently as a
+    // side effect of a bug fix. Skipped only while something else is left to
+    // flip: a package whose rows are ALL opt-in rows still has to be
+    // switchable.
+    const optOutRows = new Set(bundleOptOutRowIds(join(activeProfileDir, 'node_modules', name)))
+    const decided = patchRows.filter(rowId => !optOutRows.has(rowId))
+    /** Rows that can carry a USER decision about this package — see above. */
+    const userRows = decided.length > 0 ? decided : patchRows
     // Disable-carrier (#224): a bundle whose patch DISABLES a plugin it
     // does not own (dsh-postgres-backends disables session-persistence-jsonl).
     // Disabling only its inserted rows leaves that foreign disable applying
@@ -863,9 +1028,9 @@ export function mountMarketRoutes(
     // A bundle that merely reconfigures a neighbour (config without
     // disabled) is NOT dropped: #147 requires disabling it to leave the
     // neighbour live, and the e2e fixture-cross re-enable breaks otherwise.
-    const disablesOthers = carrierDisableIds(activeProfileDir, name)
+    const carrierRows = carrierRowIds(activeProfileDir, name)
     const foreignRows = foreignRowIds(activeProfileDir, name)
-    const isCarrier = disablesOthers.length > 0
+    const isCarrier = carrierRows.length > 0
     // Both layers, or neither (#696 B). `dsh.profile.bundles` is the
     // package-level declaration the official plugins page's switch reads
     // and the loader composes; the patch rows above are the runtime
@@ -895,7 +1060,7 @@ export function mountMarketRoutes(
           ? addProfileBundle(activeProfileDir, name)
           : removeProfileBundle(activeProfileDir, name)
         logEvent('info', 'toggle', isCarrier
-          ? `${name}: disable-carrier ${enabled ? 're-added to' : 'removed from'} dsh.profile.bundles (disables: ${disablesOthers.join(', ')})`
+          ? `${name}: disable-carrier ${enabled ? 're-added to' : 'removed from'} dsh.profile.bundles (carrier rows: ${carrierRows.join(', ')})`
           : reBundle
             ? `${name}: re-added to dsh.profile.bundles, which nothing was composing (#696)`
             : `${name}: dsh.profile.bundles ${enabled ? 're-added' : 'removed'} so the official page's package switch agrees (#696)`)
@@ -925,9 +1090,19 @@ export function mountMarketRoutes(
     // What the row layer said before this call, so a rollback can put
     // each row back the way it was rather than the other way round.
     const prePatch = patchGate ? readUserPatchState(userPatchPath) : null
-    if (patchRows.length > 0 && patchGate) {
+    if (patchRows.length > 0 && patchGate && prePatch !== null) {
+      // Disable touches every row: one left behind leaves the package
+      // half-on. Enable leaves the bundle's own opt-in rows alone — they are
+      // off by the bundle's default, and `enableRow` answers a row with no
+      // block by appending `disabled: false`, which would switch them on as a
+      // side effect of turning the package itself back on (#876) — except to
+      // remove a block an earlier disable left on one, which is a cleanup and
+      // never a force-enable.
+      const targets = enabled
+        ? patchRows.filter(rowId => !optOutRows.has(rowId) || prePatch.disables.includes(rowId))
+        : patchRows
       const flipped: string[] = []
-      for (const rowId of patchRows) {
+      for (const rowId of targets) {
         const result = enabled ? await enableRow(userPatchPath, rowId) : await disableRow(userPatchPath, rowId)
         if (result.ok) {
           flipped.push(rowId)
@@ -936,9 +1111,9 @@ export function mountMarketRoutes(
         patchWrite = result
         break
       }
-      if (patchWrite === null) {
-        logEvent('info', 'toggle', `${name}: patch layer ${enabled ? 'enabled' : 'disabled'} rows ${patchRows.join(', ')}`)
-      } else {
+      if (patchWrite === null && targets.length > 0) {
+        logEvent('info', 'toggle', `${name}: patch layer ${enabled ? 'enabled' : 'disabled'} rows ${targets.join(', ')}`)
+      } else if (patchWrite !== null) {
         logEvent('warn', 'toggle', `${name}: patch layer write refused — ${patchWrite.reason}`)
         // The two layers move together or neither does (#696): an enable
         // that wrote some of its rows and then met a refusal goes all
@@ -955,8 +1130,11 @@ export function mountMarketRoutes(
             if (prePatch !== null && prePatch.disables.includes(rowId)) {
               const back = await disableRow(userPatchPath, rowId)
               if (!back.ok) logEvent('warn', 'toggle', `${name}: patch row ${rowId} could not be put back — ${back.reason}`)
-            } else {
-              removeRowBlocks(userPatchPath, [rowId])
+            } else if (prePatch === null || !prePatch.forced.includes(rowId)) {
+              // A row already forced on before this call got nothing from
+              // the enable; that block is the user's to keep.
+              const cleanedRow = removeRowBlocks(userPatchPath, [rowId])
+              if (!cleanedRow.ok) logEvent('warn', 'toggle', `patch row could not be cleared — ${cleanedRow.reason}`)
             }
           }
           if (stackChanged) {
@@ -977,7 +1155,7 @@ export function mountMarketRoutes(
       }
     }
     logEvent(ok ? 'info' : 'error', 'toggle', `${name}: ${enabled ? 'on' : 'off'} ok=${String(ok)}`)
-    return { ok, reason, patchRows, patchWrite, disablesOthers, isCarrier, bundleSwitch }
+    return { ok, reason, patchRows, userRows, patchWrite, carrierRows, isCarrier, bundleSwitch }
   }
 
   /**
@@ -1004,7 +1182,7 @@ export function mountMarketRoutes(
     const plugins: RecoveryPlugin[] = []
     for (const name of names) {
       const rows = rowIdsForPackage(host, activeProfileDir, name)
-      const carrier = carrierDisableIds(activeProfileDir, name).length > 0
+      const carrier = carrierRowIds(activeProfileDir, name).length > 0
       if (rows.length === 0 && !carrier) continue
       const isProtected = isProtectedModule(name)
       plugins.push({
@@ -1060,6 +1238,27 @@ export function mountMarketRoutes(
       }
     }
     return live
+  }
+
+  /** A disabled loader row has no fiber but still makes its package switchable. */
+  function loaderEntryObserved(name: string): boolean {
+    const entries = [...host.loader.entries()]
+    if (entries.some(entry => {
+      const entryName = entry.options.name
+      return typeof entryName === 'string' && (entryName === name || packageOfEntryName(entryName) === name)
+    })) return true
+    const ownedRows = new Set(rowIdsForPackage(host, activeProfileDir, name))
+    return entries.some(entry => {
+      const id = entry.options.id
+      return typeof id === 'string' && ownedRows.has(id.split(':').pop() ?? id)
+    })
+  }
+
+  function isNonToggleableLibrary(name: string): boolean {
+    const manifest = readInstalledManifest(config.profile, name, activeProfileDir) as { dsh?: { kind?: unknown; bundle?: unknown; client?: unknown } } | null
+    if (!isDeclaredLibraryDsh(manifest?.dsh)) return false
+    return verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name), undefined,
+      loaderEntryObserved(name)).library === true
   }
 
   /**
@@ -1505,8 +1704,15 @@ export function mountMarketRoutes(
     // deletes. Read afterwards this returns [] and the rows survive the
     // package as boot-time orphans (#799).
     const ownedRows = rowIdsForPackage(host, activeProfileDir, name)
+    // #987: written down before the destructive step, because the process can
+    // be unloaded between the remove and the cleanup below — and a row whose
+    // package is gone can stop the next boot.
+    const rowJournal = PendingRowJournal.forProfile(activeProfileDir)
+    rowJournal.begin({ profile: config.profile, name, patchPath: userPatchPath, rows: ownedRows })
     const result = await runPlugin(config.profile, ['remove', name])
     if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
+      // Nothing was removed: the rows are still configuration, not orphans.
+      rowJournal.finish(config.profile, name)
       return { ok: false, hot: false, detail: failureDetail(result) }
     }
     // A host that owns the composition replays it instead of being
@@ -1532,7 +1738,9 @@ export function mountMarketRoutes(
     if (native) {
       logEvent('info', 'uninstall', `${name} ships or depends on a native addon; a restart is needed before it can be installed again`)
     }
-    removeRowBlocks(userPatchPath, ownedRows)
+    const cleanedOwned = removeRowBlocks(userPatchPath, ownedRows)
+    if (!cleanedOwned.ok) logEvent('warn', 'uninstall', `patch rows could not be cleared — ${cleanedOwned.reason}`)
+    else rowJournal.finish(config.profile, name)
     disabled.delete(name)
     replacedWhileLive.delete(name)
     removeFromGroups({ groups, groupOrder }, name)
@@ -1920,6 +2128,12 @@ export function mountMarketRoutes(
         version,
         requirement: verdict.requirement,
         hostVersion: host?.version ?? null,
+        // #923: the client's "find a compatible version" search is keyed by
+        // the npm name, and the install branch could fall back to the catalog
+        // entry's `npm` while the update branch had nothing. The value is
+        // already here — it is this function's first argument and the key the
+        // registry lookup above used — so publish it.
+        npmName,
       },
       error: nothingWasInstalled
         ? `${displayName} ${version ?? ''} 要求的 DSH 版本是 ${verdict.requirement ?? '未知'}，而当前运行的是 ${host?.version ?? '未知版本'}，装上多半会直接报错。已停止，没有安装任何东西。 / ${displayName} ${version ?? ''} declares it needs DSH ${verdict.requirement ?? '(unknown)'}, and this host is ${host?.version ?? 'unknown'}; installing it would most likely break the plugin. Nothing was installed.`
@@ -2019,7 +2233,7 @@ export function mountMarketRoutes(
         }
         try {
           const { channelFor, onlineSourceFor, catalogNpmByRepo } = await updateCheckInputs()
-          const updates = await checkUpdates(config.profile, forceCheckFrom(request), activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo)
+          const updates = await checkUpdates(config.profile, forceCheckFrom(request), activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true })
           // `packages` carries the same objects the single-package endpoint
           // returns, so one parser serves both. Only updatable ones: a badge
           // wants the count, a panel wants the rows, and neither wants to
@@ -2066,7 +2280,7 @@ export function mountMarketRoutes(
             // or a catalog-matched local package answers here with the
             // release it can be compared against rather than with nothing.
             const { channelFor, onlineSourceFor, catalogNpmByRepo } = await updateCheckInputs()
-            const update = (await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo))[name]
+            const update = (await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true }))[name]
             if (update === undefined) {
               sendJson(response, 404, { schema: UPDATE_API_V1_SCHEMA, error: 'plugin is not installed' })
               return
@@ -2261,7 +2475,12 @@ export function mountMarketRoutes(
           })
           response.end(backup)
         } catch (error) {
-          sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
+          // Logged as well as returned: the client shows the reason inline,
+          // and the log export is what a report can carry (kettly1260 on #55
+          // saw only "HTTP 500" because the message was thrown away here).
+          const reason = error instanceof Error ? error.message : String(error)
+          logEvent('error', 'backup', `export failed — ${reason}`)
+          sendJson(response, 500, { error: reason })
         }
       },
     }),
@@ -2315,7 +2534,14 @@ export function mountMarketRoutes(
             sendJson(response, 200, { ok: true, backup: await downloadWebdav(url, username, password) })
           } else sendJson(response, 400, { error: 'invalid WebDAV action' })
         } catch (error) {
-          sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+          // #999: a refusal that is not "the URL is wrong" says so — the code
+          // and the address it resolved to ride along, so the UI (and any bug
+          // report quoting the response) can tell a bad URL from a fake-ip
+          // resolver answering 198.18.x.x for every host.
+          const webdav = error instanceof WebdavUrlError
+            ? { code: error.code, ...(error.address === undefined ? {} : { address: error.address }) }
+            : {}
+          sendJson(response, 400, { error: error instanceof Error ? error.message : String(error), ...webdav })
         }
       },
     }),
@@ -2572,12 +2798,18 @@ export function mountMarketRoutes(
         const unbundled = Object.keys(installed).filter(name => {
           if (INBOX_BUNDLES.has(name) || composedBundles.has(name) || live.has(name)) return false
           const manifest = installedManifests.get(name) as { dsh?: { bundle?: unknown } } | null | undefined
+          // A bundle whose own patch is empty loads nothing either way, so
+          // its absence from the list says nothing about a switch (#813).
           return typeof manifest === 'object' && manifest !== null && manifest.dsh?.bundle !== undefined
+            && !bundlePatchIsEmpty(join(activeProfileDir, 'node_modules', name))
         })
         for (const name of Object.keys(installed)) {
+          const manifest = installedManifests.get(name) as { dsh?: { kind?: unknown; bundle?: unknown; client?: unknown } } | null | undefined
           const result = activationAfterReplace(
             verifyActivation(config.profile, name, live, activeProfileDir,
-              disabled.has(name) || patchFlags.disabled.includes(name) || unbundled.includes(name)),
+              disabled.has(name) || patchFlags.disabled.includes(name) || unbundled.includes(name),
+              undefined,
+              isDeclaredLibraryDsh(manifest?.dsh) && loaderEntryObserved(name)),
             replacedWhileLive.has(name),
           )
           // A package with no dsh surface of its own, outside the bundle
@@ -2599,6 +2831,37 @@ export function mountMarketRoutes(
           packageName,
           manifest,
         })))
+        // #810: a client that reads its config from a name no loader entry
+        // answers to reads NOTHING — blank or unwritable settings, and in the
+        // reported case a panel stuck on a hardcoded fallback port — with no
+        // error anywhere. Judged against everything this profile can be seen
+        // to serve: each installed package's own patch rows (read once, for
+        // the set AND for the "write this instead" value), the user patch's
+        // rows — its inserts, plus the disables and force-enables, which both
+        // name existing entry ids — and whatever the loader is running now.
+        //
+        // The gap: host-layer ids the market never reads a patch for. A plugin
+        // reading a HOST entry's config by literal would be flagged wrongly
+        // here, where the diagnostics page — which composes the host layers
+        // too — can settle that difference.
+        const ownEntryIds = new Map(Object.keys(installed).map(
+          packageName => [packageName, bundlePatchInsertedIds(join(activeProfileDir, 'node_modules', packageName))] as const,
+        ))
+        const servedEntryIds = new Set<string>([...patch.inserts, ...patch.disables, ...patch.forced])
+        for (const ids of ownEntryIds.values()) for (const id of ids) servedEntryIds.add(id)
+        for (const entry of host.loader.entries()) {
+          const id = entry.options?.id
+          if (id === undefined || id === '') continue
+          servedEntryIds.add(id)
+          const bare = id.split(':').pop()
+          if (bare !== undefined) servedEntryIds.add(bare)
+        }
+        const configNamespaces = findUnservedConfigNamespaces(
+          activeProfileDir,
+          servedEntryIds,
+          name => ownEntryIds.get(name) ?? [],
+          activeProfileDir,
+        )
         sendJson(response, 200, {
           profile: config.profile,
           installed,
@@ -2626,6 +2889,9 @@ export function mountMarketRoutes(
           brokenPlugins: marketState.brokenPlugins ?? {},
           patchForced: patchFlags.forced,
           bundles: readProfileBundles(activeProfileDir).filter(name => !INBOX_BUNDLES.has(name)),
+          // Only packages with a finding appear, so a healthy profile sends
+          // nothing and the row renders nothing.
+          configNamespaces: configNamespaces.length > 0 ? configNamespaces : undefined,
         })
       },
     }),
@@ -2651,7 +2917,25 @@ export function mountMarketRoutes(
               ? classifyPeer(row.plugin, row.name, row.range, row.resolved, row.optional === true)
               : { kind: 'none' }
           }
-          sendJson(response, 200, report)
+          // #810: a client that reads its config from a name no loader entry
+          // answers to. Attached here rather than computed inside
+          // `analyzeProfile` because that function is documented as safe on
+          // every market open and this reads one bundle per installed plugin —
+          // the diagnostics page is a page the user opened on purpose.
+          //
+          // Judged against the COMPOSITION's ids, not the package's own: a
+          // package may mount another one (carrier form), and judging by own
+          // ids would flag it.
+          const served = new Set(report.rows.map(row => row.id))
+          sendJson(response, 200, {
+            ...report,
+            configNamespaces: findUnservedConfigNamespaces(
+              activeProfileDir,
+              served,
+              name => report.rows.filter(row => row.layer === name).map(row => row.id),
+              activeProfileDir,
+            ),
+          })
         } catch (error) {
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
         }
@@ -2896,6 +3180,63 @@ export function mountMarketRoutes(
       },
     }),
 
+    // #875: DSH's own fatal recovery replaces the profile patch with a stub
+    // and renames the user's file to a `.bak-<epoch ms>` sibling, then boots
+    // normally — so the loss is silent by construction. This is the read half
+    // of the way back: what the patch looks like now, and what the backups
+    // beside it still hold.
+    registerRoute({
+      kind: 'exact',
+      path: '/dsh-market/host-recovery',
+      handler: (request, response) => {
+        if (request.method !== 'GET') {
+          response.writeHead(405, { allow: 'GET' })
+          response.end()
+          return
+        }
+        sendJson(response, 200, readHostRecoveryView(userPatchPath))
+      },
+    }),
+
+    // The write half: put one backup back in place of the stub. Same mutation
+    // lock as every other direct write (a pnpm operation in flight would be
+    // reading the same file), same origin check, and the profile snapshot is
+    // taken inside the restore itself so the two can never come apart.
+    registerRoute({
+      kind: 'exact',
+      path: '/dsh-market/host-recovery/restore',
+      handler: async (request, response) => {
+        if (request.method !== 'POST') {
+          response.writeHead(405, { allow: 'POST' })
+          response.end()
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendJson(response, 403, { error: 'untrusted origin' })
+          return
+        }
+        try {
+          await withMutationLock(response, 'write', async () => {
+            const body = (await readJsonBody(request)) as { name?: unknown } | null
+            if (body === null || typeof body !== 'object' || typeof body.name !== 'string' || body.name === '') {
+              sendJson(response, 400, { error: 'backup name is required / 需要备份文件名' })
+              return
+            }
+            const restored = restoreHostRecoveryBackup(userPatchPath, activeProfileDir, body.name, maxSnapshots)
+            if (restored.ok) {
+              // The patch is what the loader composes from: the rows take
+              // effect the way any other patch write does.
+              invalidateUpdates()
+              refreshMarketState()
+            }
+            sendJson(response, restored.ok ? 200 : 400, restored)
+          })
+        } catch (error) {
+          sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }),
+
     // Issue #98 supplement: delete one snapshot (the cap also prunes old ones
     // automatically, but the user may want to drop a specific snapshot).
     registerRoute({
@@ -2995,6 +3336,10 @@ export function mountMarketRoutes(
               sendJson(response, 400, { error: 'plugin is not installed' })
               return
             }
+            if (isNonToggleableLibrary(name)) {
+              sendJson(response, 400, { error: '这是供插件使用的依赖库，无需启用或停用 / this library is for plugins to use; it has no on/off switch' })
+              return
+            }
           // Host infrastructure (port of dsh-plugin-hub): switching off the
           // timer/hmr/webserver/storage chain would break the very HMR the
           // patch layer relies on, so those rows refuse to toggle.
@@ -3040,12 +3385,14 @@ export function mountMarketRoutes(
           const layers = await switchPluginLayers(name, enabled, ok, reason)
           ok = layers.ok
           reason = layers.reason
-          const { patchRows, patchWrite, disablesOthers, isCarrier, bundleSwitch } = layers
+          const { patchRows, userRows, patchWrite, carrierRows, isCarrier, bundleSwitch } = layers
           // Activation reads the post-write truth: the switch state OR the
           // patch layer, so a disabled plugin never reports "restart to
           // apply".
           const patchNow = readUserPatchState(userPatchPath)
-          const offNow = disabled.has(name) || patchRows.some(id => patchNow.disables.includes(id))
+          // Read from userRows, like the listing (#876): a disabled opt-in row is
+          // the bundle's own default and does not make the package off.
+          const offNow = disabled.has(name) || userRows.some(id => patchNow.disables.includes(id))
           // When the live composition does not match the requested state
           // (enable failed to hot-mount / disable left the fiber up), the
           // change lands on the next boot via the patch layer + state.json —
@@ -3078,14 +3425,15 @@ export function mountMarketRoutes(
               // activationAfterReplace — said `restart`. One moment, one story.
               activation: {
                 [name]: activationAfterReplace(
-                  verifyActivation(config.profile, name, liveNames(), activeProfileDir, offNow),
+                  verifyActivation(config.profile, name, liveNames(), activeProfileDir, offNow, undefined,
+                    loaderEntryObserved(name)),
                   replacedWhileLive.has(name),
                 ),
               },
               reason,
               patchRows,
               patchWrite: patchWrite ?? { ok: true, reason: null },
-              carrier: disablesOthers,
+              carrier: carrierRows,
               bundleSwitch,
               restart,
               refresh,
@@ -3407,6 +3755,7 @@ export function mountMarketRoutes(
             const failures: string[] = []
             for (const member of groups[name]) {
               if (!installed.has(member)) continue
+              if (isNonToggleableLibrary(member)) continue
               let result: { ok: boolean; reason?: string }
               if (enabled && themeNames.has(member)) {
                 result = { ok: await themes.activateTheme(member), reason: undefined }
@@ -3518,6 +3867,7 @@ export function mountMarketRoutes(
           // by the user — the card explains a choice it made on their behalf
           // exactly once, so nobody has to wonder why downloads moved.
           regionAuto,
+          sidebarEntry: marketState.sidebarEntry === true,
           restart: restartAllowed(config),
           // Named so the UI can say WHY the button is gone. A blank
           // "no restart button" is the state #229 reported as broken.
@@ -3532,6 +3882,9 @@ export function mountMarketRoutes(
           // Deliberately NOT folded into `restart`, which is also what the
           // settings page reads and writes back as the user's own choice.
           restartReachable: restartReachableFrom(request),
+          // Same door, one notch wider for the desktop proxy (#903): the
+          // card hides a remove button that could only ever answer 403.
+          selfUninstallReachable: selfUninstallReachableFrom(request),
           selfManaged: config.catalogUrl === undefined && (installed.dshmarket !== undefined || installed['dsh-market'] !== undefined),
           // Whether the host took the market's settings namespace (#677).
           // `unsupported-by-host` is 0.1.7 and newer, where settings come from
@@ -3636,7 +3989,7 @@ export function mountMarketRoutes(
           } catch (error) {
             logEvent('warn', 'updates', `package source lookup failed — ${error instanceof Error ? error.message : String(error)}`)
           }
-          const updates = await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo)
+          const updates = await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true })
           if (config.catalogUrl !== undefined) {
             const registry = await loadRegistry()
             const installed = readInstalled(config.profile, activeProfileDir)
@@ -3707,7 +4060,7 @@ sendJson(response, 200, { updates })
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; confirmAgentsRunning?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
             if (!NPM_NAME_RE.test(name) || INBOX_BUNDLES.has(name)) {
               sendJson(response, 400, { error: 'plugin is not installed' })
@@ -3750,7 +4103,7 @@ sendJson(response, 200, { updates })
             }
 
             const busyAgents = runningAgentsForGuard()
-            if (busyAgents.length > 0) {
+            if (busyAgents.length > 0 && body.confirmAgentsRunning !== true) {
               sendJson(response, 409, {
                 error: `有 agent 正在运行（${busyAgents.join(', ')}）。来源迁移会替换插件文件，请等它完成或取消后再迁移。 / ${busyAgents.length === 1 ? 'An agent is running' : 'Agents are running'} (${busyAgents.join(', ')}). Source migration replaces plugin files; wait for the running work to finish (or cancel it) before migrating.`,
                 agentsBusy: true,
@@ -3880,7 +4233,8 @@ sendJson(response, 200, { updates })
               logEvent('warn', 'source-migration', `${name}: ${stateWarning}`)
             }
 
-            removeRowBlocks(userPatchPath, oldRows)
+            const cleanedOld = removeRowBlocks(userPatchPath, oldRows)
+            if (!cleanedOld.ok) logEvent('warn', 'install', `patch rows could not be cleared — ${cleanedOld.reason}`)
             const patchDisabled = wasDisabled || patchFlags.disabled.includes(name)
             const patchForced = !patchDisabled && patchFlags.forced.includes(name)
             const patchWarnings: string[] = []
@@ -3932,7 +4286,7 @@ sendJson(response, 200, { updates })
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown; restore?: unknown; compatVersion?: unknown; releaseVersion?: unknown; bundled?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown; restore?: unknown; compatVersion?: unknown; confirmAgentsRunning?: unknown; releaseVersion?: unknown; bundled?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
             const force = body.force === true
             // A release the refusal dialog's own search confirmed compatible
@@ -4042,9 +4396,9 @@ sendJson(response, 200, { updates })
             // hazard the "restart" verdict cannot fix: the running module keeps
             // executing while its files change under it, so lazily imported
             // assets and data reads can fail or change version mid-turn.
-            // No bypass is offered — the user can wait or cancel the agent.
+            // Only explicit consent on this request bypasses the running-agent guard.
             const busyAgents = runningAgentsForGuard()
-            if (busyAgents.length > 0) {
+            if (busyAgents.length > 0 && body.confirmAgentsRunning !== true) {
               logEvent('warn', 'update-blocked', `${name}: refused while agents are running — ${busyAgents.join(', ')}`)
               sendJson(response, 409, {
                 error: `有 agent 正在运行（${busyAgents.join(', ')}）。更新会直接替换插件文件，正在工作的 agent 可能在执行中途读到缺失或新版本的文件而报错；请等它完成或取消后再更新。 / ${busyAgents.length === 1 ? 'An agent is running' : 'Agents are running'} (${busyAgents.join(', ')}). Updating replaces plugin files in place, so a working agent can fail or mix versions mid-turn; wait for it to finish (or cancel it) before updating.`,
@@ -4315,6 +4669,11 @@ sendJson(response, 200, { updates })
             const wasLive = verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)).state === 'live'
               && hasHostHalf(config.profile, name, activeProfileDir)
             const beforeVersion = readInstalledVersion(config.profile, name, activeProfileDir)
+            // #874: on DSH Desktop a generation-managed plugin is materialised
+            // by the host and its `dependencies` entry is suspended while pnpm
+            // runs, so the profile lockfile never records it. Read here, before
+            // the command is sent, while the projection is still intact.
+            const generationManaged = generationManagedNames(config.profile, activeProfileDir).has(name)
             const beforePackageName = readInstalledPackageName(config.profile, name, activeProfileDir)
             // A durable manifest pin is independently authoritative. When its
             // captured lock is missing or stale, the exact OLD re-add repairs
@@ -4429,6 +4788,11 @@ sendJson(response, 200, { updates })
                             lockfileBefore: lockfileCapture.snapshot,
                           }
                         : lockfileCapture.snapshot.present
+                          // ...except for the packages the host installs as
+                          // generations: their absence from the lockfile is
+                          // how that install works, not evidence of a source
+                          // this rollback cannot prove (#874).
+                          && !generationManaged
                           && capturedNpmVersion(lockfileCapture.snapshot, name) !== beforeVersion
                           ? {
                               available: false,
@@ -4501,6 +4865,12 @@ sendJson(response, 200, { updates })
             if (pinnedForIdentification) {
               declareProfileDependency(config.profile, name, pinValue, activeProfileDir)
             }
+            // #928: an update is remove-then-add, and a host killed between
+            // the two leaves a package that is simply gone — with no record
+            // of what was being attempted, because the completion log never
+            // runs. Write the intent first, so the log can answer "where did
+            // my plugin go" after the fact.
+            logEvent('info', 'update-start', `${name} -> ${target} (profile ${config.profile})`)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
             // The pin above is the market's own write, so it is undone whenever
@@ -4631,8 +5001,44 @@ sendJson(response, 200, { updates })
                 `${name}: ${reason}; removed from the profile's dependencies and dsh.profile.bundles so the next start can compose — reinstall it from the market after quitting DSH`
                 + (dropped ? '' : ' (nothing to drop: the profile did not declare it under either key)'))
             }
+            if (result.repairOnRestart === true) {
+              // The manager stopped answering and may already have removed the
+              // package. Restoring through it would block on the profile lock
+              // it still holds, so the journal repairs the profile on the next
+              // start instead (#928).
+              logEvent('warn', 'update',
+                `${name}: the desktop manager did not settle; the removal will be finished or undone on the next start`)
+            }
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true
-              && !pnpmNeverStarted(result)) {
+              && !pnpmNeverStarted(result)
+              // The manager never settled (#928): the profile may be
+              // half-updated, and its write lock is still held by whatever
+              // stopped answering. Nothing the route can do here can restore
+              // it; the market's journal does that on the next start.
+              && result.repairOnRestart !== true
+              // The host refused before running pnpm (#897): nothing was
+              // written, so there is nothing to restore — and the "could not
+              // verify restoration, inspect this profile" warning this block
+              // raises on a failed rollback would be alarm about an untouched
+              // profile.
+              && result.wroteNothing !== true
+              // pnpm ran, then refused a too-young release without writing
+              // (#919). Same untouched profile; skipping the rollback keeps
+              // the release-age reason visible instead of covering it with a
+              // false "restoration could not be verified" alarm.
+              && !pnpmRefusedYoungRelease(result)
+              // The child booted the profile again and lost the host port
+              // AFTER pnpm wrote this update (#975). Rolling back would
+              // undo a build that is already on disk.
+              && !(isHostPortCollision(result) && updateApplied({
+                profile: config.profile,
+                name,
+                isGit,
+                beforeVersion,
+                beforeCommit,
+                spec,
+                explicitDir: activeProfileDir,
+              }))) {
               if (pnpmBlockedByOpenFiles(result)) {
                 const kept = keepLockedBuild()
                 rollbackOk = kept.ok
@@ -4686,6 +5092,18 @@ sendJson(response, 200, { updates })
               }
             }
             let ok = result.exitCode === 0 && !result.timedOut && !cancelled
+            if (!ok && !cancelled && isHostPortCollision(result) && updateApplied({
+              profile: config.profile,
+              name,
+              isGit,
+              beforeVersion,
+              beforeCommit,
+              spec,
+              explicitDir: activeProfileDir,
+            })) {
+              ok = true
+              logEvent('info', 'update', `${name}: command exited after the host port was already in use; the new build is on disk, treating as success (#975)`)
+            }
             let stale = false
             let versionFailureCode: 'DOWNGRADE_DETECTED' | 'RESOLVED_VERSION_MISMATCH' | null = null
             let versionFailureError: string | null = null
@@ -4887,8 +5305,12 @@ sendJson(response, 200, { updates })
                   ...brokenClientBundles(config.profile, activeProfileDir),
                 ].filter((entry, index, all) => all.findIndex(other => other.name === entry.name) === index),
               )
-              if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
-                const rollbackId = rollbackPlan.available
+              const needsRollback = risks.length > 0 || brokenBundles.length > 0
+              // Shadowing alone stays informational (#913): still reported so the
+              // operator can look, but it proves nothing broke — so it must not
+              // arm a rollback button or claim the previous state was lost.
+              if (needsRollback || shadowed.length > 0) {
+                const rollbackId = needsRollback && rollbackPlan.available
                   ? savePendingRollback({
                       kind: 'update',
                       names: [name],
@@ -4901,13 +5323,15 @@ sendJson(response, 200, { updates })
                   risks,
                   shadowedNames: shadowed.length > 0 ? shadowed : undefined,
                   brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
-                  ...(rollbackId !== null
-                    ? { rollbackId }
-                    : {
+                  ...(needsRollback
+                    ? rollbackId !== null
+                      ? { rollbackId }
+                      : {
                         rollbackUnavailable: rollbackPlan.available
                           ? `更新完成后无法安全捕获 profile 状态（${previousVersionZh}），因此自动回滚不可用；需要时请从可信来源手工重新安装先前版本。 / The post-update profile state could not be captured safely (${previousVersionEn}), so automatic rollback is unavailable. Reinstall the prior version manually from a trusted source if needed.`
                           : rollbackPlan.detail,
-                      }),
+                        }
+                    : {}),
                 }
                 if (brokenBundles.length > 0) {
                   logEvent('error', 'update-bundle', `${brokenBundles.map(entry => `${entry.name}: ${entry.reason}`).join('; ')}`)
@@ -4973,6 +5397,24 @@ sendJson(response, 200, { updates })
               logEvent('warn', 'update-bundles-dropped',
                 `${name}: after this update ${droppedBundles.join(', ')} ${droppedBundles.length === 1 ? 'is' : 'are'} still declared in dependencies but no longer in dsh.profile.bundles, so ${droppedBundles.length === 1 ? 'it' : 'they'} will not load — the market did not write that change (#720)`)
             }
+            // #935: the desktop manager's removeBundle writes the bundle row
+            // out FIRST and only then checks whether a live fiber still uses
+            // the package — so a `bundle-in-use` refusal leaves the row gone
+            // while dependencies and node_modules stay. The plugin keeps
+            // running this session and silently fails to load next boot.
+            // Restore the row, scoped to exactly that refusal and to this
+            // operation's own target: the read-only stance in #720/#696
+            // still holds for every other way a row can disappear.
+            if (!ok && !cancelled && result.refusalCode === 'bundle-in-use') {
+              const targetRowDropped = bundlesDroppedFromProfile(
+                manifestBefore, config.profile, activeProfileDir,
+                new Set(removedDeclaration === null ? [] : [removedDeclaration.name]),
+              ).includes(name)
+              if (targetRowDropped && addProfileBundle(activeProfileDir, name)) {
+                logEvent('warn', 'update-bundles-restored',
+                  `${name}: the desktop app removed its bundle row before refusing the update (bundle-in-use) — restored it so the plugin still loads on the next boot (#935)`)
+              }
+            }
             logEvent(ok || cancelled ? 'info' : 'error', 'update',
               `${name} -> ${target} exit=${String(result.exitCode)}${result.timedOut ? ' TIMEOUT' : ''}${cancelled ? ' CANCELLED' : ''}${stale ? ` STALE(${staleReason ?? 'unknown'})` : ''}${ok || cancelled ? '' : ` err=${failureDetail(result)}`}`)
             // A user-cancelled run is a quiet outcome, not an error.
@@ -4991,11 +5433,31 @@ sendJson(response, 200, { updates })
               // ever sees this when something really is unbootable.
               ...(() => { const orphans = orphanBundles(); return orphans.length > 0 ? { orphanBundles: orphans } : {} })(),
               staleReason: staleReason ?? undefined,
-              failureCode: versionFailureCode ?? undefined,
+              // The host's own refusal code when it stopped before pnpm
+              // (#909): `market-self-update` tells a client that the button
+              // cannot work on this host, not that the update was broken.
+              failureCode: versionFailureCode ?? result.refusalCode ?? undefined,
               renamedTo: renamedTo ?? undefined,
               removedDeclaration: removedDeclaration ?? undefined,
               ...(droppedBundles.length > 0 ? { droppedBundles } : {}),
-              error: versionFailureError ?? renamedError ?? trialError ?? brokenEntryError ?? hardFailureRollbackError ?? staleError ?? undefined,
+              // Last, so the specific ones above keep the floor they had: this
+              // only fills the case where every named branch said nothing and
+              // the user would otherwise get pnpm's stack (#848).
+              // The host's own refusal sentence (#897): when it stopped
+              // before running pnpm there is no classifier for its words and
+              // no rollback behind it, so without this the answer carried no
+              // reason at all.
+              // Release-age on Desktop (#919): withHoistRecovery already wrote
+              // the wait note into stderr (and stripped the false "already
+              // retried" classifier). Prefer that over pnpmFailureMessage,
+              // which would re-surface the classifier alone — the client
+              // shows body.error first.
+              error: versionFailureError ?? renamedError ?? trialError ?? brokenEntryError
+                ?? (result.repairOnRestart === true && result.stderr.trim() !== '' ? result.stderr.trim() : undefined)
+                ?? hardFailureRollbackError ?? staleError
+                ?? (result.wroteNothing === true && result.stderr.trim() !== '' ? result.stderr.trim() : undefined)
+                ?? (pnpmRefusedYoungRelease(result) && result.stderr.trim() !== '' ? result.stderr.trim() : undefined)
+                ?? pnpmFailureMessage(result) ?? undefined,
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,
@@ -5142,6 +5604,55 @@ sendJson(response, 200, { updates })
     }),
 
     /**
+     * Whether the market also has its own row in the sidebar (#846).
+     *
+     * GET as well as POST: the browser half decides whether to register the
+     * row on every page load, and `/dsh-market/status` probes pnpm on each
+     * call — too much to pay before a sidebar row can appear.
+     *
+     * Written through the long-lived `marketState` like the region, so a
+     * later write from that object cannot put the old answer back (#435).
+     */
+    registerRoute({
+      kind: 'exact',
+      path: '/dsh-market/sidebar-entry',
+      handler: async (request, response) => {
+        if (request.method === 'GET') {
+          sendJson(response, 200, {
+            enabled: marketState.sidebarEntry === true,
+            // Absent means nobody has ever chosen. On a host with no settings
+            // page the row is then shown by default, because it is the only
+            // way into the market (#846).
+            chosen: typeof marketState.sidebarEntry === 'boolean',
+          })
+          return
+        }
+        if (request.method !== 'POST') {
+          response.writeHead(405, { allow: 'GET, POST' })
+          response.end()
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendJson(response, 403, { error: 'untrusted origin' })
+          return
+        }
+        try {
+          const body = (await readJsonBody(request)) as { enabled?: unknown }
+          if (typeof body.enabled !== 'boolean') {
+            sendJson(response, 400, { error: 'enabled must be true or false' })
+            return
+          }
+          marketState.sidebarEntry = body.enabled
+          writeMarketState(activeProfileDir, marketState)
+          logEvent('info', 'sidebar', `sidebar entry ${body.enabled ? 'on' : 'off'}`)
+          sendJson(response, 200, { ok: true, enabled: body.enabled })
+        } catch (error) {
+          sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }),
+
+    /**
      * Last-resort GitHub prefix for networks where every built-in route is
      * unavailable. It is one escape hatch, not three service-level knobs;
      * the service ordering itself remains maintained by the routing table.
@@ -5249,8 +5760,13 @@ sendJson(response, 200, { updates })
         // read as an extra guard while testing nothing: origin-matches-host
         // is already part of what this checks, so no request can fail one
         // and pass the other.
-        if (!trustedRestartRequest(request)) {
-          sendJson(response, 403, { error: 'self-uninstall is limited to same-origin loopback requests' })
+        if (!trustedSelfUninstallRequest(request)) {
+          // Says what to do, not only which policy refused it: this is the one
+          // button whose failure leaves the user with no other way out of the
+          // page they are looking at (#903).
+          sendJson(response, 403, {
+            error: `不能从这个地址卸载插件市场（只接受本机同源请求）。请在运行 DSH 的机器上执行 \`dsh plugin --profile ${config.profile} remove dshmarket\`；桌面端也可以在它自己的「设置 → 插件」里移除。 / The market can only be removed from the same machine it runs on. Run \`dsh plugin --profile ${config.profile} remove dshmarket\` there, or remove it from the desktop app's Settings → Plugins.`,
+          })
           return
         }
         try {
@@ -5303,7 +5819,8 @@ sendJson(response, 200, { updates })
               for (const name of disabled) {
                 const ids = rowIdsForPackage(host, activeProfileDir, name)
                 if (ids.length > 0) {
-                  removeRowBlocks(userPatchPath, ids)
+                  const cleanedIds = removeRowBlocks(userPatchPath, ids)
+                  if (!cleanedIds.ok) logEvent('warn', 'patch', `patch rows could not be cleared — ${cleanedIds.reason}`)
                   restored.push(name)
                 }
               }
@@ -5480,10 +5997,14 @@ sendJson(response, 200, { updates })
               : gitCommitOfTarget(spec)
                 ?? await resolveGitRemoteHead(spec, gitRefOfTarget(spec) ?? undefined)
             if (pinned === null || pinned === undefined) return [stable]
-            const pinnedKey = repo !== null
-              ? codeloadAllowBuildsKey(name, spec, pinned)
-              : pinnedGitAllowBuildsKey(name, spec, pinned)
-            return pinnedKey === null ? [stable] : [stable, pinnedKey]
+            // Both pinned key forms, for either fetch mode (#784): a codeload
+            // download matches the codeload key (review-measured on 11.7.0,
+            // empty store), while a git clone matches the commit-pinned
+            // git+https key, in the remote's own spelling. Deriving only the
+            // codeload form left a git-clone fetch with no key pnpm would
+            // read.
+            const pinnedKeys = pinnedAllowBuildsKeys(name, spec, pinned)
+            return pinnedKeys.length === 0 ? [stable] : [stable, ...pinnedKeys]
           }
           /**
            * The allowBuilds key pnpm itself printed when it refused this
@@ -5498,6 +6019,10 @@ sendJson(response, 200, { updates })
            * naming the dep path it wants allowlisted.
            */
           const printedKeysFor = (name: string): string[] => {
+            // Load FIRST (PR #822 review): the in-memory map starts empty in a
+            // new process, and the key pnpm printed before the restart lives
+            // in the persisted file until this call brings it back.
+            printedBuildKeysFile()
             const printed = printedBuildKeys.get(name)
             return printed === null || printed === undefined ? [] : [printed]
           }
@@ -5605,7 +6130,7 @@ sendJson(response, 200, { updates })
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown; confirmAgentsRunning?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
             // Only the INDETERMINATE patch case is forceable, below. A patch
             // that definitely names the package stays refused: there the user
@@ -5657,7 +6182,7 @@ sendJson(response, 200, { updates })
               return
             }
             const busyAgents = runningAgentsForGuard()
-            if (busyAgents.length > 0) {
+            if (busyAgents.length > 0 && body.confirmAgentsRunning !== true) {
               logEvent('warn', 'uninstall-blocked', `${name}: refused while agents are running — ${busyAgents.join(', ')}`)
               sendJson(response, 409, {
                 error: `有 agent 正在运行（${busyAgents.join(', ')}）。卸载会修改插件文件，正在工作的 agent 可能在中途报错；请等它完成或取消后再卸载。 / ${busyAgents.length === 1 ? 'An agent is running' : 'Agents are running'} (${busyAgents.join(', ')}). Uninstalling changes plugin files, so a working agent can fail mid-turn; wait for it to finish (or cancel it) before uninstalling.`,
@@ -5692,9 +6217,20 @@ sendJson(response, 200, { updates })
             // it is meant to clean up after, and the rows outlive the package
             // as boot-time orphans (#799).
             const ownedRows = rowIdsForPackage(host, activeProfileDir, name)
+            // #928: the same intent record as the update path — an uninstall
+            // interrupted mid-remove leaves the same "where did it go" with no
+            // entry saying what was running.
+            logEvent('info', 'uninstall-start', `${name} (profile ${config.profile})`)
+            // #987: the rows are journaled BEFORE the remove for the same
+            // reason they are read before it — and because this process can be
+            // unloaded in between (the official Desktop replays its plugin set
+            // after a profile change), which used to leave an insert naming a
+            // package that is no longer installed.
+            const rowJournal = PendingRowJournal.forProfile(activeProfileDir)
+            rowJournal.begin({ profile: config.profile, name, patchPath: userPatchPath, rows: ownedRows })
             const result = await runPlugin(config.profile, ['remove', name])
             const cancelled = result.cancelled
-            const ok = result.exitCode === 0 && !result.timedOut && !cancelled
+            let ok = result.exitCode === 0 && !result.timedOut && !cancelled
             const cancelDiff = cancelled ? changedSince(beforeInstalled) : null
             // Half-uninstall guard: pnpm can fail a remove AFTER deleting
             // node_modules but BEFORE saving package.json (#65's write-order
@@ -5710,7 +6246,14 @@ sendJson(response, 200, { updates })
             if (halfGone) {
               reconciled = dropFromManifest(config.profile, name, activeProfileDir)
               logEvent('warn', 'uninstall', `${name}: remove failed (exit ${String(result.exitCode)}) but the package is gone from disk; ${reconciled ? 'reconciled manifest lists to match' : 'manifest lists already clean'}`)
+              // Same disk truth, but the failure is the host port collision
+              // after a successful remove (#975): report success so the
+              // client does not treat a finished uninstall as a failure.
+              if (isHostPortCollision(result)) ok = true
             }
+            // The remove did not land and nothing half-gone was found: the
+            // package (and its rows) are exactly as they were.
+            if (!ok && !halfGone && !cancelled) rowJournal.finish(config.profile, name)
             let hot = false
             if (ok || halfGone) {
               invalidateUpdates()
@@ -5755,7 +6298,12 @@ sendJson(response, 200, { updates })
               // Patch-layer rows must not survive the remove either: a
               // `- id: X` + `disabled: true` row for a package that no longer
               // mounts is a boot-time orphan (port of dsh-plugin-hub).
-              removeRowBlocks(userPatchPath, ownedRows)
+              const cleanedOwned = removeRowBlocks(userPatchPath, ownedRows)
+              if (!cleanedOwned.ok) logEvent('warn', 'uninstall', `patch rows could not be cleared — ${cleanedOwned.reason}`)
+              // Either way the record is settled: cleaned means nothing is
+              // left to do, and an unclean file is reported above rather than
+              // turned into a silent retry loop on every start.
+              else rowJournal.finish(config.profile, name)
               // The disable list must not keep a removed plugin: a later
               // reinstall starts enabled. Group memberships follow the same
               // rule so no group toggle ever targets a ghost member.
@@ -5783,6 +6331,10 @@ sendJson(response, 200, { updates })
               refresh: ok && hot && hadClientPart,
               partial: cancelDiff?.partial,
               changed: cancelDiff?.changed,
+              // This route had no failure sentence at all, so a recognized pnpm
+              // failure during a remove reached the client as the tail of
+              // pnpm's stack, like the update route before #848.
+              error: ok || cancelled ? undefined : pnpmFailureMessage(result),
               // The state of the package that was just removed (captured pre-op).
               activation,
               exitCode: result.exitCode,
@@ -5896,16 +6448,6 @@ sendJson(response, 200, { updates })
           await withMutationLock(response, 'install', async () => {
             const body = (await readJsonBody(request)) as { url?: unknown; force?: unknown; version?: unknown }
             const force = body.force === true
-            const busyAgents = runningAgentsForGuard()
-            if (busyAgents.length > 0) {
-              logEvent('warn', 'install-blocked', `refused while agents are running — ${busyAgents.join(', ')}`)
-              sendJson(response, 409, {
-                error: `有 agent 正在运行（${busyAgents.join(', ')}）。安装会修改插件文件，正在工作的 agent 可能在中途报错；请等它完成或取消后再安装。 / ${busyAgents.length === 1 ? 'An agent is running' : 'Agents are running'} (${busyAgents.join(', ')}). Installing changes plugin files, so a working agent can fail mid-turn; wait for it to finish (or cancel it) before installing.`,
-                agentsBusy: true,
-                runningAgents: busyAgents,
-              })
-              return
-            }
             const url = typeof body.url === 'string' ? body.url : ''
             // A release the user picked from the refusal dialog's own search
             // (#581): it was confirmed compatible by /dsh-market/find-compatible,
@@ -6093,7 +6635,13 @@ sendJson(response, 200, { updates })
               // (a 404 for this package's own download: the classifier names
               // the last path segment, the tarball file for that URL form).
               const ownTarball = `${plainTarget.slice(plainTarget.lastIndexOf('/') + 1)}-${String(registryLatest)}.tgz`
-              const notOnMirror = (failure?.code === 'no-matching-version' && aboutThisPackage)
+              // `exact-version-missing` (#927) is the same lag shape with a
+              // clearer sentence; install still falls back to the bare name
+              // after withHoistRecovery's one same-argv retry loses.
+              const notOnMirror = (
+                (failure?.code === 'no-matching-version' || failure?.code === 'exact-version-missing')
+                && aboutThisPackage
+              )
                 || (failure?.code === 'fetch-404' && (failure.pkg === plainTarget || failure.pkg === ownTarball))
               if (heldBack || notOnMirror) {
                 // The user asked for the young release anyway. That request is
@@ -6147,7 +6695,10 @@ sendJson(response, 200, { updates })
               }
             }
             const cancelled = result.cancelled
-            if ((result.exitCode !== 0 || result.timedOut) && !cancelled) {
+            const portCollisionLanded = !cancelled
+              && isHostPortCollision(result)
+              && installApplied(config.profile, before, activeProfileDir)
+            if ((result.exitCode !== 0 || result.timedOut) && !cancelled && !portCollisionLanded) {
               const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
               if (rolledBack.length > 0) logEvent('warn', 'install', `${target}: rolled back manifest residue of the failed run: ${rolledBack.join(', ')}`)
               if (lockfileBefore.ok) {
@@ -6155,7 +6706,10 @@ sendJson(response, 200, { updates })
                 if (!lock.ok) logEvent('warn', 'install', `${target}: could not restore pnpm-lock.yaml after the failed run: ${lock.detail ?? 'unknown'}`)
               }
             }
-            let ok = result.exitCode === 0 && !result.timedOut && !cancelled
+            let ok = (result.exitCode === 0 && !result.timedOut && !cancelled) || portCollisionLanded
+            if (portCollisionLanded && result.exitCode !== 0) {
+              logEvent('info', 'install', `${target}: command exited after the host port was already in use; the new plugin is on disk, treating as success (#975)`)
+            }
             const cancelDiff = cancelled ? changedSince(beforeSpecs) : null
             if (ok) invalidateUpdates()
             if (ok) {
@@ -6174,7 +6728,7 @@ sendJson(response, 200, { updates })
             let addedNothing = false
             let removedBroken: string[] = []
             let conflicts: { name: string; id: string; owner: string }[] = []
-            if (result.exitCode === 0 && !result.timedOut && !cancelled) {
+            if ((result.exitCode === 0 || portCollisionLanded) && !cancelled) {
               const validated = await validateAddedPlugins(runPlugin, config.profile, before, activeProfileDir)
               removedBroken = validated.removedBroken
               conflicts = validated.conflicts
@@ -6238,10 +6792,28 @@ sendJson(response, 200, { updates })
                     // inventory (live names and `#<id>`) is the fact
                     // "already active this session", the same source
                     // verifyActivation reads below.
-                    const adopted = liveNames().has(name)
-                      || liveNames().has(`#${name}`)
-                      || bundlePatchInsertedIds(join(activeProfileDir, 'node_modules', name))
-                        .some(id => liveNames().has(`#${id}`))
+                    const isAdopted = (): boolean => {
+                      const names = liveNames()
+                      return names.has(name)
+                        || names.has(`#${name}`)
+                        || bundlePatchInsertedIds(join(activeProfileDir, 'node_modules', name))
+                          .some(id => names.has(`#${id}`))
+                    }
+                    let adopted = isAdopted()
+                    // The replay lands after pnpm returns, not before (#814):
+                    // give a host that replays on its own the time to do it.
+                    // The profile watcher replays only what the manifest lists
+                    // as a bundle, so a client-only package is not waited for.
+                    const replayWaitMs = config.hostReplayWaitMs
+                      ?? (declaresBundle(activeProfileDir, name) && liveNames().has(PROFILE_HMR_ENTRY) ? PROFILE_HMR_REPLAY_WAIT_MS : 0)
+                    const waitUntil = Date.now() + replayWaitMs
+                    while (!adopted && Date.now() < waitUntil) {
+                      await new Promise(resolve => setTimeout(resolve, 250))
+                      adopted = isAdopted()
+                    }
+                    if (adopted && replayWaitMs > 0) {
+                      logEvent('info', 'install', `${name}: the host's own replay activated it; adopted instead of mounting a second copy (#814, #827)`)
+                    }
                     let live = adopted
                     if (!adopted && !pluginCategories(entry).includes('theme')) {
                       // #758: this fallback hot-mount bypasses the host's own
@@ -6298,16 +6870,19 @@ sendJson(response, 200, { updates })
                   ...brokenClientBundles(config.profile, activeProfileDir),
                 ].filter((entry, index, all) => all.findIndex(other => other.name === entry.name) === index),
               )
-              if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
-                const rollbackId = savePendingRollback({ kind: 'install', names: addedPackages })
+              const needsRollback = risks.length > 0 || brokenBundles.length > 0
+              if (needsRollback || shadowed.length > 0) {
+                const rollbackId = needsRollback ? savePendingRollback({ kind: 'install', names: addedPackages }) : null
                 compatibility = {
                   code: 'soft-incompatible',
                   risks,
                   shadowedNames: shadowed.length > 0 ? shadowed : undefined,
                   brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
-                  ...(rollbackId !== null
-                    ? { rollbackId }
-                    : { rollbackUnavailable: '安装完成后无法安全捕获 profile 状态，因此自动回滚不可用；需要时请手工卸载新安装的插件。 / The post-install profile state could not be captured safely, so automatic rollback is unavailable. Remove the newly installed plugin manually if needed.' }),
+                  ...(needsRollback
+                    ? rollbackId !== null
+                      ? { rollbackId }
+                      : { rollbackUnavailable: '安装完成后无法安全捕获 profile 状态，因此自动回滚不可用；需要时请手工卸载新安装的插件。 / The post-install profile state could not be captured safely, so automatic rollback is unavailable. Remove the newly installed plugin manually if needed.' }
+                    : {}),
                 }
                 if (brokenBundles.length > 0) {
                   logEvent('error', 'install-bundle', `${brokenBundles.map(entry => `${entry.name}: ${entry.reason}`).join('; ')}`)
@@ -6389,7 +6964,10 @@ sendJson(response, 200, { updates })
                   // the action on this very row, so the text can just say
                   // what to press.
                   ? `构建脚本被 pnpm 默认拦截（${ignoredBuilds.join(', ')}），点击「放行构建脚本并重试」即可放行并重装 / build scripts are blocked by pnpm by default (${ignoredBuilds.join(', ')}); use "Allow build scripts and retry" to approve and reinstall`
-                  : undefined,
+                  // Same last resort as the update route (#848), and on THIS
+                  // route too: a recognized failure like an expired
+                  // `patchedDependencies` key had no branch here either.
+                  : pnpmFailureMessage(result),
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,

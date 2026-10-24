@@ -16,18 +16,24 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   applyRecovery, matchFailureToPlugins, parseBootFailure, recoveryPayload,
   respawnAndWatch, runRecovery, startRecoveryServer, type RecoveryConfig, type RecoveryPlugin,
 } from '../src/recovery.ts'
 import { restartHelperSource } from '../src/restart.ts'
 
+vi.mock('node:os', async importOriginal => {
+  const os = await importOriginal<typeof import('node:os')>()
+  return { ...os, homedir: vi.fn(os.homedir) }
+})
+
 const cleanups: Array<() => void | Promise<void>> = []
 afterEach(async () => {
   for (const done of cleanups.splice(0)) await done()
+  vi.mocked(homedir).mockReset()
 })
 
 /** Poll until the predicate holds, or give up — never a bare sleep. */
@@ -350,6 +356,55 @@ describe('startRecoveryServer', () => {
     expect(text).toContain('## replacement host stderr')
   })
 
+  it('redacts Windows home variants in HTTP logs while preserving line breaks and credentials masking (#907)', async () => {
+    vi.mocked(homedir).mockReturnValue(String.raw`C:\Users\Alice`)
+    const { base, config } = await serve()
+    const original = [
+      String.raw`C:\Users\Alice\private`,
+      'link:C:/Users/Alice/private',
+      String.raw`link:C:/Users\Alice/private`,
+      'link:c:/uSeRs/ALICE/private',
+      'link:C:/Users/Alice-other/private',
+      'link:C:/Users/Bob/private',
+      'ordinary Alice text',
+      'sk-abcdefgh12345678 ghp_abcdefghijklmnop npm_abcdefghijklmnop',
+      'Bearer secret', 'api-key=secret',
+    ].join('\r\n') + '\nlast line\n'
+    const expected = [
+      String.raw`~\private`, 'link:~/private', 'link:~/private', 'link:~/private',
+      'link:C:/Users/Alice-other/private', 'link:C:/Users/Bob/private', 'ordinary Alice text',
+      'sk-*** gh*_*** npm_***', 'Bearer ***', 'api-key=***',
+    ].join('\r\n') + '\nlast line\n'
+    for (const file of [config.logs.out, config.logs.err, `${config.logs.err}.recovery.log`]) {
+      writeFileSync(file, original)
+    }
+    const response = await fetch(base + '/dsh-market/logs')
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text.split(expected)).toHaveLength(4)
+    expect(text).not.toContain('secret')
+    expect(text).not.toContain('C:/Users/Alice/private')
+  })
+
+  it.each([
+    ['C:\\Users\\Alice\\', String.raw`c:/Users\ALICE\private`, String.raw`~\private`],
+    ['C:/Users/Alice/', 'c:/USERS/alice/private', '~/private'],
+    ['/home/alice/', '/home/alice/private', '~/private'],
+  ])('redacts trailing-separator home %s in HTTP recovery logs (#907)', async (directory, path, masked) => {
+    vi.mocked(homedir).mockReturnValue(directory)
+    const { base, config } = await serve()
+    const original = `link:${path}\r\napi-key=secret\nlast line\n`
+    const expected = `link:${masked}\r\napi-key=***\nlast line\n`
+    for (const file of [config.logs.out, config.logs.err, `${config.logs.err}.recovery.log`]) {
+      writeFileSync(file, original)
+    }
+    const response = await fetch(base + '/dsh-market/logs')
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    expect(text.split(expected)).toHaveLength(4)
+    expect(text).not.toContain('secret')
+  })
+
   it('refuses a cross-site write and accepts a same-origin one', async () => {
     const { base, finished } = await serve()
     const hostile = await fetch(base + '/dsh-market/recovery/apply', {
@@ -433,6 +488,38 @@ describe('the replacement is given time to be dead (#719)', () => {
       if (!up) await sleep(250)
     }
     expect(up, 'the surface never came up after the replacement exited').toBe(true)
+  })
+
+  it('stands down when the port is already served, whatever the pid says (#854)', async () => {
+    // The pid the helper hands over is the process IT spawned, and on Windows
+    // that is the `powershell.exe` wrapper rather than the node host that binds
+    // the port — the reporter's log shows the guard judging a live host dead by
+    // exactly that pid, which is how the surface came to take a port out from
+    // under a boot that was still running. A socket that answers settles the
+    // same question without a pid.
+    const { port } = await hold()
+    const { dir, patchPath } = makeProfile()
+    const config = makeConfig(dir, patchPath, [makePlugin('blamed-plugin')])
+    config.port = port
+    config.logs.err = join(dir, 'err.log')
+    writeFileSync(config.logs.err, TWO_ENTRIES_FAILED)
+    // A pid that is already gone — deliberately the unhelpful handover.
+    const dead = spawn(process.execPath, ['-e', 'process.exit(0)'], { stdio: 'ignore' })
+    cleanups.push(() => { dead.kill() })
+    await sleep(300)
+
+    const startedAt = Date.now()
+    const outcome = await runRecovery(config, { exitCode: null, bound: false, replacementPid: dead.pid })
+    const elapsed = Date.now() - startedAt
+
+    expect(outcome).toBe('booted')
+    // Fast, because it never reached the port-free wait (30s) that a surface
+    // which intended to bind would sit through first. Without the guard this
+    // test ends 'released' half a minute later.
+    expect(elapsed, 'the surface waited on a port it should have left alone').toBeLessThan(5000)
+    // The note goes to the recovery log beside the boot log, like every other
+    // stage line this surface writes.
+    expect(readFileSync(`${config.logs.err}.recovery.log`, 'utf8')).toContain('already answering')
   })
 })
 

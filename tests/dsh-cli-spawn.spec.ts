@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const childProcess = vi.hoisted(() => ({ spawn: vi.fn() }))
@@ -71,6 +71,117 @@ function expectTaskkill(index: number) {
   ])
   expect(child.kill).not.toHaveBeenCalled()
 }
+
+// Official launcher contract: deepseek-ai/deepseek-harness at
+// dsh-v0.2.0-rc.2, apps/desktop/cli/{dsh,dsh.cmd} and
+// apps/desktop-host/src/cli.ts. This covers launcher identity, not #975's bind.
+describe('Web profiles launched by the bundled Desktop CLI', () => {
+  describe.each(['win32', 'linux', 'darwin'])('%s', (os) => {
+    describe.each(['/', '\\'])('%s entry separators', (separator) => {
+      it.each([
+        ['add', '@scope/plugin@1.0.0'],
+        ['add', '--force', '@scope/plugin@2.0.0'],
+        ['remove', '@scope/plugin'],
+        ['install'],
+      ])('keeps the original carrier for %j instead of selecting a PATH dsh', async (...args) => {
+        platform(os)
+        // This path is deliberately not a physical directory. Electron can read
+        // the entry inside app.asar, but the OS cannot chdir into the archive.
+        const entry = [home, 'Application with spaces', 'resources', 'app.asar', 'dsh',
+          'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js'].join(separator)
+        process.argv = [process.execPath, entry, 'web', '--no-open']
+        process.execArgv = ['--expose-internals', '--no-warnings']
+        vi.stubEnv('ELECTRON_RUN_AS_NODE', '1')
+        const { runDshPlugin, nodeExecutable, progress } = await import('../src/dsh-cli.ts')
+        const result = runDshPlugin('web', args)
+        child.emit('close', 0)
+        await expect(result).resolves.toMatchObject({ exitCode: 0, cancelled: false, timedOut: false })
+        expectSpawn(0, nodeExecutable(), [
+          '--expose-internals', '--no-warnings', resolve(entry),
+          'plugin', '--profile', 'web', ...args, '--reporter=ndjson',
+        ], { cwd: undefined, detached: os !== 'win32' })
+        expect(childProcess.spawn.mock.calls[0]![2].env.ELECTRON_RUN_AS_NODE).toBe('1')
+        expect(progress.active).toBe(false)
+        expect(vi.getTimerCount()).toBe(0)
+      })
+    })
+
+    it.each(['failure', 'error', 'cancel', 'timeout'])('preserves the %s outcome', async (outcome) => {
+      platform(os)
+      const kill = vi.spyOn(process, 'kill').mockReturnValue(true)
+      process.argv = [process.execPath, join(home, 'node_modules', '@deepseek-ai',
+        'dsh-desktop-host', 'lib', 'cli.js'), 'web']
+      const { runDshPlugin, cancelActive, progress } = await import('../src/dsh-cli.ts')
+      const result = runDshPlugin('web', ['install'])
+      child.stderr.emit('data', Buffer.from('listen EADDRINUSE 127.0.0.1:3080'))
+      if (outcome === 'cancel') expect(cancelActive()).toBe(true)
+      if (outcome === 'timeout') vi.advanceTimersByTime(1000)
+      if (outcome === 'error') child.emit('error', new Error('spawn ENOENT'))
+      else child.emit('close', 1)
+      await expect(result).resolves.toMatchObject({
+        exitCode: outcome === 'error' ? 127 : 1,
+        cancelled: outcome === 'cancel',
+        timedOut: outcome === 'timeout',
+        stderr: expect.stringContaining('EADDRINUSE'),
+      })
+      expect(progress.active).toBe(false)
+      expect(progress.cancelling).toBe(false)
+      expect(cancelActive()).toBe(false)
+      // POSIX deliberately retains the process-group SIGKILL escalation.
+      vi.advanceTimersByTime(5000)
+      expect(vi.getTimerCount()).toBe(0)
+      kill.mockRestore()
+    })
+  })
+
+  describe.each(['win32', 'linux', 'darwin'])('%s entry boundaries', (os) => {
+    it.each([
+      ['another-app', 'lib', 'cli.js'],
+      ['@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js'],
+      ['node_modules', '@other', 'dsh-desktop-host', 'lib', 'cli.js'],
+      ['node_modules', '@deepseek-ai', 'other-host', 'lib', 'cli.js'],
+      ['node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.ts'],
+      ['node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'nested', 'cli.js'],
+      ['node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js.backup'],
+    ])('keeps PATH fallback for %j', async (...parts) => {
+      platform(os)
+      process.argv = [process.execPath, join(home, ...parts)]
+      const { dshArgv, runDshPlugin } = await import('../src/dsh-cli.ts')
+      expect(dshArgv()).toEqual({ file: 'dsh', args: [], cwd: undefined, viaShell: os === 'win32' })
+      const result = runDshPlugin('web', ['install'])
+      child.emit('close', 0)
+      await result
+      if (os === 'win32') {
+        expectSpawn(0, 'cmd.exe', ['/d', '/s', '/c', '"dsh plugin --profile web install --reporter=ndjson"'], {
+          cwd: undefined, detached: false, windowsVerbatimArguments: true,
+        })
+      } else {
+        expectSpawn(0, 'dsh', ['plugin', '--profile', 'web', 'install', '--reporter=ndjson'], {
+          cwd: undefined, detached: true,
+        })
+      }
+    })
+
+    describe.each(['absolute', 'relative'])('%s entry', (kind) => {
+      it.each(['bin.js', 'bin.ts', 'dsh'])('preserves the existing %s entry and loader flags', async (name) => {
+        platform(os)
+        const entry = kind === 'absolute' ? join(home, 'source checkout', name) : join('source checkout', name)
+        process.argv = [process.execPath, entry, 'web']
+        process.execArgv = ['--import', 'tsx/esm', '--expose-internals']
+        const { dshArgv, nodeExecutable, runDshPlugin } = await import('../src/dsh-cli.ts')
+        expect(dshArgv()).toEqual({
+          file: nodeExecutable(), args: [...process.execArgv, resolve(entry)], cwd: dirname(resolve(entry)), viaShell: false,
+        })
+        const result = runDshPlugin('web', ['install'])
+        child.emit('close', 0)
+        await result
+        expectSpawn(0, nodeExecutable(), [
+          ...process.execArgv, resolve(entry), 'plugin', '--profile', 'web', 'install', '--reporter=ndjson',
+        ], { cwd: dirname(resolve(entry)), detached: os !== 'win32' })
+      })
+    })
+  })
+})
 
 describe('--config overrides reach pnpm as environment variables (#615)', () => {
   it('sets PNPM_CONFIG_* only on the run that carries the override', async () => {

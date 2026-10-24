@@ -55,6 +55,13 @@ function catalog(): void {
   })
 }
 
+/** Write an installed package that declares itself a skin (skin.json at root). */
+function skin(name: string, id: string): void {
+  const dir = join(home, 'profiles', 'web', 'node_modules', name)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'skin.json'), JSON.stringify({ id, package: name }))
+}
+
 /** Write the profile manifest the classifier reads. */
 function installed(deps: Record<string, string>): void {
   const dir = join(home, 'profiles', 'web')
@@ -92,6 +99,49 @@ describe('installedThemeNames', () => {
 
   it('matches the repo case-insensitively', async () => {
     installed({ 'whale-fork': 'github:SMALL-TAILQWQ/DSH-Deep-Whale' })
+    expect(await names()).toEqual(['whale-fork'])
+  })
+
+  it('separates the packages of one monorepo: the manager is not a theme (#519)', async () => {
+    // The reported shape, with the catalog as it actually is: one repository
+    // ships a skin MANAGER and two skins as three separate packages, and the
+    // catalog lists only ONE of the skins (`/tree/main/maid-atelier`).
+    // Matching by repo alone made the manager a theme, so activating any other
+    // theme switched it off — taking the user's own management UI with it.
+    registry.loadRegistry.mockResolvedValue({
+      updated: '2026-01-01',
+      count: 1,
+      categories: {},
+      plugins: [
+        {
+          name: 'dsh-deep-whale#maid-atelier', owner: 'Small-tailqwq', category: 'theme',
+          url: 'https://github.com/Small-tailqwq/dsh-deep-whale/tree/main/maid-atelier',
+          description: { en: '', zh: '' }, install: '', added: '2026-01-01',
+        },
+      ],
+    })
+    installed({
+      '@dsh-external/dsh-client-ui-skin-deep-whale-manager': 'github:Small-tailqwq/dsh-deep-whale#path:/skin-manager',
+      '@smalltailqwq/dsh-client-ui-skin-maid-atelier': 'github:Small-tailqwq/dsh-deep-whale#path:/maid-atelier',
+      '@smalltailqwq/dsh-client-ui-skin-orca-link': 'github:Small-tailqwq/dsh-deep-whale#path:/orca-link',
+    })
+    // The second skin is not in the catalog at all — its own skin.json is what
+    // identifies it (both skins ship one; the manager ships none).
+    skin('@smalltailqwq/dsh-client-ui-skin-maid-atelier', 'maid-atelier')
+    skin('@smalltailqwq/dsh-client-ui-skin-orca-link', 'orca-link')
+
+    expect(await names()).toEqual([
+      '@smalltailqwq/dsh-client-ui-skin-maid-atelier',
+      '@smalltailqwq/dsh-client-ui-skin-orca-link',
+    ])
+  })
+
+  it('still classifies a subdirectory install when the catalog entry covers the whole repo', async () => {
+    // The other direction, pinned so the rule cannot become "subpath installs
+    // are never themes": a catalog entry pointing at the repo itself says
+    // nothing about subdirectories, and the old permissive match is what keeps
+    // a monorepo skin working there.
+    installed({ 'whale-fork': 'github:Small-tailqwq/dsh-deep-whale#path:/somewhere' })
     expect(await names()).toEqual(['whale-fork'])
   })
 

@@ -84,9 +84,19 @@ describe.skipIf(!HAS_DSH).sequential('web e2e: the host-version pre-check (#404)
     // its version makes a satisfiable requirement look unsatisfied — so the
     // check is a question, not a lock.
     const forced = await post('/dsh-market/update', { name: A, force: true })
-    expect(forced.status).toBe(200)
-    expect(await forced.json()).toMatchObject({ ok: true })
-    expect(installedVersion()).toBe('2.0.0')
+    // DSH 0.2.1 moved this gate into the CLI: it refuses the install itself
+    // and names an exact-version exemption, so "the user insists" is no
+    // longer enough on that line. Both answers are honest; what must hold
+    // either way is that the profile is left in ONE state, not half-updated.
+    if (forced.status === 200) {
+      expect(await forced.json()).toMatchObject({ ok: true })
+      expect(installedVersion()).toBe('2.0.0')
+    } else {
+      expect(forced.status).toBe(502)
+      const body = await forced.json() as { stderr?: string }
+      expect(body.stderr).toContain('incompatible with dsh')
+      expect(installedVersion()).toBe('1.0.0')
+    }
   }, 300_000)
 })
 
@@ -158,8 +168,17 @@ describe.skipIf(!HAS_DSH).sequential('web e2e: the fresh-install host-version pr
       url: `https://github.com/dshm-e2e/${B}`,
       force: true,
     })
-    expect(forced.status).toBe(200)
-    expect(await forced.json()).toMatchObject({ ok: true })
-    expect(installedVersion()).toBe('2.0.0')
+    // Same split as the update above: the CLI owns the gate from 0.2.1 on, so
+    // an insisted install either lands or is refused by the host with the
+    // exemption path spelled out — never a silent half-install.
+    if (forced.status === 200) {
+      expect(await forced.json()).toMatchObject({ ok: true })
+      expect(installedVersion()).toBe('2.0.0')
+    } else {
+      expect(forced.status).toBe(502)
+      const body = await forced.json() as { stderr?: string }
+      expect(body.stderr).toContain('incompatible with dsh')
+      expect(installedVersion()).toBeNull()
+    }
   }, 300_000)
 })

@@ -15,7 +15,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -23,6 +23,7 @@ import { dump } from 'js-yaml'
 import { mountMarketRoutes, type MarketHost } from '../src/routes.ts'
 import { sameOrigin } from '../src/http.ts'
 import { readMarketState, writeMarketState } from '../src/hot.ts'
+import { configurePersistentLog, readPersistentLog } from '../src/log.ts'
 import * as orderApi from '../src/order.ts'
 import type { PluginCommandRuntime } from '../src/dsh-cli.ts'
 
@@ -97,6 +98,8 @@ interface RequestOpts {
   body?: unknown
   /** Verbatim body bytes (malformed JSON / empty stream cases). */
   rawBody?: string
+  /** Peer address the download/restart fences read; loopback unless a test says otherwise. */
+  remoteAddress?: string
 }
 
 /** A fake IncomingMessage: headers + an async-iterable body (readJsonBody's only needs). */
@@ -111,6 +114,10 @@ function makeRequest(opts: RequestOpts): IncomingMessage {
     method: opts.method,
     url: opts.url,
     headers,
+    // Loopback by default, like the browser this route serves: the download
+    // fence reads `socket.remoteAddress`, and a request without a socket made
+    // that path throw instead of answering.
+    socket: { remoteAddress: opts.remoteAddress ?? '127.0.0.1' },
     [Symbol.asyncIterator]() {
       let i = 0
       return {
@@ -227,6 +234,8 @@ describe('method & Allow contract', () => {
     ['/dsh-market/bundle-order', 'GET', 'POST'],
     ['/dsh-market/snapshots', 'DELETE', 'GET, POST'],
     ['/dsh-market/restore-snapshot', 'GET', 'POST'],
+    ['/dsh-market/host-recovery', 'POST', 'GET'],
+    ['/dsh-market/host-recovery/restore', 'GET', 'POST'],
     ['/dsh-market/delete-snapshot', 'GET', 'POST'],
     ['/dsh-market/presets', 'DELETE', 'GET, POST'],
   ])('answers 405 with an Allow header on %s', async (path, method, allow) => {
@@ -242,6 +251,7 @@ describe('origin enforcement (POST routes)', () => {
     ['/dsh-market/bundle-order', { order: ['beta', 'alpha'] }],
     ['/dsh-market/snapshots', undefined],
     ['/dsh-market/restore-snapshot', { snapshot: 'snapshot-x' }],
+    ['/dsh-market/host-recovery/restore', { name: 'cordis.patch.yml.bak-1' }],
     ['/dsh-market/delete-snapshot', { snapshot: 'snapshot-x' }],
     ['/dsh-market/presets', { action: 'save', name: 'p' }],
   ]
@@ -512,6 +522,34 @@ describe('GET /dsh-market/installed — local repository evidence', () => {
       repoIdentities: { 'dsh-vision-bridge': ['gxx182/dsh-vision-bridge'] },
       repoHints: {},
     })
+  })
+})
+
+describe('GET /dsh-market/backup — a failure says why (#55)', () => {
+  // kettly1260 hit "Error: HTTP 500" and asked how to find out more: the route
+  // did answer with the reason, the client threw it away. Both ends are
+  // asserted here — the body carries the reason, and the log carries it too so
+  // a report can include it.
+  it('names the cap when the profile has more configuration files than a backup holds', async () => {
+    writeStandardProfile()
+    for (let i = 0; i < 300; i++) writeFileSync(join(dir, `conf-${String(i)}.yml`), `key: ${String(i)}\n`)
+    configurePersistentLog(join(tmp, 'log.ndjson'))
+    let res: Captured
+    try {
+      res = await hit(routes, '/dsh-market/backup', { method: 'GET', url: '/dsh-market/backup', host: HOST })
+    } finally { configurePersistentLog(null) }
+    expect(res.status).toBe(500)
+    const body = JSON.parse(res.body) as { error: string }
+    expect(body.error).toContain('配置文件超过 256 个')
+    expect(body.error).toContain('Export selected plugins instead')
+    expect(readPersistentLog(join(tmp, 'log.ndjson')).join('\n')).toContain('"event":"backup"')
+  })
+
+  it('still exports a profile inside the cap', async () => {
+    writeStandardProfile()
+    const res = await hit(routes, '/dsh-market/backup', { method: 'GET', url: '/dsh-market/backup', host: HOST })
+    expect(res.status).toBe(200)
+    expect(JSON.parse(res.body).files.length).toBeGreaterThan(0)
   })
 })
 
@@ -1069,5 +1107,162 @@ describe('POST /dsh-market/restore-snapshot & /dsh-market/delete-snapshot', () =
     const res = await hit(routes, '/dsh-market/delete-snapshot', post('/dsh-market/delete-snapshot', { snapshot: 'snapshot-does-not-exist' }))
     expect(res.status).toBe(400)
     expect(String(jsonBody(res).error)).toMatch(/snapshot not found/)
+  })
+})
+
+describe('market state publication (#582 narrowest point)', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'dshm-state-'))
+    mkdirSync(join(dir, '.dsh-market'), { recursive: true })
+  })
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+
+  const statePath = () => join(dir, '.dsh-market', 'state.json')
+
+  it('leaves no half-written file and no temporary behind', () => {
+    writeMarketState(dir, { disabled: new Set(['a']), groups: {}, groupOrder: [] })
+    expect(readMarketState(dir).disabled.has('a')).toBe(true)
+    expect(readdirSync(join(dir, '.dsh-market')).some(name => name.endsWith('.new'))).toBe(false)
+  })
+
+  it('writes through a symlinked state file instead of replacing the link (#582)', () => {
+    const real = join(dir, 'state-elsewhere.json')
+    writeFileSync(real, JSON.stringify({ disabled: ['keep'] }))
+    symlinkSync(real, statePath())
+    writeMarketState(dir, { disabled: new Set(['a', 'keep']), groups: {}, groupOrder: [] })
+    expect(lstatSync(statePath()).isSymbolicLink()).toBe(true)
+    expect(JSON.parse(readFileSync(real, 'utf8')).disabled).toEqual(['a', 'keep'])
+  })
+
+  it('says so when the state file cannot be read, instead of silently coming back empty', () => {
+    // Every disable, group, favourite and exemption lives in this file. Coming
+    // back empty silently reads as "my plugins switched themselves back on".
+    writeFileSync(statePath(), '{"disabled": ["a"')
+    configurePersistentLog(join(dir, 'log.ndjson'))
+    try {
+      expect(readMarketState(dir).disabled.size).toBe(0)
+    } finally { configurePersistentLog(null) }
+    // The log is the only trace: the next write replaces the damaged file.
+    const logged = readPersistentLog(join(dir, 'log.ndjson')).join('\n')
+    expect(logged).toContain('market state could not be read')
+    // A warning, not an info line: it is the only trace this happened.
+    expect(logged).toContain('"level":"warn"')
+  })
+})
+
+describe('a client that reads its config from a name nothing serves (#810)', () => {
+  /** A bundle package that also ships a client bundle (what the scan reads). */
+  function writeClientBundle(name: string, source: string): void {
+    writeBundle(name)
+    const pkgDir = join(dir, 'node_modules', name)
+    const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as {
+      dsh: Record<string, unknown>
+    }
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
+      ...manifest,
+      exports: { './client': './lib/client.js' },
+      dsh: { ...manifest.dsh, client: { platform: 'web' } },
+    }))
+    mkdirSync(join(pkgDir, 'lib'), { recursive: true })
+    writeFileSync(join(pkgDir, 'lib', 'client.js'), source)
+  }
+
+  const getInstalled = async (): Promise<Record<string, unknown>> =>
+    jsonBody(await hit(routes, '/dsh-market/installed', { method: 'GET', url: '/dsh-market/installed' }))
+
+  it('names the package and the entry id it should have asked for', async () => {
+    // The reported shape: the client asks for its PACKAGE name while its own
+    // entry id is something else. The row needs both — the mistake to be
+    // believable and the value to write instead.
+    writeProfile(['alpha'])
+    writeClientBundle('alpha', 'var NAMESPACE = "alpha"\nctx.configForms.get(NAMESPACE)')
+
+    expect((await getInstalled()).configNamespaces).toEqual([
+      { name: 'alpha', namespaces: ['alpha'], ownEntryIds: ['alpha-entry'] },
+    ])
+  })
+
+  it('stays quiet when an entry id answers to that name, whoever declares it', async () => {
+    // Served by ANOTHER package's row counts: a carrier bundle mounts ids of
+    // its own, and judging by the asking package's ids alone would flag it.
+    writeProfile(['alpha', 'beta'])
+    writeBundle('beta', { entries: [{ id: 'shared-entry', name: 'beta' }] })
+    writeClientBundle('alpha', 'ctx.configForms.get("shared-entry")')
+
+    expect((await getInstalled()).configNamespaces).toBeUndefined()
+  })
+
+  it('reports the same finding on the diagnostics page', async () => {
+    // The page composes the host layers as well, so it is the wider of the
+    // two judgements; a finding on the row is a finding here.
+    writeProfile(['alpha'])
+    writeClientBundle('alpha', 'ctx.configForms.get("alpha-panel")')
+
+    const body = jsonBody(await hit(routes, '/dsh-market/check', { method: 'GET', url: '/dsh-market/check' }))
+    expect(body.configNamespaces).toEqual([
+      { name: 'alpha', namespaces: ['alpha-panel'], ownEntryIds: ['alpha-entry'] },
+    ])
+  })
+
+  it('is absent from a healthy profile, so the row renders nothing', async () => {
+    writeStandardProfile()
+    expect((await getInstalled()).configNamespaces).toBeUndefined()
+    const body = jsonBody(await hit(routes, '/dsh-market/check', { method: 'GET', url: '/dsh-market/check' }))
+    expect(body.configNamespaces).toEqual([])
+  })
+})
+
+// --- #875: the host's own recovery moved the profile patch aside ---
+
+/** The stub `sanitizeProfile` writes, and the user patch it displaced. */
+const USER_PATCH_ROWS = [
+  '- insert:',
+  '    - id: llm-deepseek',
+  '- id: permission',
+  '  disabled: false',
+  '',
+].join('\n')
+
+describe('host recovery (#875)', () => {
+  const BACKUP = 'cordis.patch.yml.bak-1792065596554'
+
+  it('answers with the wipe shape and restores the patch it names', async () => {
+    writeProfile(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    writeFileSync(join(dir, 'cordis.patch.yml'), '# recovered\n')
+    writeFileSync(join(dir, BACKUP), USER_PATCH_ROWS)
+
+    const view = await hit(routes, '/dsh-market/host-recovery', { method: 'GET', url: '/dsh-market/host-recovery' })
+    expect(view.status).toBe(200)
+    expect(view.json()).toMatchObject({ offerRestore: true, lostRowIds: ['llm-deepseek', 'permission'] })
+
+    const res = await hit(routes, '/dsh-market/host-recovery/restore', post('/dsh-market/host-recovery/restore', { name: BACKUP }))
+    expect(res.status).toBe(200)
+    expect(res.json()).toMatchObject({ ok: true, restored: { rows: 2 } })
+    expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toBe(USER_PATCH_ROWS)
+
+    const after = await hit(routes, '/dsh-market/host-recovery', { method: 'GET', url: '/dsh-market/host-recovery' })
+    expect(after.json()).toMatchObject({ offerRestore: false })
+  })
+
+  it('says nothing on a profile its own recovery never touched', async () => {
+    writeProfile(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    const res = await hit(routes, '/dsh-market/host-recovery', { method: 'GET', url: '/dsh-market/host-recovery' })
+    expect(res.status).toBe(200)
+    expect(res.json()).toMatchObject({ offerRestore: false, backups: [] })
+  })
+
+  it('refuses a backup name that is not one of the files beside the patch', async () => {
+    writeProfile(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    writeFileSync(join(dir, 'cordis.patch.yml'), '# recovered\n')
+    writeFileSync(join(dir, BACKUP), USER_PATCH_ROWS)
+    const res = await hit(routes, '/dsh-market/host-recovery/restore', post('/dsh-market/host-recovery/restore', { name: '../package.json' }))
+    expect(res.status).toBe(400)
+    expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toBe('# recovered\n')
+  })
+
+  it('rejects a body that names no backup at all', async () => {
+    const res = await hit(routes, '/dsh-market/host-recovery/restore', post('/dsh-market/host-recovery/restore', {}))
+    expect(res.status).toBe(400)
   })
 })

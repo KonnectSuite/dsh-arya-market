@@ -168,6 +168,23 @@ describe('profile the launcher booted (#639)', () => {
     expect(state.officialFactoryArgs).toHaveLength(0)
   })
 
+  it('hands the launcher pnpm to the official runtime without registering it globally (#982)', () => {
+    const packageManager = {
+      command: '/Applications/DSH.app/Contents/Resources/runtime/node',
+      args: ['--expose-internals', '/Applications/DSH.app/Contents/Resources/runtime/pnpm.mjs'],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    }
+    const ctx = new FakeContext({
+      webServer: {}, loader: {},
+      profileContext: { ...launcher, packageManager },
+    })
+
+    apply(ctx as never)
+
+    expect(state.packageManagers).toEqual([])
+    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['desktop', launcher.dir, packageManager])
+  })
+
   it('uses the official manager rather than the forbidden CLI for Electron desktop', () => {
     // The official desktop host starts a profile through the launcher's node
     // entry: no `--profile` on argv, no `desktopProfiles` service. The market
@@ -186,7 +203,7 @@ describe('profile the launcher booted (#639)', () => {
     })
     expect(state.mounts[0].runtime).toBe(state.runtime)
     expect(state.officialFactoryArgs).toHaveLength(1)
-    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['desktop', launcher.dir])
+    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['desktop', launcher.dir, null])
     expect(state.mounts[0].config).toMatchObject({ desktopHost: true, allowRestart: false })
   })
 
@@ -227,7 +244,7 @@ describe('profile the launcher booted (#639)', () => {
     apply(ctx as never, { profile: 'desktop' })
 
     expect(state.officialFactoryArgs).toHaveLength(1)
-    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['desktop', undefined])
+    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['desktop', undefined, null])
     expect(state.mounts[0].config).toMatchObject({ profile: 'desktop', desktopHost: true, allowRestart: false })
     // No launcher answered, so no directory: the routes derive it, exactly as
     // they do for the flag-and-default path.
@@ -239,7 +256,7 @@ describe('profile the launcher booted (#639)', () => {
 
     apply(ctx as never, { profile: 'Desktop' })
 
-    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['Desktop', launcher.dir])
+    expect(state.officialFactoryArgs[0]?.slice(1)).toEqual(['Desktop', launcher.dir, null])
     expect(state.mounts[0].config).toMatchObject({ profile: 'Desktop', profileDirectory: launcher.dir })
   })
 
@@ -313,6 +330,31 @@ describe('host adaptation', () => {
     })
   })
 
+  it('feeds the declared authorities to the branch Desktop actually mounts (#960)', async () => {
+    // The desktopPnpm branch is the one the official Desktop shell takes. It
+    // skipped useTrustedHosts, so the fence only ever accepted loopback: on a
+    // LAN / Tailscale / hostname deployment the host itself declared and
+    // accepted, every mutating market route answered 403 "untrusted origin".
+    const { declaredTrustedHosts } = await import('../src/http.ts')
+    const desktopPnpm = { runPlugin: vi.fn() }
+    const ctx = new FakeContext({
+      webServer: {},
+      loader: {},
+      desktopProfiles: { current: { name: 'shell', dir: '/shell/dir' } },
+      desktopPnpm,
+      connection: { trustedHosts: ['192.168.31.120', '100.107.115.15'] },
+    })
+    apply(ctx as never)
+
+    expect(declaredTrustedHosts()).toEqual(['192.168.31.120', '100.107.115.15'])
+    const effect = ctx.effects.find(entry => entry.label.includes('Desktop http routes'))
+    expect(effect).toBeDefined()
+    await effect?.dispose()
+    // Disposal puts the previous source back rather than leaving this
+    // deployment's names accepted after the branch is gone.
+    expect(declaredTrustedHosts()).toEqual([])
+  })
+
   it('uses the immutable Desktop profile and waits for desktopPnpm in a nested injection', async () => {
     const desktopPnpm = { runPlugin: vi.fn() }
     const ctx = new FakeContext({
@@ -331,6 +373,8 @@ describe('host adaptation', () => {
         profile: '工作 profile',
         profileDirectory: '/private/dsh/desktop',
         allowRestart: false,
+        // No pluginActivation to ask, so the shell's own replay is awaited (#814).
+        hostReplayWaitMs: 8000,
       },
       runtime: state.runtime,
     })
@@ -358,6 +402,8 @@ describe('host adaptation', () => {
     // routes — the whole seam in one assertion: a host that publishes it gets
     // host-owned activation, and one that does not publishes nothing.
     expect(state.mounts[0]?.activation).toBe(activation)
+    // It is asked to replay, so nothing waits for it to do so unasked (#814).
+    expect((state.mounts[0] as { config: { hostReplayWaitMs?: number } }).config.hostReplayWaitMs).toBeUndefined()
   })
 
   it('uses the documented pre-Loader desktopProfiles discriminator and never falls back to ambient CLI', () => {

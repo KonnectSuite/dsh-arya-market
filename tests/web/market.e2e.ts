@@ -4,19 +4,46 @@
  * Mirrors the layer-3 harness convention (playwright as a library inside
  * vitest, serial, console tripwire).
  *
- * Hermetic: catalog data comes from the bundled snapshot when the registry
- * site is unreachable; no plugin installs are performed (those live in the
- * flow and compat lanes). A fresh DSH_HOME boots with the testing notice
+ * Hermetic catalog: `launchMarketScaffold` points `DSHM_REGISTRY_URL` at a
+ * loopback browse catalog (see browse-catalog.ts). The live curated list is
+ * no longer bundled (#185), and refetching it from CI is what made Discover
+ * sit on loading/loadFail with neither search nor cards. Installs stay in
+ * the flow and compat lanes. A fresh DSH_HOME boots with the testing notice
  * and the English locale — selectors tolerate both languages.
  */
 
 import { chromium } from 'playwright'
 import type { Browser, Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { dshAvailable, launchMarketScaffold, openMarketPage, watchConsole } from './scaffold.ts'
+import { dshAvailable, launchMarketScaffold, openMarketPage, openMarketUi, waitMarketCatalog, watchConsole } from './scaffold.ts'
 import type { WebScaffold } from './scaffold.ts'
 
 const HAS_DSH = dshAvailable()
+
+/**
+ * Host-compat filtering (#872) is on by default and fills in results in
+ * chunks. While 「正在检查」is still moving, the visible catalog shrinks and
+ * search ties reorder — page totals and "compact vs spaced" ranking then
+ * flake against this lane's own earlier snapshot. Pin the preference off so
+ * these specs assert catalog/search behaviour, not the async scan.
+ */
+async function pinHostFilterOff(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    // The test tsconfig has no DOM lib; the page does.
+    const store = (globalThis as any).localStorage
+    try { store.setItem('dshm-host-filter', 'all') } catch { /* private mode */ }
+  })
+}
+
+/** If a prior run left the filter on, wait until the note stops saying "checking". */
+async function waitHostFilterQuiet(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const note = (globalThis as any).document.querySelector('[class*="hostFilterNote"]')
+    if (note === null) return true
+    const text = String(note.textContent ?? '')
+    return !/正在检查宿主要求|Checking host requirements/.test(text)
+  }, undefined, { timeout: 120_000 })
+}
 
 describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
   let scaffold: WebScaffold
@@ -29,6 +56,7 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
     browser = await chromium.launch()
     page = await browser.newPage({ viewport: { width: 1500, height: 950 } })
     tripwire = watchConsole(page)
+    await pinHostFilterOff(page)
     await openMarketPage(page, scaffold)
     // A fresh home greets with onboarding dialogs (testing notice, API-key
     // prompt, …); click through whichever appear until none are left.
@@ -69,16 +97,15 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
   })
 
   it('opens Settings → Plugin Market and renders the catalog paginated', async () => {
-    await page.getByRole('button', { name: /^(设置|Settings)$/ }).first().click()
-    await page.getByRole('button', { name: /插件市场|Plugin Market/ }).click()
-    await page.waitForSelector('[class*="masonryCol"] > [class*="card"]', { timeout: 30_000 })
+    await openMarketUi(page)
+    await waitMarketCatalog(page)
     // Direct children only: a card with curated screenshots nests a
     // `.cardShots`/`.cardShot` thumbnail strip, and both class names also
     // match the loose `[class*="card"]` substring — counting descendants
     // inflated the total by however many thumbnails were on screen.
     const cards = await page.locator('[class*="masonryCol"] > [class*="card"]').count()
-    // Pagination: a bounded first page (24) instead of the full 400+ catalog,
-    // with a numbered pager underneath.
+    // Pagination: a bounded first page (24) instead of dumping the whole
+    // browse catalog, with a numbered pager underneath.
     expect(cards).toBe(24)
     // Numbered pager: primitives Buttons inside the pager row.
     expect(await page.locator('[class*="pager"] button').count()).toBeGreaterThan(0)
@@ -105,12 +132,16 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
     // The point of the feature is that a PHOTO of the screen carries the
     // version, so assert what is actually rendered and visible — a unit
     // test on the state would pass with the element hidden or unmounted.
-    const version = page.locator('[class*="titleRow"] [class*="version"]')
+    // In the header row, which since the row-order change means the right-hand
+    // cluster (name + sentence on the left, project + version + actions on the
+    // right) rather than a child of `titleRow`.
+    const version = page.locator('[class*="headTop"] [class*="version"]')
     await version.waitFor({ state: 'visible', timeout: 30_000 })
     expect((await version.textContent())?.trim()).toMatch(/^v\d+\.\d+\.\d+/)
   })
 
   it('search and category filter the grid', async () => {
+    await waitHostFilterQuiet(page)
     const search = page.getByPlaceholder(/搜索插件|Search plugins/)
     const gridNames = () => page.locator('[class*="masonryCol"] [class*="nm"]').allTextContents()
 
@@ -151,6 +182,7 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
       return Number(numbers[numbers.length - 1] ?? 0)
     }
 
+    await waitHostFilterQuiet(page)
     const allPages = await pages()
     expect(allPages).toBeGreaterThan(1)
     const chips = page.locator('[class*="catsWrap"] [data-chip="1"]')
@@ -161,6 +193,7 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
     expect(await pages(), 'a category must hold fewer pages than the whole catalog').toBeLessThan(allPages)
     await chips.nth(0).click() // back to All
     await page.waitForTimeout(400)
+    await waitHostFilterQuiet(page)
     // ...and clearing the filter restores the full catalog, so a chip that
     // silently stuck would not read as a pass.
     expect(await pages()).toBe(allPages)
@@ -168,6 +201,7 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
 
   it('treats adjacent Han and Latin search terms like their spaced forms', async () => {
     await page.getByRole('button', { name: /^(发现|Discover)$/ }).click()
+    await waitHostFilterQuiet(page)
     const search = page.getByPlaceholder(/搜索插件|Search plugins/)
     const gridNames = () => page.locator('[class*="masonryCol"] [class*="nm"]').allTextContents()
 
@@ -195,7 +229,7 @@ describe.skipIf(!HAS_DSH)('web e2e: plugin market', () => {
   it('the install dialog opens and cancels cleanly', async () => {
     // Independent of the previous test's final tab.
     await page.getByRole('button', { name: /^(发现|Discover)$/ }).click()
-    await page.waitForSelector('[class*="masonryCol"] [class*="card"]', { timeout: 15_000 })
+    await waitMarketCatalog(page, { timeout: 30_000 })
     await page.getByRole('button', { name: /^(安装|Install)$/ }).first().click()
     const cancel = page.getByRole('button', { name: /^(取消|Cancel)$/ }).first()
     await cancel.waitFor({ timeout: 5000 })

@@ -38,7 +38,14 @@ export function asRegion(value: unknown): Region | null {
  * pnpm's registry alone and setting it.
  */
 export const DEFAULT_NPM_REGISTRY = 'https://registry.npmjs.org'
-const NPM_CHINA = 'https://mirrors.cloud.tencent.com/npm'
+/**
+ * Default npm registry for the China download region, no trailing slash.
+ *
+ * Exported so failure classifiers can recognize this host in pnpm's output
+ * (#926) without duplicating the URL.
+ */
+export const CHINA_NPM_REGISTRY = 'https://mirrors.cloud.tencent.com/npm'
+const NPM_CHINA = CHINA_NPM_REGISTRY
 
 /**
  * First public prefix used for unauthenticated GitHub reads, no trailing slash.
@@ -157,6 +164,34 @@ const ROUTES: Record<Region, RegionRoutes> = {
   },
 }
 
+/**
+ * Every catalog source worth trying for a region: its own list, plus the
+ * catalog's published package on that region's own registry when the list
+ * does not already name it.
+ *
+ * The catalog hangs off a SECOND, independently blockable host (#891), and
+ * the probe that picks a region measures only the npm registry. A network
+ * where npm answers fast and GitHub Pages is blocked therefore measures
+ * `global` — whose one source is that very host — and since the region is
+ * decided once and persisted, nothing ever reconsiders: "catalog fetch
+ * failed" forever, on a machine whose registry is serving the catalog as a
+ * package all along.
+ *
+ * Appending the package closes that blind spot without asking the probe to
+ * learn about the second host, without revisiting the decision, and without
+ * sending anyone to another region's mirror: it rides the registry the probe
+ * already proved reachable. Last, not first — for everyone the official
+ * domain serves, this stays a source that is never contacted.
+ */
+export function catalogSourcesFor(region: Region): CatalogSource[] {
+  const routes = routesFor(region)
+  const sources = [...routes.catalog]
+  const served = sources.some(source => source.kind === 'npm'
+    && source.registry === routes.npmRegistry && source.pkg === CATALOG_PACKAGE)
+  if (!served) sources.push({ kind: 'npm', registry: routes.npmRegistry, pkg: CATALOG_PACKAGE })
+  return sources
+}
+
 /** Read an environment override, treating blank as unset. */
 function override(env: NodeJS.ProcessEnv, name: string): string | null {
   const raw = env[name]
@@ -212,6 +247,29 @@ export function resetGithubRoutePreferences(): void {
 }
 
 /**
+ * Put a user's own prefix in front, and keep the region's other routes (#850).
+ *
+ * Heading rather than replacing, because a public proxy dying is the whole
+ * reason the setting exists — the reporter's was one of these mirrors, and it
+ * took the rest of the chain with it: `gh-proxy.com` stopped serving on
+ * 2026-10-13, and every GitHub-sourced update then failed on a timeout rather
+ * than trying the next candidate. Replacing the list buys one attempt per
+ * mirror outage; heading it buys one, and then the chain that was already
+ * measured to work.
+ *
+ * The proxy is also dropped from the tail if it is already there, so a user
+ * who accepted the value the settings UI pre-suggests gets exactly the
+ * region's own table back rather than the same prefix twice.
+ *
+ * The direct escape is never dropped: `githubRoutes` promises every list ends
+ * in one, and dropping it would turn a dead mirror into an outage instead of
+ * a slow request.
+ */
+function withCustomProxy(proxy: string, base: GithubRoute[]): GithubRoute[] {
+  return [proxy, ...base.filter(route => route !== proxy)]
+}
+
+/**
  * The routes for a region, with environment overrides applied.
  *
  * Overrides win over the table because they are the user's statement about
@@ -234,7 +292,11 @@ export function routesFor(region: Region, env: NodeJS.ProcessEnv = process.env):
         raw: [...base.githubRoutes.raw],
         avatar: [...base.githubRoutes.avatar],
       }
-    : { git: [githubProxy, null], raw: [githubProxy, null], avatar: [githubProxy, null] }
+    : {
+        git: withCustomProxy(githubProxy, base.githubRoutes.git),
+        raw: withCustomProxy(githubProxy, base.githubRoutes.raw),
+        avatar: withCustomProxy(githubProxy, base.githubRoutes.avatar),
+      }
   return {
     npmRegistry: registry,
     githubProxy: githubProxy ?? base.githubProxy,

@@ -157,9 +157,12 @@ describe('restartHelperSource (#177)', () => {
     writeFileSync(script, [
       "const net = require('node:net')",
       'const server = net.createServer(socket => socket.end())',
-      "server.listen(Number(process.env.DSHM_PROBE_PORT), '127.0.0.1')",
+      // A cold start binds late; the delay is a seam so the spec does not have
+      // to sit through a real one (#854).
+      "const delay = Number(process.env.DSHM_PROBE_DELAY_MS || 0)",
+      "setTimeout(() => server.listen(Number(process.env.DSHM_PROBE_PORT), '127.0.0.1'), delay)",
       'const die = Number(process.env.DSHM_PROBE_DIE_MS || 0)',
-      'if (die > 0) setTimeout(() => process.exit(1), die)',
+      'if (die > 0) setTimeout(() => process.exit(1), delay + die)',
     ].join('\n'))
     return script
   }
@@ -176,17 +179,28 @@ describe('restartHelperSource (#177)', () => {
     return { script, config, marker: config + '.ran' }
   }
 
-  function runHelperWith(port: number, dir: string, dieAfterMs: number, settleMs: number, withRecovery: boolean): string {
+  function runHelperWith(
+    port: number,
+    dir: string,
+    dieAfterMs: number,
+    settleMs: number,
+    withRecovery: boolean,
+    windows: { up?: number; hard?: number; listenDelayMs?: number } = {},
+  ): string {
     const errLog = join(dir, 'err.log')
     const previousPort = process.env.DSHM_PROBE_PORT
     const previousDie = process.env.DSHM_PROBE_DIE_MS
+    const previousDelay = process.env.DSHM_PROBE_DELAY_MS
     process.env.DSHM_PROBE_PORT = String(port)
     process.env.DSHM_PROBE_DIE_MS = String(dieAfterMs)
+    process.env.DSHM_PROBE_DELAY_MS = String(windows.listenDelayMs ?? 0)
     cleanups.push(() => {
       if (previousPort === undefined) delete process.env.DSHM_PROBE_PORT
       else process.env.DSHM_PROBE_PORT = previousPort
       if (previousDie === undefined) delete process.env.DSHM_PROBE_DIE_MS
       else process.env.DSHM_PROBE_DIE_MS = previousDie
+      if (previousDelay === undefined) delete process.env.DSHM_PROBE_DELAY_MS
+      else process.env.DSHM_PROBE_DELAY_MS = previousDelay
     })
     const recovery = withRecovery ? writeRecoveryFixture(dir) : null
     const source = restartHelperSource(
@@ -199,11 +213,39 @@ describe('restartHelperSource (#177)', () => {
     // The settle window is the seam: shortening it keeps the spec fast without
     // changing the rule under test.
     const quick = source.replace('const SETTLE_MS = 8000', `const SETTLE_MS = ${String(settleMs)}`)
-      .replace('Date.now() + 45000', 'Date.now() + 4000')
+      .replace('Date.now() + 45000', `Date.now() + ${String(windows.up ?? 4000)}`)
+      .replace('Date.now() + 240000', `Date.now() + ${String(windows.hard ?? 20000)}`)
     const child = spawn(process.execPath, ['-e', quick], { stdio: 'ignore' })
     cleanups.push(() => { child.kill() })
     return errLog
   }
+
+  it('keeps the port for a replacement that is still starting past the window (#854)', async () => {
+    // The report: after the market rewrote node_modules, a Windows cold start
+    // took ~63s, the helper gave up at 53s and handed port 3080 to the
+    // recovery surface, and the host — still booting the whole time — died on
+    // EADDRINUSE when it finally reached its own bind. The window is a budget
+    // for "has it come up", not a verdict on "is it dead": a replacement that
+    // has NOT exited keeps the port.
+    const { port, release } = await hold()
+    await release()
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-restart-'))
+    // Binds at 2500ms, i.e. well after the 800ms window, and never exits.
+    const errLog = runHelperWith(port, dir, 0, 1000, false, { up: 800, hard: 8000, listenDelayMs: 2500 })
+    // The helper creates this file when it spawns; reading before that is the
+    // ordinary case here, not an error.
+    const log = (): string => { try { return readFileSync(errLog, 'utf8') } catch { return '' } }
+
+    expect(await until(() => log().includes('still starting'), 4000),
+      'the helper never said it was waiting for a live replacement').toBe(true)
+    expect(log(), 'a running replacement was written off as dead').not.toContain('never came up')
+
+    // And it is recognized as up once it binds — the wait has to end in
+    // success, not in a handoff that never happened.
+    expect(await until(() => log().includes('replacement started'), 4000)).toBe(true)
+    await wait(2500)
+    expect(log()).not.toContain('never came up')
+  }, 30_000)
 
   it('does not call a boot up just because the port answered once', async () => {
     // The failure this handoff exists for: an activation failure binds the
@@ -261,6 +303,16 @@ describe('restartHelperSource (#177)', () => {
 })
 
 describe('servingPort', () => {
+  it('prefers the listening port over a proxied Host (#859)', () => {
+    // The shape #859 measured: Host is the public name with the proxy's port,
+    // the server listens on 3080. Handing 8443 to the restart helper made it
+    // probe a port something else was already answering on.
+    expect(servingPort({ headers: { host: 'dsh.example.com:8443' }, socket: { localPort: 3080 } })).toBe(3080)
+    // A socket without a usable local port keeps the old Host reading.
+    expect(servingPort({ headers: { host: 'dsh.example.com:8443' }, socket: {} })).toBe(8443)
+    expect(servingPort({ headers: { host: '127.0.0.1:3080' }, socket: { localPort: 0 } })).toBe(3080)
+  })
+
   it('reads the port the browser actually reached us on', () => {
     expect(servingPort({ headers: { host: '127.0.0.1:3080' } })).toBe(3080)
     expect(servingPort({ headers: { host: 'localhost:8080' } })).toBe(8080)

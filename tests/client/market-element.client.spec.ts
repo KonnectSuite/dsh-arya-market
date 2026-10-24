@@ -25,6 +25,8 @@ interface SectionProps {
   theme: unknown
   themeStore: unknown
   preferredSubsectionId?: string
+  sidebar?: unknown
+  surface?: string
 }
 
 function build(overrides: Partial<Parameters<typeof marketElement>[0]> = {}): {
@@ -74,6 +76,14 @@ describe('marketElement', () => {
     // for "installed" to the Discover tab instead.
     expect(build({ preferredSubsectionId: 'installed' }).section.props.preferredSubsectionId).toBe('installed')
     expect(build().section.props.preferredSubsectionId).toBeUndefined()
+  })
+
+  it('forwards the sidebar controller and which surface mounted the panel', () => {
+    const sidebar = { supported: () => true }
+    const wired = build({ sidebar: sidebar as never, surface: 'sidebar' })
+    expect(wired.section.props.sidebar).toBe(sidebar)
+    expect(wired.section.props.surface).toBe('sidebar')
+    expect(build().section.props.surface).toBeUndefined()
   })
 
   it('gives the recovery panel a working log button and its own copy', () => {

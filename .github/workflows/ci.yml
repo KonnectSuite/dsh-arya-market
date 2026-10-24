@@ -49,7 +49,11 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
-      - run: npm install
+      # Install from the lockfile: dependency changes reach CI only through a
+      # lockfile diff, which can be reviewed — and `npm ci` refuses to run
+      # when package.json and the lockfile disagree, instead of silently
+      # resolving something new.
+      - run: npm ci
       - run: npm run check
       # The committed client bundle must be reproducible from the committed
       # source (#472, and the review-noise half of the same problem: a
@@ -89,7 +93,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install
+      - run: npm ci
       - run: npm run test:compat
 
   # Layer-3 web e2e: real dsh (pinned rc) + packed market + real Chromium.
@@ -118,15 +122,54 @@ jobs:
         # registers into `plugins.bundle.config` and the spec asserts it at
         # that seat — which is exactly the kind of change nothing in CI could
         # see back when the alpha broke the host's boot.
-        # Each line is tracked at its published head: 0.1.7 at rc.2, and 0.2 at
-        # rc.2, which is npm's `latest` since 2026-09-29. 0.2 is where this
-        # plugin broke first, and it broke SILENTLY (#756) — the host's own
-        # compatibility gate refused the peer range and skipped the bundle, so
-        # the market vanished from the UI with one stderr line. A caret over a
-        # prerelease ends at `<0.2.0-0`, so no amount of OR-ing earlier lines
-        # admits a 0.2 prerelease; the range has to name the new line. Running
-        # it here is what keeps that from shipping again on the line after this
-        # one.
+        # Each line is tracked at its published head: 0.1.7 at rc.2, 0.2 at
+        # rc.2 — npm's `latest` since 2026-09-29 — and 0.2.1 at 0.2.1-alpha.4,
+        # which is what `@deepseek-ai/dsh@alpha` gives as of 2026-10-15. The
+        # head of a line moves without anything else changing (alpha.3 was the
+        # alpha tag that morning), so it is a pin to refresh, not a fact: the
+        # PEER range, not this, is what decides whether the market loads.
+        # 0.2 is where this plugin broke first, and it broke SILENTLY (#756) —
+        # the host's own compatibility gate refused the peer range and skipped
+        # the bundle, so the market vanished from the UI with one stderr line.
+        # A caret over a prerelease ends at `<0.2.0-0`, so no amount of OR-ing
+        # earlier lines admits a 0.2 prerelease; the range has to name the new
+        # line. Running it here is what keeps that from shipping again on the
+        # line after this one.
+        #
+        # That gate is `evaluatePluginCompatibility` in dsh-app-boot, and it
+        # is worth knowing exactly what it does: it checks every peer whose
+        # name is `@deepseek-ai/dsh` or starts with `@deepseek-ai/dsh-` by
+        # comparing the RUNTIME version against the declared range (not the
+        # peer package's own version), with `includePrerelease: true`. So
+        # `@deepseek-ai/dsh-settings` is the one entry that decides whether the
+        # market loads at all, while `@deepseek-ai/cordis` and
+        # `@deepseek-ai/schemastery` are not gated by it at all.
+        #
+        # `includePrerelease` is also why naming the 0.2.1 line is not what
+        # makes the market load here: the existing `^0.2.0-rc.1` entry already
+        # admits `0.2.1-alpha.4` under that rule. The name is for the OTHER
+        # reader of the same field — npm and pnpm apply the strict gate, where
+        # a prerelease only matches a comparator on its own [major,minor,patch]
+        # — and for the rule above: a line this repository runs in CI should be
+        # a line the manifest claims.
+        #
+        # The lane is red on this line, and the failure is not the market's:
+        # every failing spec times out on the HOST's own Settings button
+        # (`等待 getByRole('button', { name: /^(设置|Settings)$/ })`), before
+        # the market renders at all, while the route-driven specs pass on the
+        # same host — install 14/14, update 8/8, channel 7/7. Read it as "the
+        # market's server side works there and the web UI never became
+        # reachable in this harness", not as a compatibility verdict.
+        #
+        # 0.2.1 changed one thing this plugin touches, and it is the settings
+        # service: `register` is gone (0.1.7 removed it for its own plugins;
+        # 0.2.1 makes that the model), so `settings/describe` serves no
+        # `dsh-market` namespace and the market reports
+        # `unsupported-by-host`. The two web specs that assert the card already
+        # branch on that answer, which is why this line can be added without
+        # rewriting them — and why watching it here matters: on this host the
+        # allowRestart switch has no seat until the market moves to the
+        # Config-derived model (#677).
         #
         # rc.1 → rc.2 changed one thing this plugin touches: `dsh plugin
         # --profile desktop` is no longer refused outright — Desktop's own
@@ -134,7 +177,7 @@ jobs:
         # the profile's package.json). The market never runs it from inside a
         # running Desktop, so nothing here depends on the difference; the CLI
         # path this lane drives is the web profile's, unchanged.
-        dsh: ['0.1.0-rc.8', '0.1.2-alpha.2', '0.1.7-rc.2', '0.2.0-rc.2']
+        dsh: ['0.1.0-rc.8', '0.1.2-alpha.2', '0.1.7-rc.2', '0.2.0-rc.2', '0.2.1-alpha.4', '0.2.1-rc.1', '0.2.1-rc.2']
         exclude:
           # Host-API breakage is platform-independent, and Windows web-e2e is
           # the slowest job in the matrix (~8 min). Running the older and the
@@ -148,6 +191,12 @@ jobs:
             dsh: '0.1.2-alpha.2'
           - os: windows-latest
             dsh: '0.1.7-rc.2'
+          - os: windows-latest
+            dsh: '0.2.1-alpha.4'
+          - os: windows-latest
+            dsh: '0.2.1-rc.1'
+          - os: windows-latest
+            dsh: '0.2.1-rc.2'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -157,7 +206,8 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
-      - run: npm install
+      # Same as the check job: lockfile-exact installs.
+      - run: npm ci
       # rc.8+: earlier CLIs unconditionally launched a system browser on
       # `dsh web` boot, which on the Windows runner left orphaned msedge
       # processes and the status endpoint never answering — read as a

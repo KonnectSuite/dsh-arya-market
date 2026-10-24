@@ -12,10 +12,11 @@
  * stubbed at fetch.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsCard, clearBrowserState } from '../../src/client/SettingsCard.tsx'
 import { en } from '../../src/client/locales.ts'
+import type { SidebarEntry } from '../../src/client/sidebar-entry.ts'
 
 const t = (key: string): string => (en as Record<string, string>)[key] ?? key
 
@@ -373,6 +374,83 @@ describe('SettingsCard — channels', () => {
     fireEvent.click(screen.getByRole('button', { name: t('setChannelBeta') }))
     await waitFor(() => { expect(screen.getByText(/no such channel/)).toBeTruthy() })
     expect(screen.getByRole('button', { name: t('setChannelStable') }).className).toMatch(/SegOn|setSegOn/)
+  })
+})
+
+describe('SettingsCard — sidebar shortcut (#846)', () => {
+  /** A stand-in controller: the card's contract is with this, not with fetch. */
+  function fakeSidebar(options: { supported: boolean; enabled?: boolean; refuse?: string; onlyDoor?: boolean }): SidebarEntry & { sets: boolean[]; support(): void } {
+    let supported = options.supported
+    let enabled = options.enabled === true
+    const listeners = new Set<() => void>()
+    const sets: boolean[] = []
+    return {
+      sets,
+      supported: () => supported,
+      enabled: () => enabled,
+      ready: () => true,
+      onlyDoor: () => options.onlyDoor === true,
+      refresh: () => {},
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+      markSupported: () => {},
+      load: async () => {},
+      support: () => { supported = true; for (const l of listeners) l() },
+      set: async (next) => {
+        sets.push(next)
+        if (options.refuse !== undefined) throw new Error(options.refuse)
+        enabled = next
+        for (const l of listeners) l()
+        return next
+      },
+    }
+  }
+
+  async function openWith(sidebar: SidebarEntry): Promise<void> {
+    render(<SettingsCard t={t} sidebar={sidebar} />)
+    fireEvent.click(screen.getByRole('button', { expanded: false }))
+    await waitFor(() => { expect(screen.getByText(t('setSelfRemove'), { selector: 'div' })).toBeTruthy() })
+  }
+
+  it('offers no switch on a host without sidebar panels', async () => {
+    await openWith(fakeSidebar({ supported: false }))
+    expect(screen.queryByText(t('setSidebar'))).toBeNull()
+  })
+
+  it('appears once the host declares sidebar panels, off by default', async () => {
+    const sidebar = fakeSidebar({ supported: false })
+    await openWith(sidebar)
+    act(() => { sidebar.support() })
+    await waitFor(() => { expect(screen.getByText(t('setSidebar'))).toBeTruthy() })
+    expect(screen.getByRole('button', { name: t('setSidebarOff') }).getAttribute('aria-pressed')).toBe('true')
+    const sidebarLabel = screen.getByText(t('setSidebar'))
+    const regionLabel = screen.getByText(t('setRegion'))
+    expect(sidebarLabel.compareDocumentPosition(regionLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('turns the row on, and says the settings entry stays', async () => {
+    const sidebar = fakeSidebar({ supported: true })
+    await openWith(sidebar)
+    expect(screen.getByText(t('setSidebarHint'))).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: t('setSidebarOn') }))
+    await waitFor(() => { expect(sidebar.sets).toEqual([true]) })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: t('setSidebarOn') }).getAttribute('aria-pressed')).toBe('true')
+    })
+  })
+
+  it('does not re-send the choice already in force', async () => {
+    const sidebar = fakeSidebar({ supported: true, enabled: true })
+    await openWith(sidebar)
+    fireEvent.click(screen.getByRole('button', { name: t('setSidebarOn') }))
+    expect(sidebar.sets).toEqual([])
+  })
+
+  it('keeps the old choice selected and shows why when saving fails', async () => {
+    const sidebar = fakeSidebar({ supported: true, refuse: 'untrusted origin' })
+    await openWith(sidebar)
+    fireEvent.click(screen.getByRole('button', { name: t('setSidebarOn') }))
+    await waitFor(() => { expect(screen.getByText('untrusted origin')).toBeTruthy() })
+    expect(screen.getByRole('button', { name: t('setSidebarOff') }).getAttribute('aria-pressed')).toBe('true')
   })
 })
 

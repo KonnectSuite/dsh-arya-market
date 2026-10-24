@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkUpdates, compareVersions, isUpgrade } from '../src/updates.ts'
+import { checkUpdates, compareVersions, fetchNpmLatest, isUpgrade } from '../src/updates.ts'
 
 describe('compareVersions', () => {
   it('orders by major, minor, then patch', () => {
@@ -95,6 +95,105 @@ describe('isUpgrade', () => {
  * it is not never surfaces its fix, and one that always claims an update
  * makes the button lie on every poll.
  */
+describe('checkUpdates — fresh-release wait (#945)', () => {
+  /** An npm-installed plugin in its own profile directory. */
+  function npmProfile(windowMinutes?: number): string {
+    const dir = join(mkdtempSync(join(tmpdir(), 'dshm-upd-')), 'profiles', 'web')
+    mkdirSync(join(dir, 'node_modules', 'widget'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { widget: '^1.0.0' } }))
+    writeFileSync(join(dir, 'node_modules', 'widget', 'package.json'), JSON.stringify({ name: 'widget', version: '1.0.0', dsh: {} }))
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+    if (windowMinutes !== undefined) writeFileSync(join(dir, 'pnpm-workspace.yaml'), `minimumReleaseAge: ${String(windowMinutes)}\n`)
+    return dir
+  }
+
+  /** Registry answers: latest 1.1.0, published at `published`. */
+  function registry(published: string): void {
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      const href = String(url)
+      const body = href.endsWith('/widget/latest')
+        ? { version: '1.1.0' }
+        : { time: { '1.0.0': '2026-01-01T00:00:00.000Z', '1.1.0': published } }
+      return new Response(JSON.stringify(body), { status: 200 })
+    }))
+  }
+
+  const hoursAgo = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString()
+
+  it('holds an update the profile would refuse, and names when it opens (#945)', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(1))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.updateAvailable).toBe(false)
+    expect(result.widget?.latest).toBe('1.1.0')
+    expect(result.widget?.heldUpdate?.latest).toBe('1.1.0')
+    // 1 hour into a 24-hour window: about 23 hours left.
+    const left = Date.parse(result.widget!.heldUpdate!.until) - Date.now()
+    expect(left).toBeGreaterThan(22.5 * 3_600_000)
+    expect(left).toBeLessThan(23.5 * 3_600_000)
+  })
+
+  it('holds a version the mirror has not timestamped yet, and marks the hold estimated (#961)', async () => {
+    // Mid-sync: /latest already answers 1.1.0, the packument still has no
+    // time['1.1.0']. Reading that as "old enough" let a 13-minute-old release
+    // through the gate #945 built, and on the official Desktop the click could
+    // only fail.
+    const dir = npmProfile(1440)
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      const href = String(url)
+      const body = href.endsWith('/widget/latest')
+        ? { version: '1.1.0' }
+        : { 'dist-tags': { latest: '1.0.0' }, time: { '1.0.0': '2026-01-01T00:00:00.000Z' } }
+      return new Response(JSON.stringify(body), { status: 200 })
+    }))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.updateAvailable).toBe(false)
+    expect(result.widget?.heldUpdate?.estimated).toBe(true)
+    const left = Date.parse(result.widget!.heldUpdate!.until) - Date.now()
+    // Bounded, not the full 24 hours: the next poll recomputes from the real
+    // timestamp once the mirror catches up.
+    expect(left).toBeGreaterThan(25 * 60_000)
+    expect(left).toBeLessThan(31 * 60_000)
+  })
+
+  it('retries the packument before calling the age unknown (#961)', async () => {
+    const dir = npmProfile(1440)
+    let packuments = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      const href = String(url)
+      if (href.endsWith('/widget/latest')) return new Response(JSON.stringify({ version: '1.1.0' }), { status: 200 })
+      packuments++
+      const body = packuments === 1
+        ? { time: { '1.0.0': '2026-01-01T00:00:00.000Z' } }
+        : { time: { '1.1.0': hoursAgo(1) } }
+      return new Response(JSON.stringify(body), { status: 200 })
+    }))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(packuments).toBe(2)
+    // The second answer is the real one: a normal held window, not an estimate.
+    expect(result.widget?.heldUpdate?.estimated).toBeUndefined()
+    expect(result.widget?.updateAvailable).toBe(false)
+  })
+
+  it('still offers it where the install path can bypass the wait (CLI)', async () => {
+    // The CLI retries with --config.minimum-release-age=0; hiding the update
+    // there would suppress one that actually works.
+    const dir = npmProfile(1440)
+    registry(hoursAgo(1))
+    const result = await checkUpdates('web', true, dir)
+    expect(result.widget?.updateAvailable).toBe(true)
+    expect(result.widget?.heldUpdate).toBeUndefined()
+  })
+
+  it('offers a release that is already past the window', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(48))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.updateAvailable).toBe(true)
+    expect(result.widget?.heldUpdate).toBeUndefined()
+  })
+})
+
 describe('checkUpdates — github pins', () => {
   const HEAD = 'a'.repeat(40)
   const OLD = 'b'.repeat(40)
@@ -185,6 +284,58 @@ describe('checkUpdates — github pins', () => {
     expect(result.themer).toMatchObject({
       kind: 'linked', current: '0.16.1', latest: '0.17.1',
       updateAvailable: true, restoreRequired: true,
+    })
+  })
+
+  // #867: the package's own `latest` tag lagged the line it publishes on
+  // (`...-profile`: latest 0.1.5-alpha.2, alpha 0.2.1-alpha.4), so a user
+  // pinned at 0.2.1-alpha.2 was told "up to date" while their line moved.
+  describe('a newer build than `latest` on another tag (#867)', () => {
+    /** Registry stub: a plain name spec, with per-tag answers and a request log. */
+    function tagRegistry(tags: Record<string, string | number>): { asked: string[] } {
+      const asked: string[] = []
+      vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+        const href = String(url)
+        asked.push(href)
+        const match = /registry\.npmjs\.org\/themer\/([^/?]+)/.exec(href)
+        if (match === null) return new Response('{}', { status: 200 })
+        const answer = tags[match[1]!]
+        if (typeof answer !== 'string') return new Response('not found', { status: typeof answer === 'number' ? answer : 404 })
+        return new Response(JSON.stringify({ version: answer }), { status: 200 })
+      }))
+      return { asked }
+    }
+
+    it('names the tag build without offering it as an update', async () => {
+      const { asked } = tagRegistry({ latest: '0.1.5-alpha.2', alpha: '0.2.1-alpha.4', next: 404, beta: 404, canary: 404 })
+      const result = await checkUpdates('web', true, profileWith('themer', null, '0.2.1-alpha.2'))
+      expect(result.themer).toMatchObject({
+        kind: 'npm', version: '0.2.1-alpha.2', latest: '0.1.5-alpha.2',
+        updateAvailable: false, newerPrerelease: '0.2.1-alpha.4',
+      })
+      expect(asked.some(url => url.endsWith('/themer/alpha'))).toBe(true)
+    })
+
+    it('says nothing when the tag line is not ahead of what is installed', async () => {
+      tagRegistry({ latest: '0.1.5-alpha.2', alpha: '0.2.1-alpha.2', next: '0.2.0-rc.2' })
+      const result = await checkUpdates('web', true, profileWith('themer', null, '0.2.1-alpha.2'))
+      expect(result.themer).toMatchObject({ updateAvailable: false })
+      expect(result.themer?.newerPrerelease).toBeUndefined()
+    })
+
+    it('picks the highest tag, not the first one that answers', async () => {
+      tagRegistry({ latest: '0.1.5-alpha.2', next: '0.2.0-rc.2', alpha: '0.2.1-alpha.4', beta: 404, canary: 404 })
+      const result = await checkUpdates('web', true, profileWith('themer', null, '0.2.1-alpha.2'))
+      expect(result.themer?.newerPrerelease).toBe('0.2.1-alpha.4')
+    })
+
+    it('asks no tag at all for a plain release sitting on latest', async () => {
+      // The whole point of the gate: a profile of ordinary plugins pays
+      // nothing for a field none of them can use.
+      const { asked } = tagRegistry({ latest: '1.0.0' })
+      const result = await checkUpdates('web', true, profileWith('themer', null, '1.0.0'))
+      expect(result.themer).toMatchObject({ updateAvailable: false })
+      expect(asked.filter(url => /\/themer\/(next|alpha|beta|canary)/.test(url))).toEqual([])
     })
   })
 
@@ -736,5 +887,221 @@ describe('checkUpdates — a plain dependency is not an update the market can ap
     const dir = bed({}, { patch: "- insert: [unterminated\n  : : :" })
     try { expect((await check(dir))?.updateAvailable).toBe(true) }
     finally { vi.unstubAllGlobals(); rmSync(dir, { recursive: true, force: true }) }
+  })
+})
+
+describe('checkUpdates — a floating git install follows the repository\'s version, not its branch head (#824)', () => {
+  /**
+   * The report: `dsh-our-free-model` was installed floating
+   * (`git+https://github.com/…/dsh-our-free-model.git`, no pin). The plugin's
+   * own updater had already put 2.0.0 on disk, and upstream's only changes
+   * since were catalog re-signings — commits with the SAME version. The
+   * market compared the lockfile commit to the branch HEAD, found them
+   * unequal, and advertised "有新版本 <sha>" on every poll, forever, for an
+   * update that installs nothing new.
+   *
+   * The fix asks the only question whose answer means "there is something to
+   * install": did the repository's own `version` move? A floating install
+   * gets whatever the default branch points at, so the branch moving is not
+   * news. Every case where that question cannot be answered — no readable
+   * version, a non-GitHub host, a non-semver value, a spec that names its own
+   * ref — must fall back to the commit comparison, never to "current".
+   */
+  const HEAD = 'a'.repeat(40)
+  const OLD = 'b'.repeat(40)
+  let home: string
+
+  /** Profile with one floating git+https GitHub install at lock commit `commit`. */
+  function profileWith(spec: string, commit: string, version = '2.0.0', lockExtra = ''): string {
+    const dir = join(mkdtempSync(join(tmpdir(), 'dshm-824-')), 'profiles', 'web')
+    mkdirSync(join(dir, 'node_modules', 'themer'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { themer: spec } }))
+    writeFileSync(join(dir, 'node_modules', 'themer', 'package.json'), JSON.stringify({ name: 'themer', version, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    writeFileSync(join(dir, 'pnpm-lock.yaml'),
+      `lockfileVersion: 9\npackages:\n  themer@${spec}:\n    resolution: {commit: ${commit}, repo: ${spec}, type: git${lockExtra}}\n`)
+    return dir
+  }
+
+  /**
+   * Same, but locked through the codeload tarball the `github:` branch reads
+   * `current` from — the shape a real floating `github:owner/repo` install
+   * leaves behind, without which that branch cannot see the lock commit and
+   * the old code also answered false (so the case would prove nothing).
+   */
+  function profileWithCodeload(spec: string, commit: string, version = '2.0.0'): string {
+    const dir = join(mkdtempSync(join(tmpdir(), 'dshm-824-')), 'profiles', 'web')
+    mkdirSync(join(dir, 'node_modules', 'themer'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { themer: spec } }))
+    writeFileSync(join(dir, 'node_modules', 'themer', 'package.json'), JSON.stringify({ name: 'themer', version, dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    writeFileSync(join(dir, 'pnpm-lock.yaml'),
+      `lockfileVersion: 9\n  resolution: {tarball: https://codeload.github.com/owner/themer/tar.gz/${commit}}\n`)
+    return dir
+  }
+
+  /** Answers the git advertisement with `head` and raw HEAD package.json with `version` (null = unreachable). */
+  function stubGitAndRaw(head: string, version: string | null): { rawHits: () => number } {
+    let rawHits = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const href = String(url)
+      if (href.includes('raw.githubusercontent.com')) {
+        rawHits += 1
+        return version === null
+          ? { ok: false, status: 404, json: async () => ({}) }
+          : { ok: true, status: 200, json: async () => ({ version }) }
+      }
+      return {
+        ok: true, status: 200,
+        headers: { get: () => 'application/x-git-upload-pack-advertisement' },
+        json: async () => ({}),
+        text: async () => `001e# service=git-upload-pack\n00000155${head} HEAD\0multi_ack symref=HEAD:refs/heads/main\n`
+          + `003f${head} refs/heads/main\n`,
+      }
+    }))
+    return { rawHits: () => rawHits }
+  }
+
+  beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'dshm-824home-')) })
+  afterEach(() => { vi.unstubAllGlobals(); rmSync(home, { recursive: true, force: true }) })
+
+  it('stops advertising an update when the branch moved but the version did not (#824)', async () => {
+    // The exact shape of the report: lock commit OLD, remote HEAD newer,
+    // both sides version 2.0.0. Before the fix this row read
+    // updateAvailable: true forever.
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git'
+    stubGitAndRaw(HEAD, '2.0.0')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(result.themer).toMatchObject({ kind: 'github', version: '2.0.0', current: OLD, latest: HEAD, updateAvailable: false })
+    // Not an update, but not "up to date" either: the badge names the
+    // unreleased HEAD so a user who wants those commits knows the row lags.
+    expect(result.themer.unreleasedCommit).toBe(HEAD)
+  })
+
+  it('still advertises the update when the repository published a newer version', async () => {
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git'
+    stubGitAndRaw(HEAD, '2.1.0')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(result.themer).toMatchObject({ current: OLD, latest: HEAD, updateAvailable: true })
+    // A real release is an update; the unreleased-commits badge must not say
+    // anything beside it.
+    expect(result.themer.unreleasedCommit).toBeUndefined()
+  })
+
+  it('does not offer a downgrade when the remote version reads older than the install', async () => {
+    // A rolled-back default branch is not an update; only forwards counts,
+    // same rule as the npm branch (`isUpgrade`).
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git'
+    stubGitAndRaw(HEAD, '1.9.0')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(result.themer).toMatchObject({ updateAvailable: false })
+  })
+
+  it('applies the same rule to the github: shorthand spelling of a floating install', async () => {
+    // #824 also named `github:omdsh-dev/DSH-better-sidebar`: same disease,
+    // different spec spelling. The codeload lock entry makes `current`
+    // readable, so under the OLD rule this row read current OLD ≠ HEAD →
+    // updateAvailable true; only the version rule turns it off.
+    stubGitAndRaw(HEAD, '2.0.0')
+    const result = await checkUpdates('web', true, profileWithCodeload('github:owner/themer', OLD))
+    expect(result.themer).toMatchObject({ kind: 'github', current: OLD, latest: HEAD, updateAvailable: false })
+  })
+
+  it('never consults the version of a #semver: range either (#446 shape)', async () => {
+    // `#semver:^2.0.0` re-resolves INSIDE the range: a 3.0.0 at HEAD is not
+    // installable, so the raw version must not even be requested — it would
+    // advertise an update forever. `refOfFragment` skips semver selectors
+    // (the range compares against the default branch), so this needs its own
+    // probe on top of the `#branch` guard.
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git#semver:^2.0.0'
+    const { rawHits } = stubGitAndRaw(HEAD, '3.0.0')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(rawHits(), 'a semver range must not trigger a raw version read').toBe(0)
+    expect(result.themer).toMatchObject({ current: OLD, latest: HEAD, updateAvailable: true })
+  })
+
+  it('falls back to the commit comparison when the raw version cannot be read', async () => {
+    // Private repo, no package.json at HEAD, or raw unreachable in this
+    // region: "cannot tell" must degrade to the old behaviour, not to
+    // "current" — otherwise an unreachable host stops reporting updates.
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git'
+    stubGitAndRaw(HEAD, null)
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(result.themer).toMatchObject({ current: OLD, latest: HEAD, updateAvailable: true })
+  })
+
+  it('falls back to the commit comparison when the remote version is not semver', async () => {
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git'
+    stubGitAndRaw(HEAD, 'not-a-version')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(result.themer).toMatchObject({ updateAvailable: true })
+  })
+
+  it('never consults the version of a spec that names its own ref (#446)', async () => {
+    // `#branch` chose a line deliberately; a new commit on it is exactly
+    // what that user asked to hear about. The raw file must not even be
+    // requested.
+    const spec = 'git+https://github.com/zouyuxuan122/dsh-our-free-model.git#main'
+    const { rawHits } = stubGitAndRaw(HEAD, '2.0.0')
+    const result = await checkUpdates('web', true, profileWith(spec, OLD))
+    expect(rawHits(), 'a pinned ref must not trigger a raw version read').toBe(0)
+    expect(result.themer).toMatchObject({ current: OLD, latest: HEAD, updateAvailable: true })
+  })
+
+  it('reads the package.json of the subpath a monorepo spec points at', async () => {
+    // `path:/packages/themer` installs from a subdirectory; the version that
+    // matters is the one in THAT package.json, not the repo root's.
+    const spec = 'github:owner/monorepo#path:/packages/themer'
+    let askedFor = ''
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const href = String(url)
+      if (href.includes('raw.githubusercontent.com')) {
+        askedFor = href
+        return { ok: true, status: 200, json: async () => ({ version: '2.0.0' }) }
+      }
+      return {
+        ok: true, status: 200,
+        headers: { get: () => 'application/x-git-upload-pack-advertisement' },
+        json: async () => ({}),
+        text: async () => `001e# service=git-upload-pack\n00000155${HEAD} HEAD\0multi_ack symref=HEAD:refs/heads/main\n`
+          + `003f${HEAD} refs/heads/main\n`,
+      }
+    }))
+    const result = await checkUpdates('web', true, profileWith(spec, OLD, '2.0.0', ', path: /packages/themer'))
+    expect(askedFor.endsWith('/packages/themer/package.json'), askedFor).toBe(true)
+    expect(result.themer).toMatchObject({ updateAvailable: false })
+  })
+})
+
+
+describe('fetchNpmLatest — packument fallback (#932)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('falls back to the full packument dist-tag when /latest fails', async () => {
+    // Measured in #932: registry.npmjs.org answered 429 to /latest while the
+    // packument answered 200 with the same dist-tag. Returning null made the
+    // fresh install fall back to the bare name, and pnpm's fresh-release hold
+    // installed an OLDER version than the catalog had just shown.
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(String(url))
+      if (String(url).endsWith('/dsh-plugin-compat-check/latest')) return new Response('rate limited', { status: 429 })
+      return new Response(JSON.stringify({ 'dist-tags': { latest: '0.1.3' } }), { status: 200 })
+    }))
+    await expect(fetchNpmLatest('dsh-plugin-compat-check')).resolves.toBe('0.1.3')
+    expect(calls.some(url => url.endsWith('/dsh-plugin-compat-check'))).toBe(true)
+  })
+
+  it('returns null when both reads fail, keeping the old contract', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 503 })))
+    await expect(fetchNpmLatest('dsh-plugin-compat-check')).resolves.toBeNull()
+  })
+
+  it('does not pay for the packument when /latest answers', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(String(url))
+      return new Response(JSON.stringify({ version: '0.1.3' }), { status: 200 })
+    }))
+    await expect(fetchNpmLatest('dsh-plugin-compat-check')).resolves.toBe('0.1.3')
+    expect(calls).toHaveLength(1)
   })
 })

@@ -173,4 +173,35 @@ describe('public update API v1 operation model', () => {
       failure: { code: 'RESOLVED_VERSION_MISMATCH', retryable: true },
     })
   })
+
+  it('passes the host refusal code through, so a client can stop offering retry (#909)', () => {
+    // On a host whose manager refuses re-adds, the market cannot update
+    // itself. Retrying is pointless; the code says so without parsing text.
+    const store = new UpdateOperationStoreV1('boot-self-update')
+    const op = store.create('dshmarket', '1.66.40')
+    store.start(op.operationId)
+    expect(store.finish(op.operationId, 502, {
+      failureCode: 'market-self-update',
+      error: 'the market cannot update itself; quit DSH and run pnpm add',
+    }, '1.66.39')).toMatchObject({
+      state: 'failed',
+      failure: { code: 'market-self-update', retryable: false },
+    })
+  })
+
+  it('forwards update-incomplete so a caller can tell it from an ordinary failure (#928)', () => {
+    // The desktop manager stopped answering mid-update; the record survives
+    // and the next start finishes or forgets it. That is a different outcome
+    // from a failed install, and an external caller has to see the difference.
+    const store = new UpdateOperationStoreV1('boot-incomplete')
+    const op = store.create('dsh-loop', '1.2.0')
+    store.start(op.operationId)
+    expect(store.finish(op.operationId, 502, {
+      failureCode: 'update-incomplete',
+      error: 'the desktop app stopped answering; the market will finish this on the next start',
+    }, '1.1.0')).toMatchObject({
+      state: 'failed',
+      failure: { code: 'update-incomplete' },
+    })
+  })
 })

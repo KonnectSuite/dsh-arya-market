@@ -27,6 +27,13 @@ const hostDefined = new Set(
   readFileSync(join(__dirname, '..', 'fixtures', 'host-theme-custom-properties.txt'), 'utf8')
     .split('\n').map(line => line.trim()).filter(line => line.startsWith('--')),
 )
+/**
+ * Published by the host's layout frame rather than its theme, so the theme
+ * fixture cannot list them. Each is documented in `dsh-client-ui-layout`'s
+ * README and read the same way by the host's own pages.
+ */
+const layoutDefined = new Set(['--dsh-frame-top-clearance'])
+for (const name of layoutDefined) hostDefined.add(name)
 const marketDefined = new Set(sources.flatMap(({ text }) => [...text.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map(match => match[1]!)))
 
 describe('the CSS variables the market reads', () => {

@@ -234,40 +234,45 @@ describe.skipIf(!HAS_DSH).sequential('web e2e: the real install chain', () => {
     expect(reallyLive(A)).toBe(true)
   }, 600_000)
 
-  it('a patch with config rows activates on restart, as the market says', async () => {
+  it('a patch with config rows is live once the host can compose it (#827, #156)', async () => {
     const { status } = await install(CROSS)
     expect(status).toBe(200)
-    // The market declines to hot-mount this shape and says so. Take it at
-    // its word — then check the word was true.
-    expect((await state()).activation[CROSS]?.state).toBe('restart')
-    expect(reallyLive(CROSS)).toBe(false)
-
-    await scaffold.restart()
-    // Booting is itself the assertion: a profile the install logic corrupted
-    // would not come up, and the bundle layer now has to load this entry.
-    expect(reallyLive(CROSS)).toBe(true)
+    // The market itself cannot hot-mount config rows. Hosts with a live
+    // profile watcher compose the bundle instead (#827); older hosts still
+    // need a restart. Either way the market must not say "restart" about a
+    // plugin that is already running (#156).
+    const afterInstall = (await state()).activation[CROSS]?.state
+    if (afterInstall === 'live') {
+      expect(reallyLive(CROSS)).toBe(true)
+    } else {
+      expect(afterInstall).toBe('restart')
+      expect(reallyLive(CROSS)).toBe(false)
+      await scaffold.restart()
+      expect(reallyLive(CROSS)).toBe(true)
+      expect((await state()).activation[CROSS]?.state).toBe('live')
+    }
+    // Booting / adopting must leave neighbours alone.
     expect(reallyLive(A)).toBe(true)
     expect(reallyLive(B)).toBe(true)
-
-    // ...and the market has to AGREE once the restart it asked for happened
-    // (#156). Saying "restart to activate" about a plugin that is already
-    // running sends users hunting for a failure that is not there.
-    expect((await state()).activation[CROSS]?.state).toBe('live')
   }, 600_000)
 
-  it('a carrier bundle reads as live once its restart happened (#156)', async () => {
+  it('a carrier bundle reads as live once the host can compose it (#156, #827)', async () => {
     // It ships no plugin of its own: its patch inserts an entry named after
     // ANOTHER package, with config — the shape of @tt-a1i/archify-dsh, which
     // mounts @deepseek-ai/dsh-skill-filesystem. Nothing in the live loader
     // inventory is ever called by the carrier's own name.
     const { status } = await install(CARRIER)
     expect(status).toBe(200)
-    expect((await state()).activation[CARRIER]?.state).toBe('restart')
-
-    await scaffold.restart()
-    // The profile came up, so the carrier's row IS in the running tree.
-    // Still reporting "restart to activate" sends users hunting for a
-    // failure that already resolved — the whole of #156.
+    const afterInstall = (await state()).activation[CARRIER]?.state
+    if (afterInstall === 'live') {
+      // Profile watcher composed the foreign rows (#827).
+    } else {
+      expect(afterInstall).toBe('restart')
+      await scaffold.restart()
+      expect((await state()).activation[CARRIER]?.state).toBe('live')
+    }
+    // Still reporting "restart to activate" about a plugin that is already
+    // running sends users hunting for a failure that already resolved — #156.
     expect((await state()).activation[CARRIER]?.state).toBe('live')
     expect(reallyLive(B)).toBe(true)
   }, 600_000)

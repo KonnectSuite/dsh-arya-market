@@ -290,6 +290,13 @@ export function OperationsPanel(props: OperationsPanelProps) {
       >
         {!quiet && busy && <span className={css.spin}><IconLoadingOutline16 size={12} /></span>}
         {quiet ? t('opTitle') : label}
+        {/* A chevron, because this is the only door into the task list and a
+            word with no affordance read as a caption rather than a control. */}
+        {!busy && (
+          <span className={open ? `${css.opChevron} ${css.opChevronOpen}` : css.opChevron}>
+            <IconChevronDownOutline14 size={12} />
+          </span>
+        )}
         {!quiet && summary.attention > 0 && <span className={css.opDot} />}
       </button>
       {open && (
@@ -376,7 +383,7 @@ export function OperationsPanel(props: OperationsPanelProps) {
                   {record.state === 'queued' && (
                     <>
                       {props.onRunNow !== undefined && (
-                        <Button variant="primary" size="sm" onClick={() => props.onRunNow?.(record)}>{t('opRunNow')}</Button>
+                        <Button variant="primary" size="sm" onClick={() => props.onRunNow?.(record)}>{t(record.kind === 'update' ? 'opUpdateNow' : record.kind === 'uninstall' ? 'opUninstallNow' : 'opRunNow')}</Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => props.onDismiss(record)}>{t('opDequeue')}</Button>
                     </>

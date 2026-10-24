@@ -1,11 +1,11 @@
 import { EventEmitter } from 'node:events'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { cmdCommandLine, gitEnvForPnpm, probeCoreSshCommand, isCmdSafeProfileName, nodeExecutable, pnpmConfigEnvForArgs, proxyEnvForPnpm, quoteCmdArg, TARGET_RE, toolSearchDirs } from '../src/dsh-cli.ts'
+import { clearOwnedProfileLock, cmdCommandLine, gitEnvForPnpm, probeCoreSshCommand, isCmdSafeProfileName, nodeExecutable, pnpmConfigEnvForArgs, proxyEnvForPnpm, quoteCmdArg, TARGET_RE, toolSearchDirs } from '../src/dsh-cli.ts'
 import { AUTO_INSTALL_PEERS_OFF, FETCH_TIMEOUT_OVERRIDE, RELEASE_AGE_OVERRIDE } from '../src/install.ts'
-import { routesFor } from '../src/regions.ts'
+import { routesFor, setActiveRegion } from '../src/regions.ts'
 
 describe('cmd.exe command line building (DEP0190 shim)', () => {
   it('keeps simple tokens unquoted', () => {
@@ -149,7 +149,11 @@ describe('proxy env translated for the pnpm subprocess (#148/#161/#188/#232/#274
 describe('the proxy translation actually reaches spawned pnpm (#148)', () => {
   it('points pnpm at the region mirror, and only when the region has one', () => {
     const mirror = routesFor('china', {}).npmRegistry
-    expect(proxyEnvForPnpm({}, 'china')).toEqual({ npm_config_registry: `${mirror}/` })
+    // Both spellings: pnpm reads the `PNPM_CONFIG_*` one and ignores npm's
+    // (#865), so a region mirror written only the npm way moved the market's
+    // own requests and left every install on the registry `.npmrc` named.
+    expect(proxyEnvForPnpm({}, 'china'))
+      .toEqual({ npm_config_registry: `${mirror}/`, PNPM_CONFIG_REGISTRY: `${mirror}/` })
     // The global region names the default registry, so there is nothing to
     // say — an explicit registry equal to the default is noise in the env.
     expect(proxyEnvForPnpm({}, 'global')).toEqual({})
@@ -162,9 +166,16 @@ describe('the proxy translation actually reaches spawned pnpm (#148)', () => {
     expect(proxyEnvForPnpm({ npm_config_registry: 'https://npm.corp/' }, 'china')).toEqual({})
     // Windows env keys are case-insensitive, so the check has to be too.
     expect(proxyEnvForPnpm({ NPM_CONFIG_REGISTRY: 'https://npm.corp/' }, 'china')).toEqual({})
+    // The same statement in pnpm's own vocabulary counts just as much — and
+    // it is the spelling pnpm actually reads, so it must be the one that wins.
+    expect(proxyEnvForPnpm({ PNPM_CONFIG_REGISTRY: 'https://npm.corp/' }, 'china')).toEqual({})
+    expect(proxyEnvForPnpm({ pnpm_config_registry: 'https://npm.corp/' }, 'china')).toEqual({})
     // A blank value is not a statement about anything.
     expect(proxyEnvForPnpm({ npm_config_registry: '  ' }, 'china'))
-      .toEqual({ npm_config_registry: `${routesFor('china', {}).npmRegistry}/` })
+      .toEqual({
+        npm_config_registry: `${routesFor('china', {}).npmRegistry}/`,
+        PNPM_CONFIG_REGISTRY: `${routesFor('china', {}).npmRegistry}/`,
+      })
   })
 
   it('carries the mirror alongside a proxy rather than instead of one', () => {
@@ -174,12 +185,53 @@ describe('the proxy translation actually reaches spawned pnpm (#148)', () => {
       npm_config_https_proxy: 'http://p:1',
       npm_config_proxy: 'http://p:1',
       npm_config_registry: `${routesFor('china', {}).npmRegistry}/`,
+      PNPM_CONFIG_REGISTRY: `${routesFor('china', {}).npmRegistry}/`,
     })
   })
 
   // proxyEnvForPnpm being correct is worth nothing if spawnEnv never calls
   // it — that wiring IS the bug being fixed, so it gets its own assertion
   // against a real spawn call rather than the pure function alone.
+  it('puts the region mirror in the environment pnpm is spawned with, in pnpm\'s spelling (#865)', async () => {
+    // Same reason as the proxy case below: the helper being right proves
+    // nothing about the wiring, and the wiring — a value only npm's
+    // vocabulary carries — was the bug.
+    vi.resetModules()
+    const seen: Array<NodeJS.ProcessEnv | undefined> = []
+    vi.doMock('node:child_process', () => ({
+      spawn: (_file: string, _args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+        seen.push(options.env)
+        const child = new EventEmitter() as EventEmitter & { pid?: number }
+        child.pid = 1
+        setImmediate(() => child.emit('close', 1))
+        return child
+      },
+    }))
+    const mirror = routesFor('china', {}).npmRegistry
+    // The guard is "never overrule a registry the caller named", so a
+    // machine whose own env carries one (this one does) would otherwise
+    // see the mirror correctly withheld and the test fail for a reason
+    // that has nothing to do with the wiring.
+    const previous = process.env.npm_config_registry
+    delete process.env.npm_config_registry
+    try {
+      // Set on the module instance dsh-cli is about to load: the static
+      // import above belongs to the graph resetModules just discarded.
+      const regions = await import('../src/regions.ts')
+      regions.setActiveRegion('china')
+      const { probePnpm } = await import('../src/dsh-cli.ts')
+      await probePnpm()
+      expect(seen.length).toBeGreaterThan(0)
+      expect(seen[0]?.PNPM_CONFIG_REGISTRY).toBe(`${mirror}/`)
+    } finally {
+      if (previous === undefined) delete process.env.npm_config_registry
+      else process.env.npm_config_registry = previous
+      setActiveRegion('global')
+      vi.doUnmock('node:child_process')
+      vi.resetModules()
+    }
+  })
+
   it('puts npm_config_https_proxy in the environment pnpm is spawned with', async () => {
     vi.resetModules()
     const seen: Array<NodeJS.ProcessEnv | undefined> = []
@@ -532,5 +584,45 @@ describe('pnpmConfigEnvForArgs (#615)', () => {
     expect(pnpmConfigEnvForArgs(['add', '--force', '--reporter=ndjson', 'dsh-loop@1.0.0'])).toEqual({})
     // Not the override shape: no key, or no value.
     expect(pnpmConfigEnvForArgs(['add', '--config.=x', '--config.fetchTimeout='])).toEqual({})
+  })
+})
+
+describe('clearOwnedProfileLock (#914)', () => {
+  // The profile directory comes from DSH_HOME, so the whole case runs in a
+  // throwaway home and never looks at the real one.
+  const home = mkdtempSync(join(tmpdir(), 'dshm-home-'))
+  const lockPath = join(home, 'profiles', 'web', 'package.json.lock')
+
+  afterEach(() => {
+    delete process.env.DSH_HOME
+    rmSync(join(home, 'profiles'), { recursive: true, force: true })
+  })
+
+  function writeLock(content: string): void {
+    mkdirSync(join(home, 'profiles', 'web'), { recursive: true })
+    process.env.DSH_HOME = home
+    writeFileSync(lockPath, content)
+  }
+
+  it('removes the lock naming the child this run just killed', () => {
+    writeLock('4242\n')
+    expect(clearOwnedProfileLock('web', 4242)).toBe(true)
+    expect(existsSync(lockPath)).toBe(false)
+  })
+
+  it('leaves a lock held by another operation alone', () => {
+    // A different PID may be a live operation; deleting its lock would race
+    // it. The classifier names the file instead (#914).
+    writeLock('9999\n')
+    expect(clearOwnedProfileLock('web', 4242)).toBe(false)
+    expect(existsSync(lockPath)).toBe(true)
+  })
+
+  it('does nothing when there is no lock, or its content is not a PID', () => {
+    process.env.DSH_HOME = home
+    expect(clearOwnedProfileLock('web', 4242)).toBe(false)
+    writeLock('not-a-pid')
+    expect(clearOwnedProfileLock('web', 4242)).toBe(false)
+    expect(existsSync(lockPath)).toBe(true)
   })
 })

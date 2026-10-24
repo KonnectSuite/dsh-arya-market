@@ -38,6 +38,45 @@ describe('pluginArgsFor', () => {
 })
 
 describe('classifyPnpmFailure', () => {
+  it("names the host's own install rejection instead of passing it through (DSH 0.2.1+)", () => {
+    // Captured from dsh 0.2.1-rc.1 by installing a release that declares
+    // `engines.dsh: >=99.0.0` with the market's force flag. The host enforces
+    // the gate itself now, so "the user insisted" is answered by the CLI —
+    // and what reached the dialog before this branch was this wall of text.
+    const output = [
+      'dsh: installation rejected: Plugin dshm-e2e-fixture-a@2.0.0 is incompatible with dsh 0.2.1-rc.1:',
+      ' requirements {"engines.dsh":">=99.0.0"}. Running it may cause crashes or data loss.',
+      ' Update the plugin or install a plugin version compatible with this dsh runtime.',
+      ' To accept this risk explicitly, grant the exact-version exemption for',
+      ' dshm-e2e-fixture-a@2.0.0 on dsh 0.2.1-rc.1 with `dsh plugin allow-version` or the plugin manager,',
+      ' then retry the installation or restart dsh. Exact-version exemption: not active.',
+    ].join('')
+    const failure = classifyPnpmFailure(output)
+    expect(failure?.code).toBe('host-incompatible-install')
+    expect(failure?.recoverable).toBe(false)
+    // What happened, why, and the way out — including the host's own exemption.
+    expect(failure?.message).toContain('宿主')
+    expect(failure?.message).toContain('allow-version')
+    expect(failure?.message).toContain('>=99.0.0')
+    // A plain market-side failure must not be swallowed by this branch.
+    expect(classifyPnpmFailure('ERR_PNPM_FETCH_404 GET https://registry/x: Not Found')?.code).not.toBe('host-incompatible-install')
+  })
+
+  it('names the profile write-lock timeout and where the lock is (#914)', () => {
+    // The host's atomic-write waits lockWaitMs (120 s by default) and gives
+    // up with this line. Before the branch, the dialog showed the bare
+    // atomic-write sentence and nothing else — no path, no way out.
+    const output = '停用失败: atomic-write: timed out waiting for the writer lock at C:\\Users\\a\\.dsh\\profiles\\desktop\\package.json.lock'
+    const failure = classifyPnpmFailure(output)
+    expect(failure?.code).toBe('profile-write-lock')
+    expect(failure?.recoverable).toBe(true)
+    // The path travels, and the message says what is safe to do.
+    expect(failure?.message).toContain('package.json.lock')
+    expect(failure?.message).toContain('删掉这个文件')
+    // Ordinary failures stay ordinary.
+    expect(classifyPnpmFailure('ERR_PNPM_FETCH_404 Not Found')?.code).not.toBe('profile-write-lock')
+  })
+
   it('maps each known pnpm failure signature, and only those', () => {
     const hoist = classifyPnpmFailure('ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF  This modules directory was created using a different public-hoist-pattern value. Run "pnpm install" to recreate the modules directory.')
     expect(hoist?.code).toBe('hoist-pattern-diff')
@@ -59,6 +98,27 @@ describe('classifyPnpmFailure', () => {
     const violation = classifyPnpmFailure('[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 1 lockfile entries failed verification:\n  is-odd@3.0.1 was published at 2018-05-31T20:04:53.306Z, within the minimumReleaseAge cutoff')
     expect(violation?.code).toBe('release-age-violation')
     expect(classifyPnpmFailure('[ERR_PNPM_NO_MATURE_MATCHING_VERSION] 1 version does not meet the minimumReleaseAge constraint:')?.code).toBe('release-age-violation')
+    // The THIRD face of the same gate, and the only one that fails after the
+    // lockfile check has already SAID yes. pnpm skips that check whenever the
+    // verification cache holds a run whose recorded window is at least as wide
+    // as the current one (`canTrustPastCheck`: `past >= current`), and the
+    // RESOLVER then applies the same policy from scratch. A re-resolved
+    // dependency that is still inside the window is reported as a
+    // `policyViolation`, and the CLI only knows how to consume that through a
+    // handler it does not wire for this call path — so it throws instead.
+    // Measured on the bundled pnpm 11.7.0 with a cached pass: verification
+    // says "passes supply-chain policies", and the very next phase dies with
+    // "2 resolution-policy violations were produced but no
+    // handleResolutionPolicyViolations callback was wired". Without the
+    // classification below the market recognized nothing here and surfaced
+    // pnpm's internal hint — a stack trace where the user needed the same
+    // "wait, or retry once with the override" answer the other two shapes get.
+    const unhandled = classifyPnpmFailure('[ERR_PNPM_RESOLUTION_POLICY_VIOLATIONS_UNHANDLED] 2 resolution-policy violations were produced but no handleResolutionPolicyViolations callback was wired to react to them.\n\nInternal: resolveDependencies needs a handleResolutionPolicyViolations callback whenever a policy that can produce violations (today: minimumReleaseAge) is active. Wire setupPolicyHandlers (in @pnpm/installing.commands) or supply a callback directly.\nProgress: resolved 242, reused 2, downloaded 0, added 0')
+    expect(unhandled?.code).toBe('release-age-violation')
+    // The sentence has to name the waiting period: nothing else in that text
+    // tells a user why an unrelated plugin refused to uninstall.
+    expect(unhandled?.message).toContain('等待期')
+    expect(unhandled?.message).toContain('retries once')
     // Unrecognized output → null, the raw text is then surfaced as-is.
     expect(classifyPnpmFailure('some other failure')).toBeNull()
   })
@@ -70,6 +130,28 @@ describe('classifyPnpmFailure', () => {
     expect(missing?.message).toContain('幽灵依赖')
     // Unscoped form, no encoding involved.
     expect(classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/some-ghost: Not Found - 404')?.message).toContain('some-ghost')
+  })
+
+  it('names the PACKAGE when the 404 arrived as a tarball URL, not the .tgz file (#848)', () => {
+    // pnpm's 404 can point at a tarball rather than at the package document.
+    // The sentence said "有一个依赖…（retry-0.12.0.tgz）", which is not something
+    // the user can look up in their package.json — and it only started
+    // mattering when this sentence began reaching users instead of the log
+    // (#848 put it in the row). `pkg` itself keeps the last path segment: the
+    // install route compares it against the tarball name to tell "this mirror
+    // has not synced that release" from a ghost entry.
+    const scoped = classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/@types/retry/-/retry-0.12.0.tgz: Not Found - 404')
+    expect(scoped?.code).toBe('fetch-404')
+    expect(scoped?.message).toContain('@types/retry')
+    expect(scoped?.message).not.toContain('retry-0.12.0.tgz)')
+    expect(scoped?.pkg).toBe('retry-0.12.0.tgz')
+    // The percent-encoded scope, as a real URL writes it.
+    expect(classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/@types%2Fretry/-/retry-0.12.0.tgz: Not Found - 404')?.message)
+      .toContain('@types/retry')
+    // Unscoped, and a registry mounted under a path prefix: two segments
+    // before `/-/` are not automatically a scope.
+    expect(classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://artifactory.example/api/npm/npm-remote/lodash/-/lodash-4.17.21.tgz: Not Found - 404')?.message)
+      .toContain('（lodash）')
   })
 
   it('names a patch that no longer applies, and says the package went in unpatched (#222)', () => {
@@ -407,6 +489,47 @@ The lockfile contains entries that the active policies reject.`)
     expect(classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/ghost: Not Found - 404')?.code).toBe('fetch-404')
   })
 
+  it('points at Download region → Global when the China npm mirror resets a tarball (#926)', () => {
+    // Measured shape from #926: pnpm retries the same Tencent mirror URL, then
+    // gives up. Same-argv retry (#83) still hits that host, so the message
+    // must name the real next step — switch Download region — not "try later".
+    const reset = classifyPnpmFailure([
+      'GET https://mirrors.cloud.tencent.com/npm/dsh-mobile/-/dsh-mobile-0.6.12.tgz error (ECONNRESET). Will retry in 10 seconds. 2 retries left.',
+      'GET https://mirrors.cloud.tencent.com/npm/dsh-mobile/-/dsh-mobile-0.6.12.tgz error (ECONNRESET). Will retry in 1 minute. 1 retries left.',
+      '[ERROR] terminated',
+    ].join('\n'))
+    expect(reset?.code).toBe('transient-network')
+    expect(reset?.message).toContain('下载区域')
+    expect(reset?.message).toContain('全球')
+    expect(reset?.message).toContain('Download region')
+    expect(reset?.message).toContain('Global')
+    expect(reset?.message).not.toContain('稍后再试')
+    // socket hang up on the same mirror tarball is the same dead end.
+    const hang = classifyPnpmFailure(
+      'FetchError: request to https://mirrors.cloud.tencent.com/npm/dsh-mobile/-/dsh-mobile-0.6.12.tgz failed, reason: socket hang up',
+    )
+    expect(hang?.code).toBe('transient-network')
+    expect(hang?.message).toContain('下载区域')
+    // Scoped tarball on the same host.
+    expect(classifyPnpmFailure(
+      'GET https://mirrors.cloud.tencent.com/npm/@scope/pkg/-/pkg-1.0.0.tgz error (ECONNRESET)',
+    )?.message).toContain('下载区域')
+    // Official registry reset, or a China-mirror meta fetch (no .tgz), stay on
+    // the generic "try again shortly" path — switching region is not the fix.
+    expect(classifyPnpmFailure(
+      'GET https://registry.npmjs.org/dsh-mobile/-/dsh-mobile-0.6.12.tgz error (ECONNRESET)',
+    )?.message).toContain('稍后再试')
+    expect(classifyPnpmFailure(
+      'GET https://mirrors.cloud.tencent.com/npm/dsh-mobile error (ECONNRESET)',
+    )?.message).toContain('稍后再试')
+    // China-mirror .tgz mentioned, but the reset is on another host — do not
+    // blame Download region (common when a github: dep's codeload flakes).
+    expect(classifyPnpmFailure([
+      'GET https://mirrors.cloud.tencent.com/npm/dsh-mobile/-/dsh-mobile-0.6.12.tgz 200 OK',
+      'GET https://codeload.github.com/o/r/tar.gz/abc error (ECONNRESET)',
+    ].join('\n'))?.message).toContain('稍后再试')
+  })
+
   it('recognizes pnpm\u2019s per-request fetch timeout as fetch-timeout, not transient (#…)', () => {
     // The exact pnpm/undici abort shape for a large tarball that outlives the
     // default 60s limit: DOMException "The operation was aborted due to
@@ -477,6 +600,81 @@ The lockfile contains entries that the active policies reject.`)
     const ndjson = String.raw`{"name":"pnpm","level":"error","err":{"code":"ERR_PNPM_TARBALL_URL_MISMATCH","message":"1 lockfile entries failed verification:\n  dsh-music-huazai@0.1.0 has a tarball URL (https://registry.npmjs.org/x.tgz) that does not match the registry's published metadata (https://registry.npmmirror.com/x.tgz)"}}`
     expect(classifyPnpmFailure(ndjson)?.pkg).toBe('dsh-music-huazai')
   })
+
+  // #808 by @Tofu707: the profile's own lockfile, in the two shapes pnpm
+  // reports with two codes. Both fixtures below are real captures from
+  // 2026-10-08 against a throwaway copy of a profile lockfile — one importer
+  // aligned and its `packages:` entry removed, and one whose recorded
+  // specifier no longer matches package.json.
+  it('classifies a lockfile contradicting itself, and names the entry that is missing (#808)', () => {
+    // pnpm 12.8.1 with `--reporter=ndjson`, which is what market commands use.
+    // On this major stdout is EMPTY (0 bytes) and the whole error block arrives
+    // on stderr as plain text, so this is also the production form. Note the
+    // `help:` line: 12.8.1 offers `--fix-lockfile` here, while 11.24.0 offers
+    // `--no-frozen-lockfile` for the same failure — which is why no rule may
+    // key on that line, only on the code and on pnpm's own phrase.
+    const failed = classifyPnpmFailure([
+      'Error: ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY',
+      '  × installing dependencies',
+      "  ╰─▶ Broken lockfile: no entry for 'dshmarket@1.47.0' in pnpm-lock.yaml",
+      '  help: This issue is probably caused by a badly resolved merge conflict.',
+      "        To fix the lockfile, run 'pnpm install --fix-lockfile'.",
+    ].join('\n'))
+    expect(failed?.code).toBe('lockfile-broken')
+    expect(failed?.recoverable).toBe(false)
+    // The entry is named, but not as `pkg`: the repair is in the lockfile, and
+    // callers act on `pkg` (the #289 peer retry, the #65 ghost-entry advice).
+    expect(failed?.pkg).toBeUndefined()
+    expect(failed?.message).toContain('dshmarket@1.47.0')
+    expect(failed?.message).toContain('不要删掉整个 pnpm-lock.yaml')
+  })
+
+  it('reads the same failure out of pnpm 11\u2019s ndjson record, which arrives on stdout (#808)', () => {
+    // 11.24.0 inverts the streams: stdout carries the record as one JSON line
+    // (stderr is 0 bytes). The decoder lifts err.message out of it, so the
+    // human sentence matches even though the raw stream holds it escaped.
+    // Fields that are machine-specific (time/hostname/pid/stack) are trimmed;
+    // everything the classifier reads is verbatim.
+    const record = String.raw`{"level":"error","name":"pnpm","code":"ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY","hint":"This issue is probably caused by a badly resolved merge conflict.\nTo fix the lockfile, run 'pnpm install --no-frozen-lockfile'.","err":{"name":"pnpm","message":"Broken lockfile: no entry for 'dshmarket@1.47.0' in pnpm-lock.yaml","code":"ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY"}}`
+    const failed = classifyPnpmFailure(record)
+    expect(failed?.code).toBe('lockfile-broken')
+    expect(failed?.message).toContain('dshmarket@1.47.0')
+    // pnpm's phrase alone is enough: a record whose message survives but whose
+    // `code` field is absent still classifies (the anchor is not one string).
+    const phraseOnly = String.raw`{"level":"error","name":"pnpm","err":{"message":"Broken lockfile: no entry for 'dsh-plugin-x@0.4.1' in pnpm-lock.yaml"}}`
+    expect(classifyPnpmFailure(phraseOnly)?.code).toBe('lockfile-broken')
+    expect(classifyPnpmFailure(phraseOnly)?.message).toContain('dsh-plugin-x@0.4.1')
+  })
+
+  it('keeps a lockfile that is merely behind the manifest separate from a broken one (#808)', () => {
+    // pnpm 12.8.1, plain text on stderr. The sentence pnpm uses here wraps
+    // across two lines ("… is not up" / "to date with package.json."), so the
+    // rule anchors on the code — a sentence-anchored rule would miss exactly
+    // the form the user is looking at.
+    const failed = classifyPnpmFailure([
+      'Error: ERR_PNPM_OUTDATED_LOCKFILE',
+      '  × installing dependencies',
+      '  ╰─▶ Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up',
+      '      to date with package.json.',
+      '        Failure reason:',
+      "        specifiers in the lockfile don't match specifiers in package.json:",
+      '      * in importers["."]:',
+      '      * 1 dependency is mismatched:',
+      '        - dshmarket (lockfile: ^1.46.0, manifest: ^1.47.0)',
+      '  help: Regenerate the lockfile with `pnpm install --lockfile-only` so that',
+      '        pnpm-lock.yaml reflects the current package.json, then re-run `pnpm',
+      '        install --frozen-lockfile`.',
+    ].join('\n'))
+    expect(failed?.code).toBe('lockfile-outdated')
+    expect(failed?.recoverable).toBe(false)
+    expect(failed?.message).toContain('package.json')
+    // Its own repair, not the other one's: the two codes exist because the two
+    // repairs differ, and neither message may borrow the other's command.
+    expect(failed?.message).toContain('不要互相套用')
+    // The ndjson form used in production says the same thing on one line.
+    const ndjson = String.raw`{"level":"error","name":"pnpm","code":"ERR_PNPM_OUTDATED_LOCKFILE","hint":"Note that in CI environments this setting is true by default. If you still need to run install in such cases, use \"pnpm install --no-frozen-lockfile\"","err":{"name":"pnpm","message":"Cannot install with \"frozen-lockfile\" because pnpm-lock.yaml is not up to date with <ROOT>/package.json","code":"ERR_PNPM_OUTDATED_LOCKFILE"}}`
+    expect(classifyPnpmFailure(ndjson)?.code).toBe('lockfile-outdated')
+  })
 })
 
 describe('ERR_PNPM_NO_MATCHING_VERSION — host peer with only pre-releases (#569)', () => {
@@ -529,6 +727,30 @@ describe('ERR_PNPM_NO_MATCHING_VERSION — host peer with only pre-releases (#56
 
   it('still names the plain-404 shape as fetch-404 (unchanged)', () => {
     expect(classifyPnpmFailure('[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/ghost: Not Found - 404')?.code).toBe('fetch-404')
+  })
+
+  it('names an exact pin the registry cannot see yet — not "never published" (#927)', () => {
+    // Measured shape from #927: market pinned @1.1.3 from /latest; pnpm's
+    // packument on the same Tencent mirror still stopped at 1.1.2.
+    const output = [
+      '[ERR_PNPM_NO_MATCHING_VERSION] No matching version found for @michengai/dsh-archive-manager@1.1.3 while fetching it from https://mirrors.cloud.tencent.com/npm/',
+      'The latest release of @michengai/dsh-archive-manager is "1.1.2". Published at 2026/10/18 19:45:43',
+    ].join('\n')
+    const failure = classifyPnpmFailure(output)
+    expect(failure?.code).toBe('exact-version-missing')
+    expect(failure?.pkg).toBe('@michengai/dsh-archive-manager')
+    expect(failure?.message).toContain('@michengai/dsh-archive-manager@1.1.3')
+    expect(failure?.message).toContain('1.1.2')
+    expect(failure?.message).toContain('还没同步')
+    expect(failure?.message).toContain('下载区域')
+    expect(failure?.message).toContain('Global')
+    expect(failure?.message).not.toContain('通常是该版本被弃用或从未发布')
+    // A real range with no match stays on the generic withdrawn wording.
+    const range = classifyPnpmFailure(
+      'ERR_PNPM_NO_MATCHING_VERSION  No matching version found for some-dep@^9.0.0 while fetching it from https://registry.npmjs.org/',
+    )
+    expect(range?.code).toBe('no-matching-version')
+    expect(range?.message).toContain('通常是该版本被弃用或从未发布')
   })
 })
 
@@ -792,5 +1014,37 @@ describe('pnpm 12 native engine out of memory (#701)', () => {
 
   it('does not claim an ordinary failure', () => {
     expect(classifyPnpmFailure('dsh: pnpm failed in profile directory x', 1)?.code).not.toBe('native-oom')
+  })
+})
+
+describe('a pnpm run the host stopped for silence (#817)', () => {
+  // The reporter's tail, verbatim: cloudflared's postinstall downloading its
+  // binary from GitHub Releases on a network that cannot reach it.
+  const TAIL = [
+    'Resolved 241, reused 4, downloaded 0, added 0, done',
+    'node_modules/cloudflared postinstall$ node scripts/postinstall.mjs && node lib/cloudflared.js bin install',
+    'node_modules/cloudflared postinstall: Installing latest version of cloudflared',
+    'dsh: pnpm printed nothing for 600000ms and was terminated',
+  ].join('\n')
+
+  it('names the dependency whose install script went quiet, and says what to do', () => {
+    const failed = classifyPnpmFailure(TAIL, 1)
+    expect(failed?.code).toBe('pnpm-stalled')
+    expect(failed?.recoverable).toBe(false)
+    expect(failed?.pkg).toBeUndefined()
+    expect(failed?.message).toContain('依赖 cloudflared 的安装脚本 10 分钟')
+    expect(failed?.message).toContain('the dependency cloudflared printed nothing for 10 minutes')
+  })
+
+  it('keeps a scoped name whole, Windows separators included', () => {
+    const failed = classifyPnpmFailure('node_modules\\@scope\\bin-fetcher postinstall: fetching\ndsh: pnpm printed nothing for 120000ms and was terminated', 1)
+    expect(failed?.message).toContain('依赖 @scope/bin-fetcher 的安装脚本 2 分钟')
+  })
+
+  it('blames the network, not a package, when no install script was running', () => {
+    const failed = classifyPnpmFailure('Progress: resolved 12\ndsh: pnpm printed nothing for 600000ms and was terminated', 1)
+    expect(failed?.code).toBe('pnpm-stalled')
+    expect(failed?.message).toContain('pnpm 10 分钟没有任何输出')
+    expect(failed?.message).not.toContain('依赖')
   })
 })

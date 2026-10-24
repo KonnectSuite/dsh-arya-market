@@ -1027,6 +1027,115 @@ describe('duplicate loader entry ids (#98 boot failure)', () => {
   })
 })
 
+describe('one loader id on two rows depends on the loader (#853)', () => {
+  /** The reported shape: a bundle's own row plus the user's row on one id. */
+  function twoRowsOnOneId(dir: string): void {
+    writeProfile(dir, {
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } },
+      dependencies: { '@deepseek-ai/dsh-base': '^4.0.1' },
+    })
+    writeBundle(dir, '@deepseek-ai/dsh-base', '4.0.1', [
+      { insert: [{ id: 'dsh-market', name: 'dshmarket' }] },
+    ])
+    writeFileSync(join(dir, 'cordis.patch.yml'), dump([
+      { insert: [{ id: 'dsh-market', name: 'file:///profile/node_modules/dshmarket/lib/index.js' }] },
+    ]))
+  }
+
+  /** A lockfile naming the loader, the way a real profile has one. */
+  function lockWithLoader(dir: string, version: string): void {
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), [
+      "lockfileVersion: '9.0'",
+      'packages:',
+      `  '@deepseek-ai/cordis-plugin-loader@${version}':`,
+      `    version: ${version}`,
+      '',
+    ].join('\n'))
+  }
+
+  it('is a warning on a loader that folds the id instead of refusing it', () => {
+    // Measured against the published packages: 1.0.3 throws
+    // `duplicate loader entry id`, 1.0.4 and 1.0.5 fold the array into a Map
+    // and let the LATER row win. The reporter's profile already had this pair,
+    // so treating it as fatal rolled back every update — of every plugin —
+    // forever, over a boot that works.
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+    lockWithLoader(dir, '1.0.5')
+
+    const report = analyzeProfile(dir, { dshInstallDir: dir })
+
+    expect(report.summary.errors.some(e => e.includes('duplicate loader entry id'))).toBe(false)
+    expect(report.summary.ok).toBe(true)
+    // Still SAID: on this loader one of the two rows quietly loses.
+    const warning = report.summary.warnings.find(w => w.includes('dsh-market'))
+    expect(warning).toBeDefined()
+    expect(String(warning)).toContain('"dsh-market"')
+    expect(String(warning)).toMatch(/后一层覆盖前一层|LATER row wins/)
+  })
+
+  it('stays fatal on a loader that still refuses it — the version this rule was written for', () => {
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+    lockWithLoader(dir, '1.0.3')
+
+    const report = analyzeProfile(dir, { dshInstallDir: dir })
+
+    expect(report.summary.errors.some(e => e.includes('duplicate loader entry id'))).toBe(true)
+    expect(report.summary.ok).toBe(false)
+  })
+
+  it('stays fatal when no version can be read, because the evidence to relax is missing', () => {
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+
+    const report = analyzeProfile(dir, { dshInstallDir: dir })
+
+    expect(report.summary.errors.some(e => e.includes('duplicate loader entry id'))).toBe(true)
+  })
+
+  /** A host installation whose shared node_modules carries the loader. */
+  function hostWithLoader(version: string): string {
+    const host = mkdtempSync(join(tmpdir(), 'dshm-host-'))
+    const packageDir = join(host, 'node_modules', '@deepseek-ai', 'cordis-plugin-loader')
+    mkdirSync(packageDir, { recursive: true })
+    writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: '@deepseek-ai/cordis-plugin-loader', version }))
+    return host
+  }
+
+  it('reads the loader from a host that PROVIDES it when the profile lockfile cannot (#943)', () => {
+    // The official Desktop embeds the loader in app.asar and hands it to every
+    // profile, so a profile lockfile can never name it. Reading that as an old
+    // loader made this gate fatal for every update on 0.2.1-rc.2.
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+
+    const report = analyzeProfile(dir, { dshInstallDir: hostWithLoader('1.0.6') })
+
+    expect(report.summary.errors.some(e => e.includes('duplicate loader entry id'))).toBe(false)
+    expect(report.summary.warnings.some(w => w.includes('dsh-market'))).toBe(true)
+  })
+
+  it('still refuses when the host-provided loader is one that throws on the pair', () => {
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+
+    const report = analyzeProfile(dir, { dshInstallDir: hostWithLoader('1.0.3') })
+
+    expect(report.summary.errors.some(e => e.includes('duplicate loader entry id'))).toBe(true)
+  })
+
+  it('the trial gate reads the same host-provided loader', () => {
+    // trial.ts calls the same function on the candidate composition; without
+    // the host fallback it kept rolling updates back after the check report
+    // had already relaxed (#943: "update succeeds, then reverts").
+    const dir = pdir()
+    twoRowsOnOneId(dir)
+    const result = trialValidate(dir, [], { dshInstallDir: hostWithLoader('1.0.6') })
+    expect(result.ok).toBe(true)
+  })
+})
+
 describe('duplicate loader entry names (#98 opt: runtime shadowing)', () => {
   it('reports two rows sharing one name across layers — informational, not a boot failure and not a summary warning', () => {
     const dir = pdir()
@@ -1130,6 +1239,45 @@ describe('peer checks cover every plugin (#98 opt: plugin-to-plugin peers)', () 
     expect(mismatch).toBeDefined()
     expect(mismatch?.satisfied).toBe(false)
     expect(report.summary.warnings.some(w => w.includes('community-lib'))).toBe(true)
+  })
+
+  it('admits a prerelease host line a range written for it can only be met by (#1000)', () => {
+    // A healthy NEXT profile carried six permanent warnings because
+    // `>=0.2.0-rc.0 <0.3.0` does not admit `0.2.1-rc.2` under npm's DEFAULT
+    // rule (a prerelease needs a comparator on its own tuple). The discovery
+    // and verify checks already opt into includePrerelease for exactly this
+    // reason; the peer check now asks the same question the same way.
+    const dir = pdir()
+    writeProfile(dir, { name: 'web-profile', dependencies: {} })
+    writePackage(dir, 'plugin-rc', {
+      name: 'plugin-rc',
+      version: '1.0.0',
+      peerDependencies: { 'rc-lib': '>=0.2.0-rc.0 <0.3.0' },
+    })
+    writePackage(dir, 'rc-lib', { name: 'rc-lib', version: '0.2.1-rc.2' })
+
+    const report = analyzeProfile(dir)
+    const mismatch = report.peerMismatches.find(m => m.plugin === 'plugin-rc' && m.name === 'rc-lib')
+    expect(mismatch?.satisfied).toBe(true)
+    expect(report.summary.warnings.some(w => w.includes('rc-lib'))).toBe(false)
+  })
+
+  it('still refuses a prerelease BELOW the range, and one across a ^ ceiling (#1000)', () => {
+    // The flag must not turn the check off: an rc older than the floor is a
+    // real mismatch, and `^0.1.0` still excludes the next minor.
+    const dir = pdir()
+    writeProfile(dir, { name: 'web-profile', dependencies: {} })
+    writePackage(dir, 'plugin-floor', {
+      name: 'plugin-floor',
+      version: '1.0.0',
+      peerDependencies: { 'floor-lib': '>=0.2.1-rc.5', 'caret-lib': '^0.1.0' },
+    })
+    writePackage(dir, 'floor-lib', { name: 'floor-lib', version: '0.2.1-rc.2' })
+    writePackage(dir, 'caret-lib', { name: 'caret-lib', version: '0.2.0-rc.2' })
+
+    const report = analyzeProfile(dir)
+    expect(report.peerMismatches.find(m => m.name === 'floor-lib')?.satisfied).toBe(false)
+    expect(report.peerMismatches.find(m => m.name === 'caret-lib')?.satisfied).toBe(false)
   })
 
   it('reports a peer dependency that is not installed at all (info-level, no summary warning)', () => {
@@ -2063,6 +2211,28 @@ describe('pnpm-lock.yaml multi-version core packages', () => {
 })
 
 describe('satisfiesRange', () => {
+
+  it('zero-fills a partial version inside a comparator, as node-semver does', () => {
+    // The connector-plugin family's peers are written this way —
+    // `@deepseek-ai/dsh-llm: '>=0.1.5 <0.3'`, `'>=0.1.7-rc <2'`,
+    // `'>=0.2.0-rc.0 <0.3'` — and every one of them used to parse as
+    // UNKNOWN, which left the activation gate standing aside: measured
+    // against the host's own evaluator over 699 live catalog manifests, the
+    // market promised a restart would apply a plugin the host refuses.
+    expect(satisfiesRange('0.1.2-alpha.2', '>=0.1.5 <0.3', { includePrerelease: true })).toBe(false)
+    expect(satisfiesRange('0.1.2-alpha.2', '>=0.1.5-rc <2', { includePrerelease: true })).toBe(false)
+    expect(satisfiesRange('0.1.7-rc.2', '>=0.2.0-rc.0 <0.3', { includePrerelease: true })).toBe(false)
+    expect(satisfiesRange('0.2.9', '<0.3', { includePrerelease: true })).toBe(true)
+    expect(satisfiesRange('2.1.0', '>=2', { includePrerelease: true })).toBe(true)
+    expect(satisfiesRange('1.9.9', '>=2', { includePrerelease: true })).toBe(false)
+  })
+
+  it('keeps a BARE partial version unknown: `1.2` is an x-range, not `1.2.0`', () => {
+    // node-semver reads `1.2` as `>=1.2.0 <1.3.0`. Treating it as the exact
+    // version would be a different — and wrong — answer, so it stays unknown.
+    expect(satisfiesRange('1.2.0', '1.2', { includePrerelease: true })).toBeNull()
+    expect(satisfiesRange('1.2.0', '2', { includePrerelease: true })).toBeNull()
+  })
   it('matches caret ranges', () => {
     expect(satisfiesRange('1.2.3', '^1.2.0')).toBe(true)
     expect(satisfiesRange('1.9.9', '^1.2.0')).toBe(true)

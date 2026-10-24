@@ -30,7 +30,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { logEvent } from './log.ts'
 import { parsePatchFile, parsePatchText } from './check.ts'
-import { bundlePatchInsertedIds, declaredBundlePatchFiles, parsePatchRows } from './profile.ts'
+import { bundleOptOutRowIds, bundlePatchInsertedIds, declaredBundlePatchFiles, parsePatchRows } from './profile.ts'
 
 /** The slice of the loader tree this module needs. */
 export interface PatchHost {
@@ -137,6 +137,16 @@ export interface PatchState {
 /** Row ids the market is allowed to write: plain unquoted YAML scalars. */
 const ROW_ID_RE = /^[A-Za-z0-9_.-]+$/u
 
+function nextPatchContentLine(lines: readonly string[], from: number): number {
+  let index = from
+  while (index < lines.length) {
+    const line = (lines[index] ?? '').trim()
+    if (line !== '' && !line.startsWith('#')) break
+    index += 1
+  }
+  return index
+}
+
 /**
  * Line-wise scan of one patch file — the plugin-hub shapes. Deliberately
  * not a YAML parse: the file may hold structures the market's dialect
@@ -165,11 +175,12 @@ export function readUserPatchState(patchPath: string): PatchState {
       if (insertRow !== null) inserts.push(insertRow[1])
       continue
     }
-    const disableRow = /^- id: ([A-Za-z0-9_.-]+)\s*$/u.exec(line)
+    const disableRow = /^- id: (?:([A-Za-z0-9_.-]+)|'([A-Za-z0-9_.-]+)'|"([A-Za-z0-9_.-]+)")[ \t]*$/u.exec(line)
     if (disableRow === null) continue
-    const next = lines[index + 1] ?? ''
-    if (/^ {2}disabled: true\s*$/u.test(next)) disables.push(disableRow[1])
-    else if (/^ {2}disabled: false\s*$/u.test(next)) forced.push(disableRow[1])
+    const id = (disableRow[1] ?? disableRow[2] ?? disableRow[3])!
+    const next = lines[nextPatchContentLine(lines, index + 1)] ?? ''
+    if (/^ {2}disabled: true\s*$/u.test(next)) disables.push(id)
+    else if (/^ {2}disabled: false\s*$/u.test(next)) forced.push(id)
   }
   return { disables, forced, inserts }
 }
@@ -314,37 +325,65 @@ function foreignDisableIds(rows: unknown[]): string[] {
 }
 
 /**
- * The ids of OTHER plugins a package's bundle patch DISABLES — top-level
- * `- id: X` + `disabled: true` rows targeting plugins it does not own. This is
- * the precise marker of a bundle whose toggle-off can brick the boot (#224):
- * dsh-postgres-backends disables session-persistence-jsonl, so once the market
- * also disables the postgres backends nothing provides sessionPersistence.
+ * Top-level patch rows that add an `inject:` requirement to another plugin.
+ *
+ * Same shape rule as foreignDisableIds: anything at the top level with an id
+ * is a statement about a plugin this package does not own. An `inject` there
+ * makes that foreign row depend on a service — usually one this bundle
+ * provides — so switching this package off while leaving its patch in the
+ * stack strands the row: #938's billion-context adds
+ * `inject: [biliBasicCompactionPolicy]` to the four official agent presets,
+ * and a row-level disable left them unable to activate.
+ */
+function foreignInjectIds(rows: unknown[]): string[] {
+  const ids: string[] = []
+  for (const row of rows) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
+    const record = row as Record<string, unknown>
+    const id = record.id
+    if (typeof id === 'string' && record.inject !== undefined && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+/**
+ * The ids of OTHER plugins a package's bundle patch rewires — top-level rows
+ * that either `disabled: true` a plugin it does not own, or add an `inject:`
+ * requirement to one.
+ *
+ * Both are the marker of a bundle whose toggle-off can brick the boot while
+ * its patch keeps applying (#224, #938):
+ *  - dsh-postgres-backends disables session-persistence-jsonl, so once the
+ *    market also disables the postgres backends nothing provides
+ *    sessionPersistence;
+ *  - billion-context adds `inject: [biliBasicCompactionPolicy]` to the four
+ *    official agent presets, so disabling only its own row leaves the presets
+ *    waiting for a service that no longer exists — every preset disappears.
  *
  * A bundle that merely RECONFIGURES a neighbour is deliberately NOT counted:
  * the e2e fixture-cross tweaks dshm-fixture-b's config, and #147 requires
  * disabling it to leave that neighbour live — dropping such a bundle from the
  * stack broke its re-enable. Config-only side effects stay on the normal #147
- * path; only a foreign `disabled: true` triggers the bundle removal. Removing
- * the bundle still neutralizes any config side effects it carries, since its
- * whole patch stops applying.
+ * path. Removing the bundle still neutralizes any config side effects it
+ * carries, since its whole patch stops applying.
  *
  * Reads both patch sources like rowIdsForPackage — the declared
  * dsh.bundle.patch (one file or a LIST of them, #792) and the conventional
  * root cordis.patch.yml — so either form is detected, and every declared file
- * is attributed (a foreign disable declared in the second file is still what
- * bricks the boot, #224).
+ * is attributed.
  */
-export function carrierDisableIds(profileDirectory: string, packageName: string): string[] {
+export function carrierRowIds(profileDirectory: string, packageName: string): string[] {
   const packageDir = join(profileDirectory, 'node_modules', packageName)
-  const disabled = new Set<string>()
+  const rows = new Set<string>()
   const collectFromFile = (patchPath: string): void => {
-    const rows = parsePatchFile(patchPath)
-    if (rows === null) return
-    for (const id of foreignDisableIds(rows)) disabled.add(id)
+    const parsed = parsePatchFile(patchPath)
+    if (parsed === null) return
+    for (const id of foreignDisableIds(parsed)) rows.add(id)
+    for (const id of foreignInjectIds(parsed)) rows.add(id)
   }
   for (const file of declaredBundlePatchFiles(packageDir)) collectFromFile(file)
   collectFromFile(join(packageDir, 'cordis.patch.yml'))
-  return [...disabled]
+  return [...rows]
 }
 
 /**
@@ -362,7 +401,7 @@ export function carrierDisableIds(profileDirectory: string, packageName: string)
  * fixture-cross e2e exist to protect, where the neighbour must keep running
  * and the bundle must keep re-enabling.
  *
- * Reads both patch sources like carrierDisableIds: the declared
+ * Reads both patch sources like carrierRowIds: the declared
  * `dsh.bundle.patch` (one file or a LIST, #792) and the conventional root
  * cordis.patch.yml. Ownership is judged per file, because a package may ship
  * both and only the file's own `insert:` block says which ids it brings in.
@@ -406,8 +445,15 @@ export function packagePatchFlags(
   const forced: string[] = []
   for (const name of names) {
     const rows = rowIdsForPackage(host, profileDirectory, name)
-    if (rows.some(id => state.disables.includes(id))) disabled.push(name)
-    if (rows.some(id => state.forced.includes(id))) forced.push(name)
+    // Rows the package's own layer already ships off say nothing about what
+    // the user decided (#876): `dsh-mnemon` ships four strategy rows as
+    // opt-in, its user patch layer repeats one of them, and the package was
+    // reported as 「已停用 / 重启后保持关闭」 while it was running. Only the
+    // user's decisions ABOVE the bundle's own default count.
+    const optOut = new Set(bundleOptOutRowIds(join(profileDirectory, 'node_modules', name)))
+    const decidedByUser = (id: string): boolean => !optOut.has(id)
+    if (rows.some(id => decidedByUser(id) && state.disables.includes(id))) disabled.push(name)
+    if (rows.some(id => decidedByUser(id) && state.forced.includes(id))) forced.push(name)
   }
   return { disabled, forced }
 }
@@ -429,11 +475,81 @@ function rowBlock(rowId: string, disabled: boolean): string {
 }
 
 /**
+ * Rewrite standalone id/flag rows while preserving the surrounding file.
+ * Comments and blank lines may separate the fields (#930). Look beyond them
+ * after the flag too: an indented config/name/key makes this a longer entry,
+ * whose first lines must never be removed (#821). Trailing comments stay put.
+ */
+function rewriteRowBlocks(text: string, rowId: string, disabled: 'true' | 'false' | 'any', replace: (block: string) => string): string {
+  const id = escapeRegExp(rowId)
+  const idLine = new RegExp(`^- id: (?:${id}|'${id}'|"${id}")[ \t]*$`, 'u')
+  const lines = text.match(/[^\n]*(?:\n|$)/gu)?.filter(Boolean) ?? []
+  const offsets: number[] = [0]
+  for (const line of lines) offsets.push(offsets[offsets.length - 1]! + line.length)
+  let result = '', copied = 0
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!idLine.test(lines[index]!.replace(/\r?\n$/u, ''))) continue
+    const flagIndex = nextPatchContentLine(lines, index + 1)
+    const flag = /^ {2}disabled: (true|false)[ \t]*(?:\r?\n)?$/u.exec(lines[flagIndex] ?? '')
+    if (flag === null || (disabled !== 'any' && flag[1] !== disabled)) continue
+    const following = nextPatchContentLine(lines, flagIndex + 1)
+    if (/^[ \t]/u.test(lines[following] ?? '')) continue
+    const start = offsets[index]!, end = offsets[flagIndex + 1]!
+    result += text.slice(copied, start) + replace(text.slice(start, end))
+    copied = end
+    index = flagIndex
+  }
+  return result + text.slice(copied)
+}
+
+/**
+ * What the patch file finally says about one row: the flag of its last
+ * `- id: X` entry that carries one, rows with more keys included. Later
+ * entries override earlier ones.
+ */
+function lastRowFlag(text: string, rowId: string): 'true' | 'false' | null {
+  const id = escapeRegExp(rowId)
+  const idLine = new RegExp(`^- id: (?:${id}|'${id}'|"${id}")\\s*$`, 'u')
+  const lines = text.split(/\r?\n/u)
+  let flag: 'true' | 'false' | null = null
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!idLine.test(lines[index] ?? '')) continue
+    const value = /^ {2}disabled: (true|false)\s*$/u.exec(lines[nextPatchContentLine(lines, index + 1)] ?? '')
+    if (value !== null) flag = value[1] as 'true' | 'false'
+  }
+  return flag
+}
+
+/**
  * Append one top-level patch entry, refusing when the file is not a valid
  * entry list. The refusal is the point: a malformed patch layer (the
  * `[]` + items mistake, or any broken YAML) must never be made worse —
  * the market reports it and keeps its own live/state.json toggle instead.
  */
+/**
+ * Write the patch file, or say in the user's words why it could not be
+ * written (kettly1260's family of reports, and #582's read-only case): a bare
+ * `EACCES: permission denied, open '…'` reaching the UI tells a user nothing
+ * they can act on, while the plugin's actual state has already changed.
+ */
+function writePatchFile(patchPath: string, contents: string): { ok: boolean; reason: string | null } {
+  try {
+    writeFileSync(patchPath, contents)
+    return { ok: true, reason: null }
+  } catch (error) {
+    const code = error !== null && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : ''
+    const detail = code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+      ? '文件不可写（只读或被系统保护）'
+      : code === 'ENOSPC'
+        ? '磁盘空间不足'
+        : error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      reason: `补丁层文件写不进去：${detail} / the patch file could not be written: ${code === 'EACCES' || code === 'EPERM' || code === 'EROFS' ? 'it is read-only' : detail}`,
+    }
+  }
+}
+
 function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reason: string | null } {
   let text = ''
   try {
@@ -441,8 +557,7 @@ function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reas
   } catch { /* created below */ }
   const core = text.trim()
   if (core === '') {
-    writeFileSync(patchPath, block)
-    return { ok: true, reason: null }
+    return writePatchFile(patchPath, block)
   }
   // The dsh profile template ships an empty `[]` placeholder (a valid
   // empty list). Appending after it would create TWO top-level elements in
@@ -452,14 +567,12 @@ function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reas
   // Comments only (the user dropped the placeholder): append after them.
   if (withoutComments === '') {
     const next = text.endsWith('\n') ? text : `${text}\n`
-    writeFileSync(patchPath, `${next}${block}`)
-    return { ok: true, reason: null }
+    return writePatchFile(patchPath, `${next}${block}`)
   }
   if (withoutComments === '[]' || withoutComments === '[ ]') {
     const commented = text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
     const next = commented.endsWith('\n') ? commented : `${commented}\n`
-    writeFileSync(patchPath, `${next}${block}`)
-    return { ok: true, reason: null }
+    return writePatchFile(patchPath, `${next}${block}`)
   }
   // A top-level flow LIST (other than the placeholder above) cannot be
   // appended to: `- id: X` after `[1, 2]` would create two top-level
@@ -484,15 +597,42 @@ function appendPatchEntry(patchPath: string, block: string): { ok: boolean; reas
     }
   }
   const next = text.endsWith('\n') ? text : `${text}\n`
-  writeFileSync(patchPath, `${next}${block}`)
-  return { ok: true, reason: null }
+  return writePatchFile(patchPath, `${next}${block}`)
 }
 
-/** Disable one row: append `- id: X` + `disabled: true` (idempotent). */
+/**
+ * Disable one row: `- id: X` + `disabled: true` (idempotent).
+ *
+ * A force-enable block already there is flipped in place rather than
+ * followed by a second block (#821): the pair cancelled out by order alone,
+ * and an uninstall that cleared one of them left the other behind to switch
+ * a later reinstall off. Duplicates an older version left are folded into
+ * the one block at the same time.
+ */
 export function disableRow(patchPath: string, rowId: string): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
     if (!ROW_ID_RE.test(rowId)) {
       return { ok: false, reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${rowId} cannot be written to the patch layer` }
+    }
+    const text = (() => {
+      try { return readFileSync(patchPath, 'utf8') } catch { return '' }
+    })()
+    let kept = false
+    const next = rewriteRowBlocks(text, rowId, 'any', block => {
+      if (kept) return ''
+      kept = true
+      return block.replace(/^ {2}disabled: false(?=[ \t]*(?:\r?\n|$))/mu, '  disabled: true')
+    })
+    if (next !== text) {
+      const flipped = writePatchFile(patchPath, next)
+      if (!flipped.ok) return flipped
+      // A longer entry for the row further down still has the last word.
+      if (lastRowFlag(next, rowId) !== 'true') {
+        const result = appendPatchEntry(patchPath, rowBlock(rowId, true))
+        if (!result.ok) return result
+      }
+      logEvent('info', 'patch', `disabled row ${rowId} in ${patchPath}`)
+      return { ok: true, reason: null }
     }
     const state = readUserPatchState(patchPath)
     if (state.disables.includes(rowId)) return { ok: true, reason: null }
@@ -502,7 +642,7 @@ export function disableRow(patchPath: string, rowId: string): Promise<{ ok: bool
   })
 }
 
-/** Enable one row: remove the `disabled: true` block; force-enable with
+/** Enable one row: remove its `disabled: true` blocks; force-enable with
  * `disabled: false` when a lower layer (bundle/home patch) holds it down. */
 export function enableRow(patchPath: string, rowId: string): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
@@ -510,12 +650,13 @@ export function enableRow(patchPath: string, rowId: string): Promise<{ ok: boole
       return { ok: false, reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${rowId} cannot be written to the patch layer` }
     }
     const state = readUserPatchState(patchPath)
-    const blockRe = new RegExp(`^- id: ['\"]?${escapeRegExp(rowId)}['\"]?\\r?\\n  disabled: true\\r?\\n`, 'mu')
     const text = (() => {
       try { return readFileSync(patchPath, 'utf8') } catch { return '' }
     })()
-    if (blockRe.test(text)) {
-      writeFileSync(patchPath, withPlaceholderRestored(text.replace(blockRe, '')))
+    const next = rewriteRowBlocks(text, rowId, 'true', () => '')
+    if (next !== text) {
+      const written = writePatchFile(patchPath, withPlaceholderRestored(next))
+      if (!written.ok) return written
       logEvent('info', 'patch', `enabled row ${rowId} in ${patchPath}`)
       return { ok: true, reason: null }
     }
@@ -545,18 +686,15 @@ function withPlaceholderRestored(text: string): string {
 
 /** Remove every disable/force block the market (or the user) wrote for a
  * row — the uninstall cleanup, so a removed plugin leaves no orphan rows. */
-export function removeRowBlocks(patchPath: string, rowIds: readonly string[]): void {
+export function removeRowBlocks(patchPath: string, rowIds: readonly string[]): { ok: boolean; reason: string | null } {
   let text = ''
   try {
     text = readFileSync(patchPath, 'utf8')
-  } catch { return }
+  } catch { return { ok: true, reason: null } } // no file, nothing to remove
   let next = text
-  for (const rowId of rowIds) {
-    const blockRe = new RegExp(`^- id: ['\"]?${escapeRegExp(rowId)}['\"]?\\r?\\n  disabled: (?:true|false)\\r?\\n`, 'mu')
-    next = next.replace(blockRe, '')
-  }
-  if (next !== text) {
-    writeFileSync(patchPath, withPlaceholderRestored(next))
-    logEvent('info', 'patch', `removed patch rows for ${rowIds.join(', ')}`)
-  }
+  for (const rowId of rowIds) next = rewriteRowBlocks(next, rowId, 'any', () => '')
+  if (next === text) return { ok: true, reason: null }
+  const written = writePatchFile(patchPath, withPlaceholderRestored(next))
+  if (written.ok) logEvent('info', 'patch', `removed patch rows for ${rowIds.join(', ')}`)
+  return written
 }

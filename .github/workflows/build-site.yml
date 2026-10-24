@@ -60,14 +60,14 @@ jobs:
           curl -sfL --retry 3 --retry-delay 5 \
             https://awesome-dsh-plugin.com/readmes.json -o data/readmes-snapshot.json \
             || echo "readmes.json unavailable — building without README bodies"
+          # The plugin market index, mirrored so the market's own domain can
+          # answer the same URL. Same rule as the READMEs: a degraded deploy
+          # beats a cancelled one, so a missing index is a warning, not a stop.
+          curl -sfL --retry 3 --retry-delay 5 \
+            https://awesome-dsh-plugin.com/index.json -o data/market-index.json \
+            || echo "index.json unavailable — this deploy carries no market index"
 
-      # Unset until the AdSense review clears these domains; while unset the
-      # build emits no ad markup and no third-party script, so the site is
-      # byte-identical to an ad-free one. A variable rather than a secret:
-      # the publisher id ships in the HTML either way.
       - run: node scripts/build-site.mjs
-        env:
-          ADSENSE_CLIENT: ${{ vars.ADSENSE_CLIENT }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -8,11 +8,13 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { StrictMode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MarketSection, OwnerAvatar, resetMarketPortalHost, resetThemePreviewCache } from '../../src/client/MarketSection.tsx'
+import { MarketSection, OwnerAvatar, resetHostCompatibilityCache, resetMarketPortalHost, resetThemePreviewCache } from '../../src/client/MarketSection.tsx'
 import css from '../../src/client/Market.module.css'
 import { downloadStatsText } from '../../src/client/download-stats.ts'
+import { createHostNavigation } from '../../src/client/host-navigation.ts'
 import { SEARCH_DELAY_MS } from '../../src/client/SearchInput.tsx'
 import {
   pluginScreenshotCandidates, resetGithubRouting, resetScreenshotsCache, restartHintKey, setGithubRoutes,
@@ -154,12 +156,161 @@ function fakeStorage(): Storage {
 beforeEach(() => {
   vi.stubGlobal('localStorage', fakeStorage())
   stubFetch(); resetGithubRouting(); resetScreenshotsCache(); resetThemePreviewCache()
+  resetHostCompatibilityCache()
 })
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   sessionStorage.clear()
   resetGithubRouting()
+})
+
+describe('WebDAV daily backup (#868)', () => {
+  const day = 24 * 60 * 60 * 1000
+  const now = 1_800_000_000_000
+  const config = { url: 'https://dav.example/dsh/backup.json', username: 'alice', auto: true }
+  const requests = () => fetchCalls.filter(call => call.path === '/dsh-market/webdav')
+
+  beforeEach(() => { vi.spyOn(Date, 'now').mockReturnValue(now) })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  async function openBackup() {
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: en.tabAdvanced }))
+  }
+
+  it.each([
+    ['URL', en.webdavUrl, 'https://dav.example/dsh/edited.json'],
+    ['username', en.webdavUser, 'bob'],
+    ['password', en.webdavPassword, 'session-secret'],
+  ])('editing the %s after a failed daily backup does not retry it', async (_field, placeholder, value) => {
+    localStorage.setItem('dshm-webdav', JSON.stringify(config))
+    stubFetch({ '/dsh-market/webdav': { __status: 500, error: 'daily backup failed' } })
+    const view = render(<MarketSection {...props()} />)
+    await openBackup()
+    await screen.findByText('Error: daily backup failed')
+    expect(requests()).toHaveLength(1)
+    fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value } })
+    fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value: `${value}x` } })
+    // A new translation callback must not become an automatic-backup trigger either.
+    view.rerender(<MarketSection {...props()} />)
+    await act(async () => {})
+    expect(requests()).toHaveLength(1)
+    expect(localStorage.getItem('dshm-webdav-last')).toBeNull()
+    // A failed request releases the lock so an explicit retry still works.
+    fireEvent.click(screen.getByRole('button', { name: en.webdavUpload }))
+    await act(async () => {})
+    expect(requests()).toHaveLength(2)
+  })
+
+  it('says what the address field wants, in the words the reporter had to guess (#868)', async () => {
+    // "说明里面没有写清楚备份是个文件" — the field carried a placeholder and
+    // nothing else, so the shape (file, name included) and the reason the name
+    // cannot float were both left to trial and error.
+    localStorage.setItem('dshm-webdav', JSON.stringify(config))
+    stubFetch({ '/dsh-market/webdav': { ok: true } })
+    render(<MarketSection {...props()} />)
+    await openBackup()
+    expect(await screen.findByText(new RegExp(en.webdavPathHint))).toBeTruthy()
+    expect(screen.getByText(new RegExp(en.webdavPathHint)).textContent).toContain('name included')
+  })
+
+  it.each([
+    ['no previous success', null, true],
+    ['less than 24 hours', now - day + 1, false],
+    ['exactly 24 hours', now - day, true],
+    ['more than 24 hours', now - day - 1, true],
+  ])('checks the original daily threshold on mount: %s', async (_label, last, due) => {
+    localStorage.setItem('dshm-webdav', JSON.stringify(config))
+    if (last !== null) localStorage.setItem('dshm-webdav-last', String(last))
+    stubFetch({ '/dsh-market/webdav': { ok: true } })
+    render(<MarketSection {...props()} />)
+    await openBackup()
+    expect(requests()).toHaveLength(due ? 1 : 0)
+    if (due) await waitFor(() => expect(localStorage.getItem('dshm-webdav-last')).toBe(String(now)))
+  })
+
+  it('does not overlap daily uploads during StrictMode replay, editing or off/on toggles', async () => {
+    localStorage.setItem('dshm-webdav', JSON.stringify(config))
+    const fallback = stubFetch()
+    let finish!: (response: Response) => void
+    const pending = new Promise<Response>(resolve => { finish = resolve })
+    vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
+      if (String(input) !== '/dsh-market/webdav') return fallback(input, init)
+      fetchCalls.push({ path: String(input), method: init!.method!, body: JSON.parse(String(init!.body)) })
+      return pending
+    })
+    render(<StrictMode><MarketSection {...props()} /></StrictMode>)
+    await openBackup()
+    expect(requests()).toHaveLength(1)
+    fireEvent.change(screen.getByPlaceholderText(en.webdavUrl), { target: { value: `${config.url}x` } })
+    fireEvent.change(screen.getByPlaceholderText(en.webdavUser), { target: { value: 'bob' } })
+    fireEvent.change(screen.getByPlaceholderText(en.webdavPassword), { target: { value: 'secret' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoBackup }))
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoBackup }))
+    expect(requests()).toHaveLength(1)
+    expect(localStorage.getItem('dshm-webdav-last')).toBeNull()
+    await act(async () => { finish(new Response(JSON.stringify({ ok: true }))) })
+    await screen.findByText(en.backupDone)
+    expect(localStorage.getItem('dshm-webdav-last')).toBe(String(now))
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoBackup }))
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoBackup }))
+    expect(requests()).toHaveLength(1)
+  })
+
+  it('does not start a backup when an enabled but empty URL is filled in', async () => {
+    localStorage.setItem('dshm-webdav', JSON.stringify({ ...config, url: '' }))
+    stubFetch({ '/dsh-market/webdav': { ok: true } })
+    const view = render(<MarketSection {...props()} />)
+    await openBackup()
+    expect(requests()).toHaveLength(0)
+    fireEvent.change(screen.getByPlaceholderText(en.webdavUrl), { target: { value: config.url } })
+    fireEvent.change(screen.getByPlaceholderText(en.webdavPassword), { target: { value: 'secret' } })
+    await act(async () => {})
+    expect(requests()).toHaveLength(0)
+    // The next opening still performs the due daily backup with saved settings.
+    view.unmount()
+    render(<MarketSection {...props()} />)
+    await openBackup()
+    expect(requests()).toHaveLength(1)
+    expect(requests()[0]?.body).toEqual({ action: 'backup', url: config.url, username: config.username, password: '' })
+  })
+
+  it('uses current settings when enabled and still supports manual upload and restore without storing passwords', async () => {
+    localStorage.setItem('dshm-webdav', JSON.stringify({ ...config, auto: false, password: 'old-secret' }))
+    const backup = {
+      format: 'dsh-profile-backup', version: 0.2,
+      files: [{ path: 'package.json', json: { dependencies: { 'webdav-plugin': '^1.0.0' } } }],
+    }
+    stubFetch({ '/dsh-market/webdav': { ok: true, backup }, '/dsh-market/restore': { ok: true } })
+    render(<MarketSection {...props()} />)
+    await openBackup()
+    expect((screen.getByPlaceholderText(en.webdavPassword) as HTMLInputElement).value).toBe('')
+    const editedUrl = 'https://dav.example/dsh/edited.json'
+    fireEvent.change(screen.getByPlaceholderText(en.webdavUrl), { target: { value: editedUrl } })
+    fireEvent.change(screen.getByPlaceholderText(en.webdavUser), { target: { value: 'bob' } })
+    fireEvent.change(screen.getByPlaceholderText(en.webdavPassword), { target: { value: 'session-secret' } })
+    expect(requests()).toHaveLength(0)
+    expect(JSON.parse(localStorage.getItem('dshm-webdav')!)).toEqual({ url: editedUrl, username: 'bob', auto: false })
+    fireEvent.click(screen.getByRole('checkbox', { name: en.autoBackup }))
+    await screen.findByText(en.backupDone)
+    const body = { action: 'backup', url: editedUrl, username: 'bob', password: 'session-secret' }
+    expect(requests().map(call => call.body)).toEqual([body])
+    expect(JSON.parse(localStorage.getItem('dshm-webdav')!)).toEqual({ url: editedUrl, username: 'bob', auto: true })
+    fireEvent.click(screen.getByRole('button', { name: en.webdavUpload }))
+    await waitFor(() => expect(screen.getByRole('button', { name: en.webdavUpload }).hasAttribute('disabled')).toBe(false))
+    expect(requests().map(call => call.body)).toEqual([body, body])
+    fireEvent.click(screen.getByRole('button', { name: en.webdavRestore }))
+    await screen.findByText('webdav-plugin')
+    expect(requests().at(-1)?.body).toEqual({ ...body, action: 'restore' })
+    expect(screen.getByRole('button', { name: en.restoreStart })).toBeTruthy()
+    expect(fetchCalls.some(call => call.path === '/dsh-market/restore')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: en.restoreStart }))
+    fireEvent.click(await screen.findByRole('button', { name: en.confirm, exact: true }))
+    await screen.findByText(en.restoreDone)
+    expect(fetchCalls.find(call => call.path === '/dsh-market/restore')?.body).toEqual({ backup })
+    expect(localStorage.getItem('dshm-webdav')).not.toContain('secret')
+  })
 })
 
 describe('search input scheduling', () => {
@@ -262,6 +413,77 @@ describe('api() base resolution (#345)', () => {
       url === '/app/my-dsh/dsh-market/changelog?name=dsh-loop')).toBe(true)
   })
 
+  describe('notes the market does not hold (#819)', () => {
+    const ZH_LOCALE = { active: 'zh' }
+    function openNotes(changelog: object, dict: Record<string, string> = en): Promise<HTMLElement> {
+      stubFetch({
+        '/dsh-market/installed': {
+          profile: 'web', installed: { 'dsh-codearts-auth': 'git+https://gitee.com/o/r.git' }, live: [], disabled: [], notes: {},
+        },
+        '/dsh-market/updates': {
+          updates: { 'dsh-codearts-auth': { kind: 'github', current: 'a'.repeat(40), latest: 'b'.repeat(40), updateAvailable: true } },
+        },
+        '/dsh-market/changelog': changelog,
+      })
+      const localized = dict === en ? {} : {
+        t: (key: string) => dict[key] ?? key,
+        locale: { subscribe: () => () => {}, getSnapshot: () => ZH_LOCALE },
+      }
+      render(<MarketSection {...props()} {...localized} preferredSubsectionId="installed" />)
+      return screen.findByRole('button', { name: new RegExp(dict.notesLink!) }).then((button) => {
+        fireEvent.click(button)
+        return button
+      })
+    }
+
+    it('says the market has none yet and links to the repository, instead of blaming the plugin', async () => {
+      await openNotes({ kind: 'source', reason: 'missing', sourceUrl: 'https://gitee.com/o/r' })
+      expect(await screen.findByText(new RegExp(en.notesSource))).toBeTruthy()
+      expect(screen.getByRole('link', { name: en.notesSourceLink }).getAttribute('href')).toBe('https://gitee.com/o/r')
+      expect(screen.queryByText(en.notesNone)).toBeNull()
+    })
+
+    it('says a non-GitHub source cannot be read, rather than that it is not collected yet', async () => {
+      // #819's actual case: the dialog on a gitee install. "not collected
+      // yet" reads as something that may arrive later, and for this source
+      // nothing ever will — the feed is built from GitHub.
+      await openNotes({ kind: 'source', reason: 'unreadable', sourceUrl: 'https://gitee.com/o/r' })
+      expect(await screen.findByText(new RegExp(en.notesSourceUnreadable))).toBeTruthy()
+      expect(screen.queryByText(new RegExp(en.notesSource))).toBeNull()
+      expect(screen.queryByText(new RegExp(en.notesLoadFail))).toBeNull()
+      expect(screen.getByRole('link', { name: en.notesSourceLink }).getAttribute('href')).toBe('https://gitee.com/o/r')
+    })
+
+    it('calls a failed load passing, and still links to the repository', async () => {
+      await openNotes({ kind: 'source', reason: 'unavailable', sourceUrl: 'https://gitee.com/o/r' })
+      expect(await screen.findByText(new RegExp(en.notesLoadFail))).toBeTruthy()
+      expect(screen.queryByText(new RegExp(en.notesSource))).toBeNull()
+      expect(screen.getByRole('link', { name: en.notesSourceLink })).toBeTruthy()
+    })
+
+    it('offers a next step when there is nothing to link to', async () => {
+      await openNotes({ kind: 'source', reason: 'missing', sourceUrl: null })
+      expect(await screen.findByText(new RegExp(en.notesSourceNoLink))).toBeTruthy()
+      expect(screen.queryByRole('link', { name: en.notesSourceLink })).toBeNull()
+    })
+
+    it('joins the two Chinese sentences without a space, and the English ones with one', async () => {
+      await openNotes({ kind: 'source', reason: 'missing', sourceUrl: null }, zh)
+      const zhLine = await screen.findByText(new RegExp(zh.notesSourceNoLink))
+      expect(zhLine.textContent).toBe(`${zh.notesSource}${zh.notesSourceNoLink}`)
+      cleanup()
+      await openNotes({ kind: 'source', reason: 'missing', sourceUrl: null })
+      const enLine = await screen.findByText(new RegExp(en.notesSourceNoLink))
+      expect(enLine.textContent).toBe(`${en.notesSource} ${en.notesSourceNoLink}`)
+    })
+
+    it('does not render a link that is not http(s)', async () => {
+      await openNotes({ kind: 'source', reason: 'missing', sourceUrl: 'javascript:alert(1)' })
+      expect(await screen.findByText(new RegExp(en.notesSourceNoLink))).toBeTruthy()
+      expect(screen.queryByRole('link', { name: en.notesSourceLink })).toBeNull()
+    })
+  })
+
   it('leaves no root-absolute endpoint anywhere in the client source', () => {
     // #345 has now been fixed twice. The first fix converted every endpoint
     // that existed; changelog and personal notes were written afterwards, as
@@ -323,6 +545,175 @@ describe('MarketSection (jsdom)', () => {
     expect(screen.getByText('dsh-notify')).toBeTruthy()
     // Theme entries carry an Install button too (discover tab shows all).
     expect(screen.getAllByRole('button', { name: en.install }).length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('hides host-incompatible plugins by default, and says how many it hid (#872)', async () => {
+    // The report measured the default list on a live 0.2.0-rc.2 host: 175
+    // discovered plugins, 45 declaring that host. The filter existed but was
+    // opt-in, so the default list was mostly entries that cannot be
+    // installed, with nothing at list level saying so.
+    stubFetch({
+      '/dsh-market/discovery-compatibility': {
+        hostVersion: '0.1.2-alpha.2',
+        plugins: {
+          'dsh-loop': { status: 'incompatible', basis: 'manifest', requirement: '^0.9.0', declarations: ['^0.9.0'] },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+
+    // The gated entry is gone; the ones that declare nothing stay (the
+    // filter hides what is CONFIRMED incompatible, not what is silent).
+    // The scan answers asynchronously, so the line that reports it is also
+    // the signal that the filter has been applied.
+    await waitFor(() => { if (!document.body.textContent?.includes('Hidden') && !document.body.textContent?.includes('Hid')) throw new Error('x') }, { timeout: 2000 }).catch(() => {})
+    expect(await screen.findByText(en.hostFilterActive.replace('{0}', '0.1.2-alpha.2').replace('{1}', '1'))).toBeTruthy()
+    expect(screen.queryByText('dsh-loop')).toBeNull()
+    expect(screen.getByText('dsh-notify')).toBeTruthy()
+
+    // Turning it off brings the entry back AND sticks: a user who disagreed
+    // with the default must not be argued with on every page load.
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(await screen.findByText(en.hostAll))
+    await waitFor(() => expect(screen.getByText('dsh-loop')).toBeTruthy())
+    expect(localStorage.getItem('dshm-host-filter')).toBe('all')
+  })
+
+  it('reuses host-compatibility results across remounts so the sidebar page does not rescan (#846)', async () => {
+    stubFetch({
+      '/dsh-market/discovery-compatibility': {
+        hostVersion: '0.1.2-alpha.2',
+        plugins: {
+          'dsh-loop': { status: 'incompatible', basis: 'manifest', requirement: '^0.9.0', declarations: ['^0.9.0'] },
+        },
+      },
+    })
+    const note = en.hostFilterActive.replace('{0}', '0.1.2-alpha.2').replace('{1}', '1')
+    const { unmount } = render(<MarketSection {...props()} />)
+    expect(await screen.findByText(note)).toBeTruthy()
+    const callsBeforeRemount = fetchCalls.filter(call => call.path.includes('discovery-compatibility')).length
+    expect(callsBeforeRemount).toBeGreaterThan(0)
+    unmount()
+    const marked = fetchCalls.length
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(note)).toBeTruthy()
+    expect(screen.queryByText('dsh-loop')).toBeNull()
+    expect(
+      fetchCalls.slice(marked).filter(call => call.path.includes('discovery-compatibility')),
+      'remount must not POST discovery-compatibility again for names already scanned',
+    ).toEqual([])
+  })
+
+  it('keeps update badges painted across remounts so the sidebar entry matches settings (#846)', async () => {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web',
+        installed: { 'dsh-loop': '^1.0.0' },
+        live: ['dsh-loop'],
+        disabled: [],
+        notes: {},
+      },
+      '/dsh-market/updates': {
+        updates: {
+          'dsh-loop': {
+            kind: 'npm', version: '1.0.0', current: '1.0.0', latest: '1.2.0', updateAvailable: true,
+          },
+        },
+      },
+    })
+    const { unmount } = render(<MarketSection {...props()} />)
+    expect(await screen.findByRole('button', { name: /Update all \(1\)/ })).toBeTruthy()
+    unmount()
+    // No network yet — the button must still come from the shared cache, not
+    // wait on /dsh-market/updates the way an empty remount used to.
+    render(<MarketSection {...props()} />)
+    expect(screen.getByRole('button', { name: /Update all \(1\)/ })).toBeTruthy()
+  })
+
+  it('keeps the header package version across remounts (#846)', async () => {
+    stubFetch({ '/dsh-market/status': { active: false, pnpm: true, boot: 'boot-1', restart: true, installed: {}, version: '1.66.28' } })
+    const { unmount } = render(<MarketSection {...props()} />)
+    expect(await screen.findByText('v1.66.28')).toBeTruthy()
+    unmount()
+    render(<MarketSection {...props()} />)
+    expect(screen.getByText('v1.66.28')).toBeTruthy()
+  })
+
+  it('drops host-compatibility results when the host version changes (#846)', async () => {
+    stubFetch({
+      '/dsh-market/registry': { source: 'live', registry: REGISTRY, hostVersion: '0.1.2-alpha.2' },
+      '/dsh-market/discovery-compatibility': {
+        hostVersion: '0.1.2-alpha.2',
+        plugins: {
+          'dsh-loop': { status: 'incompatible', basis: 'manifest', requirement: '^0.9.0', declarations: ['^0.9.0'] },
+        },
+      },
+    })
+    const { unmount } = render(<MarketSection {...props()} />)
+    expect(await screen.findByText(en.hostFilterActive.replace('{0}', '0.1.2-alpha.2').replace('{1}', '1'))).toBeTruthy()
+    expect(screen.queryByText('dsh-loop')).toBeNull()
+    const compatBefore = fetchCalls.filter(call => call.path.includes('discovery-compatibility')).length
+    unmount()
+    stubFetch({
+      '/dsh-market/registry': { source: 'live', registry: REGISTRY, hostVersion: '0.2.0-rc.2' },
+      '/dsh-market/discovery-compatibility': {
+        hostVersion: '0.2.0-rc.2',
+        plugins: {
+          'dsh-loop': { status: 'compatible', basis: 'manifest', requirement: '*', declarations: ['*'] },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(en.hostFilterActive.replace('{0}', '0.2.0-rc.2').replace('{1}', '0'))).toBeTruthy()
+    expect(screen.getByText('dsh-loop')).toBeTruthy()
+    expect(fetchCalls.filter(call => call.path.includes('discovery-compatibility')).length).toBeGreaterThan(0)
+    expect(compatBefore).toBeGreaterThan(0)
+  })
+
+  it('finishes the host-filter note after a remount mid-scan instead of freezing on 「正在检查」(#846)', async () => {
+    // Unmounting mid-flight used to drop setStates while names stayed
+    // "requested" — the next mount skipped them and froze at e.g. 665/2455.
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let calls = 0
+    const compatBody = {
+      hostVersion: '0.1.2-alpha.2',
+      plugins: {
+        'pkg-a': { status: 'compatible', basis: 'manifest', requirement: '*', declarations: ['*'] },
+        'pkg-b': { status: 'incompatible', basis: 'manifest', requirement: '^9.0.0', declarations: ['^9.0.0'] },
+      },
+    }
+    stubFetch({
+      '/dsh-market/registry': {
+        source: 'live', hostVersion: '0.1.2-alpha.2',
+        registry: {
+          ...REGISTRY,
+          count: 2,
+          plugins: [
+            { name: 'pkg-a', owner: 'a', url: 'https://github.com/a/a', category: 'tools', npm: 'pkg-a', stars: 1, added: '2026-08-01', description: { en: 'A', zh: 'A' }, install: '' },
+            { name: 'pkg-b', owner: 'b', url: 'https://github.com/b/b', category: 'tools', npm: 'pkg-b', stars: 1, added: '2026-08-01', description: { en: 'B', zh: 'B' }, install: '' },
+          ],
+        },
+      },
+    })
+    const baseFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input).split('?')[0] ?? ''
+      if (path.endsWith('/dsh-market/discovery-compatibility')) {
+        calls += 1
+        if (calls === 1) await gate
+        return new Response(JSON.stringify(compatBody), { status: 200 })
+      }
+      return baseFetch(input, init)
+    })
+    const { unmount } = render(<MarketSection {...props()} />)
+    await screen.findByText('pkg-a')
+    await waitFor(() => expect(calls).toBeGreaterThanOrEqual(1))
+    unmount()
+    render(<MarketSection {...props()} />)
+    await act(async () => { release() })
+    expect(await screen.findByText(en.hostFilterActive.replace('{0}', '0.1.2-alpha.2').replace('{1}', '1'))).toBeTruthy()
+    expect(screen.queryByText(/Checking host requirements|正在检查宿主要求/)).toBeNull()
   })
 
   it('opens Discover with the host-provided plugin query', async () => {
@@ -404,6 +795,32 @@ describe('MarketSection (jsdom)', () => {
    * with no underline meant nothing said so until the cursor was already on
    * it. The link now carries a GitHub mark and names its destination, so it
    * is findable without hovering every card to look for one. */
+  it('shows the mapped product name on a subdirectory card and install dialog without changing its target', async () => {
+    const plugin = {
+      name: 'dsh-plugin-compat-check#plugin', owner: 'lcy0121',
+      npm: 'dsh-plugin-compat-check', category: 'tools',
+      url: 'https://github.com/lcy0121/dsh-plugin-compat-check/tree/main/plugin',
+      description: { en: 'Installed-plugin compatibility checks' }, install: '', added: '2026-10-17',
+    }
+    stubFetch({
+      '/dsh-market/registry': { source: 'live', registry: { ...REGISTRY, plugins: [plugin] } },
+      '/dsh-market/install': { cancelled: true },
+    })
+    render(<MarketSection {...props()} />)
+    const links = await screen.findAllByRole('link', { name: `${plugin.name} — ${en.repoLink}` })
+    for (const link of links) {
+      expect(link.textContent?.trim()).toBe('dsh-plugin-compat-check')
+      expect(link.getAttribute('title')).toBe('dsh-plugin-compat-check#plugin')
+      expect(link.getAttribute('href')).toBe('https://github.com/lcy0121/dsh-plugin-compat-check/tree/main/plugin')
+    }
+    fireEvent.click(screen.getAllByRole('button', { name: en.install, exact: true })[0]!)
+    expect(await screen.findByRole('dialog', { name: `${en.confirmTitle} dsh-plugin-compat-check?` })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.confirmInstall }))
+    await waitFor(() => expect(fetchCalls.find(call => call.path === '/dsh-market/install')?.body).toEqual({
+      url: 'https://github.com/lcy0121/dsh-plugin-compat-check/tree/main/plugin',
+    }))
+  })
+
   it('gives every card title a visible, named link to its repository', async () => {
     render(<MarketSection {...props()} />)
     await screen.findByText('dsh-loop')
@@ -428,6 +845,21 @@ describe('MarketSection (jsdom)', () => {
         expect(link.getAttribute('href')).toBe(plugin.url)
       }
     }
+  })
+
+  it('shows why an export failed instead of only the status code (#55)', async () => {
+    // kettly1260 saw "Error: HTTP 500" and could not tell what to do. The route
+    // had answered with the reason; the download dropped it.
+    stubFetch({
+      '/dsh-market/backup': { __status: 500, error: '这个 profile 的配置文件超过 256 个，整份备份放不下。可以只导出选中的插件。' },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: en.tabAdvanced }))
+    fireEvent.click(await screen.findByRole('button', { name: en.backupDownload }))
+    const banner = await screen.findByText(/配置文件超过 256 个/)
+    expect(banner.textContent).toContain(en.backupExportFailed)
+    expect(screen.queryByText(/HTTP 500/)).toBeNull()
   })
 
   it('groups Backup & Restore and Diagnostics under an Advanced tab, not as top-level peers', async () => {
@@ -828,7 +1260,11 @@ describe('MarketSection (jsdom)', () => {
     expect(foot?.textContent).toContain(en.terminalCautionStartup)
   })
 
-  it('still shows the startup line when only the description mentions a CLI (#739)', async () => {
+  it('still shows the startup line when the description claims a CLI surface (#739, #931)', async () => {
+    // #739 pinned "a description mentioning a CLI counts". #931 showed that
+    // rule fires on web plugins whose repository happens to ship a CLI too,
+    // so the evidence is now a phrase that asserts THIS plugin's surface —
+    // here "CLI-only" instead of the old bare "Supports a CLI flag".
     stubFetch({
       '/dsh-market/registry': {
         source: 'live',
@@ -839,7 +1275,7 @@ describe('MarketSection (jsdom)', () => {
           plugins: [{
             name: 'note-tool', owner: 'alice', url: 'https://github.com/alice/note-tool',
             category: 'tools', npm: null, stars: 1, added: '2026-08-01',
-            description: { en: 'Supports a CLI flag', zh: '支持命令行参数' }, install: 'dsh plugin install note-tool',
+            description: { en: 'A CLI-only note tool', zh: '命令行工具，管理笔记' }, install: 'dsh plugin install note-tool',
           }],
         },
       },
@@ -1395,6 +1831,86 @@ describe('MarketSection (jsdom)', () => {
     })
   })
 
+  it('shows a fresh release as waiting instead of offering a failing update (#945)', async () => {
+    // The official Desktop cannot bypass minimumReleaseAge, so an update
+    // offered inside the window is a button that fails by construction. The
+    // row says when it opens instead.
+    const until = new Date(Date.now() + 5 * 3_600_000).toISOString()
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': {
+        updates: {
+          'dsh-loop': {
+            kind: 'npm', version: '1.0.0', current: '1.0.0', latest: '1.2.0',
+            updateAvailable: false, heldUpdate: { latest: '1.2.0', until },
+          },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+
+    expect(await screen.findByText(en.updateHeldTag)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.update })).toBeNull()
+  })
+
+  it('marks a hold the registry could not timestamp as estimated (#961)', async () => {
+    // Mid-sync the mirror answers /latest but not the packument entry; the
+    // market holds anyway and says it is a guess, rather than claiming a
+    // window it cannot know.
+    const until = new Date(Date.now() + 25 * 60_000).toISOString()
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': {
+        updates: {
+          'dsh-loop': {
+            kind: 'npm', version: '1.0.0', current: '1.0.0', latest: '1.2.0',
+            updateAvailable: false, heldUpdate: { latest: '1.2.0', until, estimated: true },
+          },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+
+    const tag = await screen.findByText(en.updateHeldTag)
+    expect(tag.getAttribute('title')).toMatch(/mirror|镜像/)
+    expect(tag.getAttribute('title')).toMatch(/minute|分钟/)
+    expect(screen.queryByRole('button', { name: en.update })).toBeNull()
+  })
+
+  it('names a newer prerelease instead of "up to date", and installs that exact version (#867)', async () => {
+    // The pinned install is AHEAD of npm's `latest` (0.2.1-alpha.2 vs
+    // 0.1.5-alpha.2), which means the reader follows a line `latest` does not
+    // name. "Up to date" is true against the tag and false for them, so the
+    // card says which build their line published and leaves the click to them.
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '0.2.1-alpha.2' }, live: [] },
+      '/dsh-market/updates': {
+        updates: {
+          'dsh-loop': {
+            kind: 'npm', version: '0.2.1-alpha.2', current: '0.2.1-alpha.2',
+            latest: '0.1.5-alpha.2', updateAvailable: false, newerPrerelease: '0.2.1-alpha.4',
+          },
+        },
+      },
+      '/dsh-market/update': { ok: true, activation: {} },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    expect(await screen.findByText(re(en.newerPrereleaseAvailable.replace('{0}', '0.2.1-alpha.4')))).toBeTruthy()
+    expect(screen.queryByText(en.upToDate)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.install }))
+    await waitFor(() => {
+      const update = fetchCalls.find(call => call.path === '/dsh-market/update')
+      expect(update, 'the install never asked the update route').toBeTruthy()
+      expect(update!.body).toMatchObject({ name: 'dsh-loop', compatVersion: '0.2.1-alpha.4' })
+    })
+  })
+
   it('re-enables Restart now when a completed update leaves the last status poll busy (#440)', async () => {
     vi.useFakeTimers()
     try {
@@ -1463,6 +1979,45 @@ describe('MarketSection (jsdom)', () => {
     }
   })
 
+  it('labels a plugin loaded by the user\'s own setup as such, not as inactive (#813)', async () => {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [],
+        activation: { 'dsh-loop': { state: 'inert', loadedByProfile: true, hot: false, bundle: true, reasons: ['loaded by your setup'] } },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    // A fact about where it comes from, not news: no warning chip, and the
+    // reason stays one click away like every non-live row's.
+    await screen.findByText(en.actWhy)
+    expect(screen.queryByText(en.stateInert)).toBeNull()
+    expect(screen.queryByText(re(en.restartBanner))).toBeNull()
+  })
+
+  it('does not list a plain dependency as a plugin, nor offer to uninstall it (#857)', async () => {
+    // The reported shape: zustand / bufferutil / utf-8-validate sit in
+    // node_modules because other plugins need them, and the installed list
+    // rendered each one as a card whose uninstall button really removes it.
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-loop': '^1.0.0', zustand: '^5.0.15' }, live: [], disabled: [],
+        activation: {
+          'dsh-loop': { state: 'live', hot: true, bundle: true, reasons: ['live via its bundle patch'] },
+          zustand: { state: 'inert', dependencyOf: 'dsh-loop', hot: false, bundle: false, reasons: ['a plain dependency with no dsh metadata'] },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    // Counted, so a shorter list does not read as packages going missing...
+    await screen.findByText(en.installedDependencyNote.replace('{0}', '1'))
+    // ...but not listed, and therefore with no uninstall path to find.
+    expect(screen.queryByText('zustand')).toBeNull()
+  })
+
   it('a stale update response arms the Update-now button (#22 flow)', async () => {
     stubFetch({
       '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
@@ -1496,6 +2051,37 @@ describe('MarketSection (jsdom)', () => {
     const banner = await screen.findByText(/ERR_PNPM_PREPARE_PACKAGE/)
     expect(banner).toBeTruthy()
     expect(banner.textContent).toContain('dsh-loop')
+  })
+
+  it('shows the route\'s sentence whole — the old 600-character tail cut its Chinese half off (#848)', async () => {
+    // The market writes its diagnosis as one bilingual sentence: Chinese
+    // first, then English. The row kept the LAST 600 characters of what it
+    // had, so a message longer than that arrived as its English tail with the
+    // half a Chinese reader needs already gone — for the classifier's
+    // `unused-patch` sentence (771 characters) the Chinese was cut inside its
+    // first clause, and with it the two ways out.
+    // Referentially stable, like LOCALE_SNAPSHOT: useSyncExternalStore reads a
+    // fresh object as a change on every render and loops until React throws.
+    const ZH = { active: 'zh' }
+    const message = 'profile 里的 pnpm 补丁有一条已经用不上了（dsh-loop@1.1.0）：patchedDependencies 是按「包名@精确版本」钉的，而这次要装的版本已经越过它，pnpm 12 因此判定整条命令失败——它什么都没写，所以看起来像「点了更新没反应」。要么把补丁更新到新版本、并把 profile package.json 里 pnpm.patchedDependencies 的键改成「包名@新版本」，要么在新版本已经自带这个修复时直接删掉这一条和对应的补丁文件 / a pnpm patch in this profile is no longer used (dsh-loop@1.1.0): patchedDependencies keys on "package@exactVersion", and the version being installed has moved past that key, so pnpm 12 fails the WHOLE command and writes nothing at all — which is why the update looks like it simply did not apply. Either retarget the patch to the new version and change its pnpm.patchedDependencies key in the profile\'s package.json to "package@newVersion", or — when the new release already carries that fix — drop the entry and its patch file'
+    // Meaningful only while the message is longer than the window that used to
+    // clip it: shorten the fixture and this test stops testing anything.
+    expect(message.length).toBeGreaterThan(600)
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': { kind: 'npm', current: '1.0.0', latest: '1.2.0', updateAvailable: true } } },
+      '/dsh-market/update': { ok: false, error: message, stderr: 'ERR_PNPM_UNUSED_PATCH\n    at resolveDependencies2 (pnpm.mjs:177458:5)' },
+    })
+    render(<MarketSection {...props()} locale={{ subscribe: () => () => {}, getSnapshot: () => ZH }} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    fireEvent.click(await screen.findByRole('button', { name: en.update }))
+
+    // The opening clause AND the clause that says what to do: a tail clip kept
+    // neither, and the row must not fall back to pnpm's stack either.
+    const shown = await screen.findByText(/pnpm 补丁有一条已经用不上了/)
+    expect(shown.textContent).toContain('直接删掉这一条和对应的补丁文件')
+    expect(shown.textContent).not.toContain('resolveDependencies2')
   })
 
   it('a busy-agent update response queues instead of naming the running agent', async () => {
@@ -1537,6 +2123,79 @@ describe('MarketSection (jsdom)', () => {
       expect(panel!.textContent).toContain(en.opQueued)
     })
     expect(screen.queryByText(en.busyWait)).toBeNull()
+  })
+
+  it.each(['update', 'uninstall'] as const)('confirms a queued %s only after the risk modal, without leaking consent (#779)', async kind => {
+    for (const wording of ['会话', '中途报错', '取消']) expect(zh.agentsRunningRisk).toContain(wording)
+    for (const wording of ['sessions', 'fail mid-turn', 'Cancel']) expect(en.agentsRunningRisk).toContain(wording)
+    const path = `/dsh-market/${kind}`
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': { kind: 'npm', current: '1.0.0', latest: '1.2.0', updateAvailable: true } } },
+      '/dsh-market/status': { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: {}, runningAgents: ['main'] },
+      [path]: { ok: false, agentsBusy: true, runningAgents: ['main'], __status: 409 },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    if (kind === 'update') {
+      fireEvent.click(await screen.findByRole('button', { name: en.update }))
+    } else {
+      await openRowMenu('dsh-loop')
+      fireEvent.click(await screen.findByRole('menuitem', { name: en.uninstall }))
+      fireEvent.click(await screen.findByRole('button', { name: en.uninstall }))
+    }
+    const posts = () => fetchCalls.filter(call => call.path === path && call.method === 'POST')
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(posts()[0]!.body).toEqual({ name: 'dsh-loop' })
+    const label = kind === 'update' ? en.opUpdateNow : en.opUninstallNow
+    fireEvent.click(await screen.findByRole('button', { name: label }))
+    const dialog = await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+    expect(within(dialog).getByText(en.agentsRunningRisk)).toBeTruthy()
+    expect(posts()).toHaveLength(1)
+    fireEvent.click(within(dialog).getByRole('button', { name: en.cancel }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: re(en.agentsRunningConfirm) })).toBeNull())
+    expect(posts()).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    const reopened = await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+    fireEvent.click(within(reopened).getByRole('button', { name: label }))
+    await waitFor(() => expect(posts()).toHaveLength(2))
+    expect(posts()[1]!.body).toEqual({ name: 'dsh-loop', confirmAgentsRunning: true })
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('dshm-queue-v1') ?? '[]')).toEqual([
+      expect.objectContaining({ kind, name: 'dsh-loop' }),
+    ]))
+    expect(localStorage.getItem('dshm-queue-v1')).not.toContain('confirmAgentsRunning')
+    // Even a re-queued confirmed request needs a new decision next time.
+    fireEvent.click(await screen.findByRole('button', { name: label }))
+    await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+    expect(posts()).toHaveLength(2)
+  })
+
+  it('preserves queued update force, restore and compatVersion through busy confirmation (#779)', async () => {
+    const updateOptions = { force: true, restore: true, compatVersion: '1.1.0' }
+    localStorage.setItem('dshm-queue-v1', JSON.stringify([{ kind: 'update', name: 'dsh-loop', updateOptions }]))
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': 'link:../dsh-loop' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': { kind: 'linked', updateAvailable: false } } },
+      '/dsh-market/status': { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: {}, runningAgents: ['main'] },
+      '/dsh-market/update': { ok: true, activation: {} },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findAllByText('dsh-loop')
+    const runNow = await screen.findByRole('button', { name: en.opUpdateNow })
+    expect(JSON.parse(localStorage.getItem('dshm-queue-v1') ?? '[]')).toEqual([
+      expect.objectContaining({ kind: 'update', name: 'dsh-loop', updateOptions }),
+    ])
+    expect(localStorage.getItem('dshm-queue-v1')).not.toContain('confirmAgentsRunning')
+    fireEvent.click(runNow)
+    const dialog = await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+    expect(fetchCalls.filter(call => call.path === '/dsh-market/update')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: en.opUpdateNow }))
+    await waitFor(() => expect(fetchCalls).toContainEqual({
+      path: '/dsh-market/update', method: 'POST',
+      body: { name: 'dsh-loop', ...updateOptions, confirmAgentsRunning: true },
+    }))
   })
 
   it('queues an install when agents are busy instead of failing it', async () => {
@@ -1603,11 +2262,7 @@ describe('MarketSection (jsdom)', () => {
     })
   })
 
-  it('answers "run now" with what is in the way instead of doing nothing (#752)', async () => {
-    // Sending it anyway came back 409, the handler re-queued the record, and
-    // the panel was pixel-identical before and after: the one button on that
-    // row read as broken. The guard is a thing we can see, so the click says
-    // so — and the row stays queued for the drain that will really run it.
+  it('retries a legacy busy-agent install on "run now" without risk confirmation (#779)', async () => {
     const fetchMock = vi.fn((input: unknown, init?: RequestInit) => {
       const path = String(input).split('?')[0]
       const method = (init?.method ?? 'GET').toUpperCase()
@@ -1648,16 +2303,85 @@ describe('MarketSection (jsdom)', () => {
 
       fireEvent.click(runNow)
 
-      // It says what is in the way, naming how many sessions…
-      const banner = await screen.findByText(en.queuedRunBlocked.replace('{0}', '2'))
-      expect(banner).toBeTruthy()
-      // …and it does not pretend to try: no second POST, and the row is still
-      // queued (the drain owns it, and will run it when they go idle).
-      const after = fetchMock.mock.calls.filter(([url, init]) =>
+      await waitFor(() => expect(fetchMock.mock.calls.filter(([url, init]) =>
         String(url).endsWith('/dsh-market/install') && (init?.method ?? 'GET').toUpperCase() === 'POST',
-      ).length
-      expect(after).toBe(before)
+      )).toHaveLength(before + 1))
+      expect(screen.queryByRole('dialog', { name: re(en.agentsRunningConfirm) })).toBeNull()
+      expect(screen.queryByText(en.queuedRunBlocked.replace('{0}', '2'))).toBeNull()
       expect(document.querySelector('[class*="opPanel"]')!.textContent).toContain(en.opQueued)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not refuse "run now" with the busy sample from the operation that just ended (#845 review)', async () => {
+    // liuwenji007's finding on #845: the settle branch cleared `hostBusy` but
+    // left `statusRef.current.busy` as sampled DURING that operation, and
+    // #845's own change removed the idle poll that used to correct it within
+    // 2 s. The reproducer's shape: finish an update, queue the next one while
+    // an agent is running, click 立即执行 — and be told 「另一个安装、更新或卸载还在进行」
+    // about a host that is idle (clicking again 2 s later works, because the
+    // drain's next tick refreshes the ref).
+    let statusCalls = 0
+    let installPosts = 0
+    const fetchMock = vi.fn((input: unknown, init?: RequestInit) => {
+      const path = String(input).split('?')[0]
+      const method = (init?.method ?? 'GET').toUpperCase()
+      const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
+      if (path === '/dsh-market/registry') return json({ source: 'live', registry: REGISTRY, hostVersion: '0.1.2-alpha.2' })
+      if (path === '/dsh-market/installed') return json({ profile: 'web', installed: {}, live: [], disabled: [], groups: {}, groupOrder: [], favorites: [], blocked: [] })
+      if (path === '/dsh-market/updates') return json({ updates: {} })
+      if (path === '/dsh-market/status') {
+        statusCalls += 1
+        // The only sample that ever lands is the one taken WHILE the install
+        // runs. Everything after that hangs, so nothing can quietly refresh
+        // the ref — which is the state the report describes.
+        return statusCalls === 1
+          ? json({ active: true, busy: true, pnpm: true, boot: 'boot-1', restart: true, installed: {} })
+          : new Promise<Response>(() => { /* no further sample */ })
+      }
+      if (path === '/dsh-market/install' && method === 'POST') {
+        installPosts += 1
+        if (installPosts === 1) {
+          // Slow enough that the 2 s progress poll samples it, then it settles
+          // on its own response.
+          return new Promise<Response>(resolve => {
+            setTimeout(() => resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })), 2300)
+          })
+        }
+        if (installPosts === 2) {
+          // The second install is refused because a session is running, so its
+          // row goes to the queue with a 立即执行 button.
+          return json({ ok: false, agentsBusy: true, runningAgents: ['session-a'], error: 'agents are running' }, 409)
+        }
+        return json({ ok: true })
+      }
+      return Promise.reject(new Error(`unstubbed fetch: ${String(input)}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      localStorage.clear()
+      render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+
+      // One install, sampled busy while it runs, settled by its own response.
+      fireEvent.click(screen.getAllByRole('button', { name: en.install })[0]!)
+      fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+      await waitFor(() => expect(statusCalls).toBeGreaterThan(0), { timeout: 5000 })
+      // Let the install settle (its own response, 2.3 s) — the card's button
+      // is disabled until then, which is why the next click waits.
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 2600)) })
+
+      // The next one is refused for the running session -> queued row.
+      fireEvent.click(screen.getAllByRole('button', { name: en.install })[1]!)
+      fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+      const runNow = await screen.findByRole('button', { name: en.opRunNow }, { timeout: 5000 })
+
+      const before = installPosts
+      fireEvent.click(runNow)
+
+      await waitFor(() => expect(installPosts).toBe(before + 1))
+      expect(screen.queryByText(en.queuedRunBusy)).toBeNull()
     } finally {
       vi.unstubAllGlobals()
     }
@@ -1798,7 +2522,7 @@ describe('MarketSection (jsdom)', () => {
     }
   })
 
-  it('drains a queued install once agents go idle', async () => {
+  it('drains a queued install even while agents remain busy (#779)', async () => {
     // NOTE: no fake timers here — the drain fires on a real 2s interval and
     // the install POST resolves on the microtask queue. Fake timers freeze
     // the real-interval drain while waitFor's own timers fight it.
@@ -1817,15 +2541,15 @@ describe('MarketSection (jsdom)', () => {
       if (path === '/dsh-market/status') {
         return Promise.resolve(new Response(JSON.stringify({
           active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: {},
-          runningAgents: [],
+          runningAgents: ['main'],
         }), { status: 200 }))
       }
       if (path === '/dsh-market/install' && method === 'POST') {
         const count = fetchMock.mock.calls.filter(([url, init]) =>
           String(url).endsWith('/dsh-market/install') && (init?.method ?? 'GET').toUpperCase() === 'POST',
         ).length
-        // First attempt: the agent is still busy, so the host refuses and the
-        // record queues. The drain then refetches /status (idle) and retries.
+        // A legacy host can still refuse; the drain retries the install even
+        // while /status continues reporting the running agent.
         if (count === 1) {
           return Promise.resolve(new Response(JSON.stringify({
             ok: false, agentsBusy: true, runningAgents: ['main'], error: 'agents are running',
@@ -1849,7 +2573,7 @@ describe('MarketSection (jsdom)', () => {
         const panel = document.querySelector('[class*="opPanel"]')
         expect(panel!.textContent).toContain(en.opQueued)
       })
-      // …agents go idle, the drain fires and the install succeeds.
+      // …the drain fires and the install succeeds without waiting for idle.
       // (A non-hot success needs a refresh, so the record reads
       // "Installed · refresh the page to apply", not "Done".)
       await waitFor(() => {
@@ -1864,6 +2588,28 @@ describe('MarketSection (jsdom)', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('leaves an idle page alone — no /status poll without a queued record (#838)', async () => {
+    // The drain's own comment has always claimed "an idle page makes no
+    // requests", and the loop fetched /status on every tick before asking
+    // whether anything was queued: an open market tab polled the host every
+    // 2 s for as long as it stayed open, with nothing to drain. Real timers,
+    // as in the test above — the loop runs on a real interval and fake ones
+    // would freeze it. The two drain tests above are the other half of this
+    // assertion: with a record queued, the loop still fires.
+    stubFetch()
+    localStorage.clear()
+    render(<MarketSection {...props()} />)
+    await screen.findAllByText('dsh-loop')
+    const statusCalls = () => fetchCalls.filter(call => call.path === '/dsh-market/status').length
+    // Let the mount settle before sampling, so a late first load cannot be
+    // mistaken for a tick of the drain.
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const atRest = statusCalls()
+    // Longer than one 2 s interval, so an ungated loop would have fired.
+    await new Promise(resolve => setTimeout(resolve, 2600))
+    expect(statusCalls()).toBe(atRest)
   })
 
   it('keeps a queued install across remounts via localStorage', async () => {
@@ -1899,6 +2645,105 @@ describe('MarketSection (jsdom)', () => {
     expect(JSON.parse(localStorage.getItem('dshm-queue-v1') ?? '[]')).toHaveLength(1)
   })
 
+  describe('finished operations across a reload', () => {
+    /** The Install button on one card, found by walking up from its name. */
+    const installButtonOf = (name: string) => {
+      let card: HTMLElement | null = screen.getByText(name)
+      while (card !== null && within(card).queryAllByRole('button', { name: en.install }).length === 0) {
+        card = card.parentElement
+      }
+      return within(card!).getAllByRole('button', { name: en.install })[0]!
+    }
+
+    /**
+     * A failed install is the row a reload used to eat: the card is back to
+     * "Install", the plugin is not in Installed (the host rolled it back), and
+     * the approval that was the only way forward disappeared with the row.
+     */
+    const failedInstall = {
+      id: 'op-4',
+      kind: 'install',
+      name: 'dsh-loop',
+      url: 'https://github.com/alice/dsh-loop',
+      state: 'failed',
+      reason: 'pnpm refused to run node-pty build scripts',
+      blockedBuilds: ['node-pty'],
+    }
+
+    it('restores a failed install row with its way out after a reload', async () => {
+      localStorage.setItem('dshm-settled-v1', JSON.stringify([failedInstall]))
+      stubFetch({
+        '/dsh-market/install': { ok: true, hot: false },
+        '/dsh-market/approve-builds': { ok: true, approved: ['node-pty'] },
+      })
+      render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+      // The card keeps the marker it had before the reload...
+      expect(await screen.findByRole('button', { name: en.opBlockedCard })).toBeTruthy()
+      // ...but the panel is not opened for the user; the row waits behind it.
+      expect(document.querySelector('[class*="opPanel"]')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel!.textContent).toContain('dsh-loop')
+      expect(panel!.textContent).toContain(failedInstall.reason)
+      // The way out travels with the record: one click approves and retries.
+      fireEvent.click(within(panel as HTMLElement).getByRole('button', { name: en.approveBuilds }))
+      await waitFor(() => {
+        expect(fetchCalls.some(call => call.path === '/dsh-market/approve-builds')).toBe(true)
+        expect(fetchCalls.some(call => call.path === '/dsh-market/install' && call.method === 'POST')).toBe(true)
+      })
+    })
+
+    it('ignores an unusable stored history without crashing or inventing a row', async () => {
+      localStorage.setItem('dshm-settled-v1', '{not json')
+      render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+      // The entry stays quiet, and opening it shows the ordinary empty state.
+      fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel!.textContent).toContain(en.opEmpty)
+      // The bad value is dropped instead of being re-parsed on every mount.
+      expect(localStorage.getItem('dshm-settled-v1')).toBeNull()
+    })
+
+    it('restores a finished row without re-asking for a refresh already taken', async () => {
+      localStorage.setItem('dshm-settled-v1', JSON.stringify([{
+        id: 'op-2', kind: 'update', name: 'dsh-loop', state: 'done', needsRefresh: true,
+      }]))
+      render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+      fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel!.textContent).toContain('dsh-loop')
+      expect(panel!.textContent).toContain(en.opDone)
+      // The reload already applied the change; offering Refresh would loop.
+      expect(within(panel as HTMLElement).queryByRole('button', { name: en.refresh })).toBeNull()
+    })
+
+    it('persists a row that finishes now, and clearing it empties the stored copy', async () => {
+      stubFetch({
+        '/dsh-market/install': {
+          ok: false, ignoredBuilds: ['node-pty'], error: 'blocked by pnpm', __status: 502,
+        },
+      })
+      render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+      fireEvent.click(installButtonOf('dsh-loop'))
+      fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+      // The failure is written the moment the row becomes terminal...
+      await waitFor(() => {
+        const stored = JSON.parse(localStorage.getItem('dshm-settled-v1') ?? '[]') as Array<Record<string, unknown>>
+        expect(stored).toHaveLength(1)
+        expect(stored[0]).toMatchObject({ state: 'failed', name: 'dsh-loop', blockedBuilds: ['node-pty'] })
+      })
+      // ...and "clear finished" empties it through the same records state.
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel, 'the failed row did not open the panel').toBeTruthy()
+      fireEvent.click(within(panel as HTMLElement).getByRole('button', { name: en.opClear }))
+      await waitFor(() => expect(localStorage.getItem('dshm-settled-v1')).toBeNull())
+    })
+  })
+
   it('shows a compatibility-risk banner after an update and rolls back on demand (#195)', async () => {
     const fetchMock = stubFetch({
       '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
@@ -1925,6 +2770,36 @@ describe('MarketSection (jsdom)', () => {
       expect(fetchMock.mock.calls.some(([url]) => url === '/dsh-market/rollback')).toBe(true)
     })
     expect(screen.queryByText(en.compatRiskBanner)).toBeNull()
+  })
+
+  it('reports a same-name row as informational, with no rollback (#913)', async () => {
+    // The #913 shape: the install mounts a second instance of an existing
+    // plugin name from a bundle patch. Both rows can load, so the banner must
+    // not promise that one wins, and nothing is armed for rollback.
+    const fetchMock = stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': { kind: 'npm', version: '1.0.0', current: '1.0.0', latest: '1.2.0', updateAvailable: true } } },
+      '/dsh-market/update': {
+        ok: true,
+        activation: { 'dsh-loop': { state: 'restart', hot: false, bundle: true, reasons: ['restart to apply'] } },
+        compatibility: {
+          code: 'soft-incompatible',
+          risks: [],
+          shadowedNames: [{ name: '@deepseek-ai/dsh-skill-filesystem', layers: ['bundle:dsh-base', 'bundle:dsh-loop'], count: 2 }],
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    fireEvent.click(await screen.findByRole('button', { name: en.update }))
+
+    expect(await screen.findByText(en.shadowNameBanner)).toBeTruthy()
+    // #913: the copy no longer claims only one of the two rows will load.
+    expect(en.shadowNameBanner).not.toContain('only one will load')
+    expect(screen.queryByRole('button', { name: en.rollbackNow })).toBeNull()
+    expect(screen.queryByText(en.rollbackUnavailable)).toBeNull()
+    expect(fetchMock.mock.calls.some(([url]) => url === '/dsh-market/rollback')).toBe(false)
   })
 
   it('does not offer a rollback action when the server could not capture an exact source', async () => {
@@ -2066,8 +2941,8 @@ describe('MarketSection (jsdom)', () => {
         registry: { updated: '', count: 2, categories: { tools: { en: 'Tools', zh: '工具' } }, plugins },
       },
     })
-    render(<MarketSection {...props()} />)
-    await screen.findByText('dsh-fresh')
+    const { container } = render(<MarketSection {...props()} />)
+    await waitFor(() => expect(rankedNames(container)).toContain('dsh-fresh'))
     expect(screen.getByText('dsh-stale')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en.filter }))
     fireEvent.click(screen.getByRole('menuitem', { name: en.timeWeek }))
@@ -2370,6 +3245,35 @@ describe('#60 enable/disable switches in the Installed tab', () => {
     expect(screen.queryByRole('switch')).toBeNull()
   })
 
+  it('shows a declared library as shared code, keeps updates, and explains uninstall consequences (#995)', async () => {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-shared': '^0.1.7' }, live: [], disabled: ['dsh-shared'],
+        groups: {}, groupOrder: [],
+        activation: {
+          'dsh-shared': { state: 'inert', library: true, reasons: ['供其他插件使用，无需启用 / for other plugins to use; no need to enable it'], bundle: false, hot: false },
+        },
+      },
+      '/dsh-market/updates': { updates: { 'dsh-shared': { kind: 'npm', version: '0.1.7', current: '0.1.7', latest: '0.1.8', updateAvailable: true } } },
+      '/dsh-market/update': { ok: true, activation: { 'dsh-shared': { state: 'inert', library: true, reasons: ['for other plugins to use'], bundle: false, hot: false } } },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    await screen.findByText('dsh-shared')
+
+    expect(screen.getByText('Library')).toBeTruthy()
+    expect(screen.getByText('Shared code for other plugins. No need to enable it.')).toBeTruthy()
+    expect(screen.queryByText(en.stateInert)).toBeNull()
+    expect(screen.queryByText(en.switchOnLabel)).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.update }))
+    expect(await screen.findByText('✓ Updated')).toBeTruthy()
+    expect(screen.queryByText(en.updated)).toBeNull()
+
+    await openCardUninstall()
+    expect(screen.getByText('Removing this library may stop plugins that use it from starting.')).toBeTruthy()
+  })
+
   it('never lists the market itself in the Installed tab — it manages itself from its own settings card', async () => {
     stubFetch({
       '/dsh-market/installed': {
@@ -2545,6 +3449,60 @@ describe('#60 enable/disable switches in the Installed tab', () => {
  * then uninstall and the page is level again, with nothing left for a
  * refresh to show, yet it kept asking. It was reporting session history,
  * not pending work. */
+describe("the host's own page for a plugin (dsh 0.2.1+)", () => {
+  /** One installed plugin, live, with the host offering its navigation service. */
+  function renderInstalled(navigation?: { openBundle: (name: string) => void }) {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web',
+        installed: { 'dsh-loop': '^1.0.0' },
+        live: ['dsh-loop'],
+        disabled: [],
+        groups: {},
+        groupOrder: [],
+      },
+    })
+    const store = createHostNavigation()
+    if (navigation !== undefined) store.attach(navigation)
+    const element = render(<MarketSection {...props()} hostNavigation={store} />)
+    return { ...element, store }
+  }
+
+  it('opens the bundle on the host when the service is there', async () => {
+    const opened: string[] = []
+    renderInstalled({ openBundle: name => opened.push(name) })
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    await openRowMenu('dsh-loop')
+    fireEvent.click(await screen.findByRole('menuitem', { name: en.openInHostPage }))
+    expect(opened).toEqual(['dsh-loop'])
+  })
+
+  it('offers nothing on a host that never provides the service', async () => {
+    // Every dsh before 0.2.1, and any host whose plugin manager is not
+    // mounted. An entry that cannot do anything is worse than no entry.
+    renderInstalled()
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    await openRowMenu('dsh-loop')
+    expect(screen.queryByRole('menuitem', { name: en.openInHostPage })).toBeNull()
+  })
+
+  it('offers it to a menu already on screen when the service arrives late', async () => {
+    // The manager's client half can load after this panel; a menu drawn from a
+    // setup-time snapshot would never show the action on a host that has it.
+    const opened: string[] = []
+    const { store } = renderInstalled()
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    await openRowMenu('dsh-loop')
+    expect(screen.queryByRole('menuitem', { name: en.openInHostPage })).toBeNull()
+    store.attach({ openBundle: name => opened.push(name) })
+    fireEvent.click(await screen.findByRole('menuitem', { name: en.openInHostPage }))
+    expect(opened).toEqual(['dsh-loop'])
+  })
+})
+
 describe('refresh banner falls back when the change is undone (#340)', () => {
   it('stops asking after the installed plugin is uninstalled again', async () => {
     let present: Record<string, string> = {}
@@ -3208,6 +4166,46 @@ describe('#60 catalog deprecation', () => {
 })
 
 describe('#60 groups view', () => {
+  it('labels an ungrouped declared library as a library (#995)', async () => {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-shared': '^0.1.7' }, live: [], disabled: [],
+        groups: {}, groupOrder: [],
+        activation: {
+          'dsh-shared': { state: 'inert', library: true, reasons: ['for other plugins to use'], bundle: false, hot: false },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    fireEvent.click(screen.getByRole('button', { name: en.tabGroups }))
+
+    const row = (await screen.findByText('dsh-shared')).closest('[class*="ungroupedRow"]') as HTMLElement
+    expect(within(row).getByText(en.stateLibrary)).toBeTruthy()
+    expect(within(row).queryByText(en.groupStateInert)).toBeNull()
+  })
+
+  it('does not offer library switches in a group (#995)', async () => {
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-loop': '^1.0.0', 'dsh-shared': '^0.1.7' },
+        live: ['dsh-loop'], disabled: [], groups: { work: ['dsh-loop', 'dsh-shared'] }, groupOrder: ['work'],
+        activation: {
+          'dsh-loop': { state: 'live', reasons: [], bundle: true, hot: true },
+          'dsh-shared': { state: 'inert', library: true, reasons: ['used by other plugins'], bundle: false, hot: false },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    fireEvent.click(screen.getByRole('button', { name: en.tabGroups }))
+
+    expect(await screen.findByText('dsh-shared')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: en.disable + ' work' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: en.disable + ' dsh-loop' })).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: en.disable + ' dsh-shared' })).toBeNull()
+  })
+
   /** Stateful fake: mirrors the server-side group/toggle semantics in memory. */
   function makeFake(installed: Record<string, string>, activationOverride?: Record<string, unknown>) {
     const state = { disabled: [] as string[], groups: {} as Record<string, string[]>, groupOrder: [] as string[] }
@@ -3605,6 +4603,39 @@ describe('incompatible install (#758)', () => {
   })
 })
 
+describe('landing tab after an install (#825)', () => {
+  it('opens on Discover the next time, not on Installed', async () => {
+    // The success path wrote the one-shot "open on Installed" key without
+    // reloading, so it waited in sessionStorage and the NEXT visit to the
+    // market landed on Installed. Only a reload hands a tab over.
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed: {}, live: [] },
+      '/dsh-market/updates': { updates: {} },
+      '/dsh-market/install': {
+        ok: true,
+        hot: true,
+        installed: { 'dsh-loop': '^1.0.0' },
+        activation: { 'dsh-loop': { state: 'live', hot: true, bundle: true, reasons: ['live via hot mount'] } },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await vi.waitFor(() => { screen.getByText('dsh-loop') })
+    await vi.waitFor(() => { screen.getByRole('button', { name: en.tabInstalled }) })
+    let card: HTMLElement | null = screen.getByText('dsh-loop')
+    while (card !== null && within(card).queryAllByRole('button', { name: en.install }).length === 0) {
+      card = card.parentElement
+    }
+    fireEvent.click(within(card!).getByRole('button', { name: en.install }))
+    await vi.waitFor(() => { screen.getByRole('button', { name: en.confirmInstall }) })
+    fireEvent.click(screen.getByRole('button', { name: en.confirmInstall }))
+    await vi.waitFor(() => {
+      expect(fetchCalls.some(call => call.path === '/dsh-market/install')).toBe(true)
+      expect(screen.getAllByText(re(en.refreshBanner)).length).toBeGreaterThan(0)
+    })
+    expect(sessionStorage.getItem('dshm-tab')).toBeNull()
+  })
+})
+
 describe('uninstall confirmation Modal', () => {
   const installedFixture = {
     '/dsh-market/installed': { profile: 'web', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
@@ -3846,6 +4877,48 @@ describe('installed masonry layout (#273)', () => {
     await ignoreRowUntilRestart('gamma')
     await act(async () => {})
     expect(names()).toEqual(['gamma', 'alpha', 'beta', 'delta'])
+  })
+})
+
+describe('a plugin whose settings read a name nothing serves (#810)', () => {
+  // The reported shape: `dsh-comfyui-canvas`'s client asks its config from
+  // "dsh-comfyui-canvas" while its own entry id is "comfyui-canvas", so its
+  // settings read nothing and its panel falls back to a hardcoded port. The
+  // row has to carry both halves — what it asks for, and what it should.
+  const installed = {
+    profile: 'web', installed: { 'dsh-comfyui-canvas': '^0.1.13' }, live: [], disabled: [], groups: {}, groupOrder: [], favorites: [],
+    configNamespaces: [{
+      name: 'dsh-comfyui-canvas',
+      namespaces: ['dsh-comfyui-canvas'],
+      ownEntryIds: ['comfyui-canvas'],
+    }],
+  }
+
+  it('names the mistake and the value to write instead', async () => {
+    stubFetch({ '/dsh-market/installed': installed })
+
+    render(<MarketSection {...props()} preferredSubsectionId="installed" />)
+
+    // Found by its own sentence: the package name alone is on the row below
+    // this banner too, which is why the assertion cannot key on it.
+    const notice = await screen.findByText(/cannot read its config/)
+    expect(notice.textContent).toContain('dsh-comfyui-canvas')
+    expect(notice.textContent).toContain('comfyui-canvas')
+    // The consequence and whose problem it is, not just the fact: a user who
+    // cannot tell "the plugin is broken" from "DSH is broken" is stuck.
+    expect(notice.textContent).toContain('cannot read its config')
+    expect(notice.textContent).toContain('the market cannot change it')
+  })
+
+  it('says nothing at all when no plugin has the problem', async () => {
+    stubFetch({
+      '/dsh-market/installed': { ...installed, configNamespaces: undefined },
+    })
+
+    render(<MarketSection {...props()} preferredSubsectionId="installed" />)
+
+    await screen.findByText('dsh-comfyui-canvas')
+    expect(screen.queryByText(new RegExp(re('cannot read its config').source))).toBeNull()
   })
 })
 
@@ -5574,6 +6647,101 @@ describe('lost install response (#100)', () => {
       vi.useRealTimers()
     }
   })
+
+  it('settles the live install task the poll recovers, so the entry stops claiming it is running (#904)', async () => {
+    // The same lost-response path as above, one layer up: the poll is the only
+    // witness that the install landed. It released the card's busy state, but
+    // the record `doInstall` put in the Tasks panel was still `running`, so the
+    // entry kept saying "Installing 1/1" for the rest of the mount. A remount
+    // used to mask it: `records` is React state, and only FINISHED rows are
+    // restored from storage, so a `running` row still vanished with the mount.
+    vi.useFakeTimers()
+    try {
+      let installedNow: Record<string, string> = {}
+      vi.stubGlobal('fetch', vi.fn((url: string) => {
+        const path = String(url).split('?')[0]
+        if (path === '/dsh-market/install') return Promise.reject(new TypeError('network connection was lost'))
+        const payload =
+          path === '/dsh-market/registry' ? { source: 'live', registry: REGISTRY }
+          : path === '/dsh-market/installed' ? { profile: 'web', installed: installedNow, live: [] }
+          : path === '/dsh-market/status' ? { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: installedNow }
+          : path === '/dsh-market/updates' ? { updates: {} }
+          : null
+        if (payload === null) return Promise.reject(new Error(`unstubbed fetch: ${String(url)}`))
+        return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
+      }))
+      render(<MarketSection {...props()} />)
+      await vi.waitFor(() => { screen.getByText('dsh-loop') })
+      await vi.waitFor(() => { screen.getByRole('button', { name: en.tabInstalled }) })
+      let card: HTMLElement | null = screen.getByText('dsh-loop')
+      while (card !== null && within(card).queryAllByRole('button', { name: en.install }).length === 0) {
+        card = card.parentElement
+      }
+      fireEvent.click(within(card!).getAllByRole('button', { name: en.install })[0]!)
+      await vi.waitFor(() => { screen.getByRole('button', { name: en.confirmInstall }) })
+      fireEvent.click(screen.getByRole('button', { name: en.confirmInstall }))
+      await vi.advanceTimersByTimeAsync(100)
+      await vi.waitFor(() => { screen.getByRole('button', { name: `${en.opInstalling} 1/1` }) })
+
+      installedNow = { 'dsh-loop': '^1.0.0' }
+      await vi.advanceTimersByTimeAsync(4500)
+      await vi.waitFor(() => { expect(sessionStorage.getItem('dshm-pending')).toBeNull() })
+
+      // The operation is over; the Tasks entry must say so on its own.
+      expect(screen.queryByRole('button', { name: `${en.opInstalling} 1/1` })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel?.textContent).toContain('dsh-loop')
+      expect(panel?.textContent).toContain(en.opDoneRefresh)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('releases the live install task when the lost install never lands (#904)', async () => {
+    // The mirror outcome of the poll recovery: two idle polls conclude the
+    // install died. The banner says so, but the record must stop running too —
+    // otherwise the entry is left claiming "Installing 1/1" over a failure.
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn((url: string) => {
+        const path = String(url).split('?')[0]
+        if (path === '/dsh-market/install') return Promise.reject(new TypeError('network connection was lost'))
+        const payload =
+          path === '/dsh-market/registry' ? { source: 'live', registry: REGISTRY }
+          : path === '/dsh-market/installed' ? { profile: 'web', installed: {}, live: [] }
+          : path === '/dsh-market/status' ? { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: {} }
+          : path === '/dsh-market/updates' ? { updates: {} }
+          : null
+        if (payload === null) return Promise.reject(new Error(`unstubbed fetch: ${String(url)}`))
+        return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
+      }))
+      render(<MarketSection {...props()} />)
+      await vi.waitFor(() => { screen.getByText('dsh-loop') })
+      await vi.waitFor(() => { screen.getByRole('button', { name: en.tabInstalled }) })
+      let card: HTMLElement | null = screen.getByText('dsh-loop')
+      while (card !== null && within(card).queryAllByRole('button', { name: en.install }).length === 0) {
+        card = card.parentElement
+      }
+      fireEvent.click(within(card!).getAllByRole('button', { name: en.install })[0]!)
+      await vi.waitFor(() => { screen.getByRole('button', { name: en.confirmInstall }) })
+      fireEvent.click(screen.getByRole('button', { name: en.confirmInstall }))
+      await vi.advanceTimersByTimeAsync(100)
+      await vi.waitFor(() => { screen.getByRole('button', { name: `${en.opInstalling} 1/1` }) })
+
+      await vi.advanceTimersByTimeAsync(2100)
+      await vi.advanceTimersByTimeAsync(2100)
+      await vi.waitFor(() => { expect(sessionStorage.getItem('dshm-pending')).toBeNull() })
+
+      expect(screen.queryByRole('button', { name: `${en.opInstalling} 1/1` })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]')
+      expect(panel?.textContent).toContain('dsh-loop')
+      expect(panel?.textContent).toContain(en.installFail)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('standing restart notice for host-reported pending plugins', () => {
@@ -5727,6 +6895,67 @@ describe('standing restart notice for host-reported pending plugins', () => {
   })
 })
 
+describe('a shell that runs the host as its child process owns the restart', () => {
+  // A Tauri/Electron shell that spawned `dsh web` restarts by stopping the
+  // process it started and relaunching its own window. The market's own route
+  // spawns a detached helper instead — a second lifecycle competing with the
+  // shell's for one port. Where the shell publishes its bridge, the button
+  // asks the shell and never touches the host route.
+  function stubStatus(extra: Record<string, unknown> = {}) {
+    const installed = { 'dsh-loop': '^1.0.0' }
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed, live: [],
+        activation: { 'dsh-loop': { state: 'restart', reasons: ['in the bundle layer'], bundle: true, hot: false } },
+      },
+      '/dsh-market/status': { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed, ...extra },
+      '/dsh-market/updates': { updates: {} },
+    })
+  }
+
+  afterEach(() => { Reflect.deleteProperty(window, '__dshHostShell') })
+
+  it('asks the shell, and never posts to the host restart route', async () => {
+    const shellRestart = vi.fn()
+    Reflect.set(window, '__dshHostShell', { restart: shellRestart })
+    stubStatus()
+    render(<MarketSection {...props()} />)
+    await waitFor(() => { expect(screen.getAllByText(re(en.restartBanner)).length).toBeGreaterThan(0) })
+
+    fireEvent.click(screen.getByRole('button', { name: en.restartNow }))
+
+    await waitFor(() => { expect(shellRestart).toHaveBeenCalledTimes(1) })
+    expect(fetchCalls.some(call => call.path === '/dsh-market/restart')).toBe(false)
+  })
+
+  it('falls back to the host route when the shell bridge is absent', async () => {
+    stubStatus()
+    render(<MarketSection {...props()} />)
+    await waitFor(() => { expect(screen.getAllByText(re(en.restartBanner)).length).toBeGreaterThan(0) })
+
+    fireEvent.click(screen.getByRole('button', { name: en.restartNow }))
+
+    await waitFor(() => {
+      expect(fetchCalls.some(call => call.path === '/dsh-market/restart' && call.method === 'POST')).toBe(true)
+    })
+  })
+
+  it('falls back to the host route when the shell bridge throws', async () => {
+    // A bridge that throws is not a restart. Silently reporting success would
+    // leave the page "restarting" forever against a host that never stopped.
+    Reflect.set(window, '__dshHostShell', { restart: () => { throw new Error('bridge is gone') } })
+    stubStatus()
+    render(<MarketSection {...props()} />)
+    await waitFor(() => { expect(screen.getAllByText(re(en.restartBanner)).length).toBeGreaterThan(0) })
+
+    fireEvent.click(screen.getByRole('button', { name: en.restartNow }))
+
+    await waitFor(() => {
+      expect(fetchCalls.some(call => call.path === '/dsh-market/restart' && call.method === 'POST')).toBe(true)
+    })
+  })
+})
+
 describe('boot-scoped update reminder dismissals (#419)', () => {
   const installed = {
     dshmarket: '^1.38.0',
@@ -5863,6 +7092,28 @@ describe('boot-scoped update reminder dismissals (#419)', () => {
     expect(screen.queryByRole('button', { name: `${en.updateExemptRestore} dsh-loop` })).toBeNull()
     expect(JSON.parse(sessionStorage.getItem('dshm-updates-ignored')!)).toEqual({ boot: 'boot-1', names: [] })
     expect(await screen.findByRole('button', { name: /Update all \(2\)/ })).toBeTruthy()
+  })
+
+  it('says the branch has unreleased commits instead of claiming it is up to date (#824 follow-up)', async () => {
+    // A floating git row whose repository moved without publishing: the market
+    // offers no update, and "Up to date" was the wrong fact — the install IS
+    // behind, it is just behind an unreleased commit.
+    stubFetch({
+      '/dsh-market/installed': { profile: 'web', installed, live: Object.keys(installed) },
+      '/dsh-market/status': { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed },
+      '/dsh-market/updates': {
+        updates: {
+          'dsh-loop': { kind: 'github', version: '1.0.0', current: 'aaaaaaa', latest: 'bbbbbbb7c1d2e3f40516', updateAvailable: false, unreleasedCommit: 'bbbbbbb7c1d2e3f40516' },
+          'dsh-notify': { kind: 'npm', version: '1.0.0', current: '1.0.0', latest: '1.0.0', updateAvailable: false },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /^Installed/ }))
+    expect(await screen.findByText(en.unreleasedCommits.replace('{0}', 'bbbbbbb'))).toBeTruthy()
+    // The row that HAS a release is untouched, and neither row offers a button.
+    expect(screen.getAllByText(en.upToDate)).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: en.update })).toBeNull()
   })
 
   it('keeps the saved mark on an up-to-date row, and adds no status line to other up-to-date rows', async () => {
@@ -6230,6 +7481,69 @@ describe('category row expansion', () => {
     }
   })
 
+  it('remeasures the collapsed budget when the category wrap grows wider (#846 sidebar)', async () => {
+    // The sidebar page is often much wider than the settings dialog. Without
+    // a resize pass, a budget measured at the first (narrow or zero) width
+    // leaves a half-empty category row on the wide panel.
+    let chipsPerRow = 4
+    let wrapWidth = 400
+    const offsetTopDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop')
+    const offsetHeightDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    const clientWidthDesc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.dataset.chip !== '1') return 0
+        const siblings = [...(this.parentElement?.children ?? [])]
+          .filter((el): el is HTMLElement => (el as HTMLElement).dataset?.chip === '1')
+        return Math.floor(siblings.indexOf(this) / chipsPerRow) * 32
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) { return this.className.includes('catsWrap') ? 90 : 26 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) { return this.className.includes('catsWrap') ? wrapWidth : 300 },
+    })
+    let resizeCats: (width: number) => void = () => { throw new Error('cats wrap is not observed') }
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        if (!(target instanceof HTMLElement) || !target.className.includes('catsWrap')) return
+        resizeCats = width => {
+          wrapWidth = width
+          chipsPerRow = width >= 800 ? 8 : 4
+          this.callback([
+            { target, contentRect: { width } } as ResizeObserverEntry,
+          ], this as unknown as ResizeObserver)
+        }
+      }
+      unobserve() {}
+      disconnect() {}
+    })
+    try {
+      stubFetch({ '/dsh-market/registry': { source: 'snapshot', registry: { ...REGISTRY, categories: CATS } } })
+      const { container } = render(<MarketSection {...props()} />)
+      await screen.findByText('dsh-loop')
+      const chipCount = () => container.querySelectorAll('[data-chip="1"]').length
+      // 4/row × 1 row → 4 fit → 3 categories + 「全部」.
+      await waitFor(() => expect(chipCount()).toBe(4))
+      act(() => resizeCats(900))
+      // 8/row × 1 row → 7 categories + 「全部」.
+      await waitFor(() => expect(chipCount()).toBe(8))
+    } finally {
+      if (offsetTopDesc) Object.defineProperty(HTMLElement.prototype, 'offsetTop', offsetTopDesc)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetTop')
+      if (offsetHeightDesc) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offsetHeightDesc)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+      if (clientWidthDesc) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidthDesc)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('does not auto-collapse when there is too little to scroll for the collapse to hold (#266)', async () => {
     // The loop this prevents: collapsing shrinks the sticky header, which
     // shrinks the scrollable content; with barely more content than
@@ -6397,11 +7711,10 @@ describe('category row expansion', () => {
       // Sentinel scrolled out of view above the scroll root: the header is now stuck.
       onChange!({ isIntersecting: false })
       await waitFor(() => expect(chipCount()).toBeLessThan(openCount))
-      // Squeezed to the one-row budget (2 categories, reserving a slot for
-      // the chevron), not the two-row budget (6) the plain collapsed state
-      // would use — proves the stuck path swapped budgets, not just re-ran
-      // the ordinary collapse.
-      expect(chipCount()).toBe(3) // "all" pill + 2 categories
+      // Squeezed to the one-row budget — the same row the collapsed state
+      // uses, chevron included in its own cell beside the wrap rather than
+      // taking a chip slot.
+      expect(chipCount()).toBe(4) // "all" pill + 3 categories
       // Auto-collapse is render-derived (`catsExpanded = stuckExpanded` while
       // pinned, starting false) — not a follow-up catsOpen flip. Chevron still
       // tracks catsExpanded, and clicking it while stuck must keep working
@@ -6856,7 +8169,7 @@ describe('card owner name and description overflow', () => {
 
 
 describe('Git to npm source migration (#461)', () => {
-  it('requires modal confirmation before source migration', async () => {
+  it.each([false, true])('requires source and busy-risk confirmations for migration (busy=%s, #779)', async busy => {
     stubFetch({
       '/dsh-market/installed': {
         profile: 'web',
@@ -6882,13 +8195,15 @@ describe('Git to npm source migration (#461)', () => {
           },
         },
       },
-      '/dsh-market/migrate-source': {
-        ok: true,
-        from: { name: 'dsh-loop', source: 'github:alice/dsh-loop' },
-        to: { name: '@alice/dsh-loop', source: 'npm' },
-        activation: {},
-        warnings: [],
-      },
+      '/dsh-market/migrate-source': (body: unknown) => busy && (body as { confirmAgentsRunning?: boolean }).confirmAgentsRunning !== true
+        ? { ok: false, agentsBusy: true, runningAgents: ['main'], __status: 409 }
+        : {
+          ok: true,
+          from: { name: 'dsh-loop', source: 'github:alice/dsh-loop' },
+          to: { name: '@alice/dsh-loop', source: 'npm' },
+          activation: {},
+          warnings: [],
+        },
     })
 
     render(<MarketSection {...props()} />)
@@ -6916,6 +8231,24 @@ describe('Git to npm source migration (#461)', () => {
         body: { name: 'dsh-loop' },
       })
     })
+    if (busy) {
+      const posts = () => fetchCalls.filter(call => call.path === '/dsh-market/migrate-source' && call.method === 'POST')
+      const risk = await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+      expect(within(risk).getByText(en.agentsRunningRisk)).toBeTruthy()
+      expect(posts()).toHaveLength(1)
+      fireEvent.click(within(risk).getByRole('button', { name: en.cancel }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: re(en.agentsRunningConfirm) })).toBeNull())
+      expect(posts()).toHaveLength(1)
+
+      fireEvent.click(await screen.findByRole('button', { name: en.migrateNpm }))
+      const source = await screen.findByRole('dialog', { name: re(en.migrateTitle) })
+      fireEvent.click(within(source).getByRole('button', { name: en.migrateContinue }))
+      const retryRisk = await screen.findByRole('dialog', { name: re(en.agentsRunningConfirm) })
+      expect(posts()).toHaveLength(2)
+      fireEvent.click(within(retryRisk).getByRole('button', { name: en.opUpdateNow }))
+      await waitFor(() => expect(posts()).toHaveLength(3))
+      expect(posts()[2]!.body).toEqual({ name: 'dsh-loop', confirmAgentsRunning: true })
+    }
   })
 })
 
@@ -7097,4 +8430,519 @@ it('installs a chosen Arya release from a catalog card before a profile override
   fireEvent.click(await screen.findByRole('button', { name: '0.1.0' }))
   await waitFor(() => expect(fetchCalls).toContainEqual({ path: '/dsh-market/install', method: 'POST', body: { url: plugin.url, version: '0.1.0' } }))
   expect(fetchCalls.some(call => call.path === '/dsh-market/update')).toBe(false)
+})
+describe('recently added Discover row (#780)', () => {
+  const now = Date.parse('2026-09-30T12:00:00Z')
+  const daysAgo = (days: number) => new Date(now - days * 86_400_000).toISOString()
+  const entry = (name: string, downloads: number | null, stars: number, added = daysAgo(2)) => ({
+    name, owner: 'alice', url: `https://github.com/alice/${name}`, category: 'tools',
+    npm: downloads === null ? null : name, downloads, stars, added,
+    description: { en: `${name} description` }, install: '',
+  })
+  const rows = () => [
+    entry('github-low', null, 5), entry('zero', 0, 2),
+    entry('cutoff', 10, 999, daysAgo(7)), entry('github-high', null, 500),
+    entry('recent-high', 900, 1), entry('old-high', 9999, 1000, daysAgo(7) + 'invalid'),
+    entry('old', 8000, 1000, daysAgo(7 + 1 / 86_400_000)),
+    entry('future', 7000, 1000, daysAgo(-1)), entry('undated', 6000, 1000, ''),
+  ]
+  const recentNames = ['recent-high', 'cutoff', 'zero', 'github-high', 'github-low']
+  const registry = (plugins = rows()) => ({
+    source: 'live', hostVersion: '0.1.2-alpha.2',
+    registry: { ...REGISTRY, count: plugins.length, plugins },
+  })
+  const recent = () => screen.getByRole('region', { name: en.recentlyAdded })
+  const names = (element: HTMLElement) => [...element.querySelectorAll<HTMLAnchorElement>(`.${css.nmLink}`)]
+    .map(link => link.title)
+  const expectHidden = () => expect(screen.queryByRole('region', { name: en.recentlyAdded })).toBeNull()
+
+  let resizeRecent: (width: number) => void
+  let observedRecent: Element | undefined
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    resizeRecent = () => { throw new Error('recent row is not observed') }
+    observedRecent = undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        // jsdom has no layout; deliver row widths without resizing CardDesc.
+        if (!target.classList.contains(css.recentRow)) return
+        observedRecent = target
+        resizeRecent = width => this.callback([
+          { target, contentRect: { width } } as ResizeObserverEntry,
+        ], this as unknown as ResizeObserver)
+        resizeRecent(1600)
+      }
+      unobserve() {}
+      disconnect() {}
+    })
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('keeps two cards per row, two rows deep, as the container resizes', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    expect(recent().getAttribute('aria-labelledby')).toBe('dshm-recently-added')
+    expect(within(recent()).getByRole('heading', { name: en.recentlyAdded }).id).toBe('dshm-recently-added')
+    const main = rankedNames(container)
+    // Two columns at every width that fits two cards (the same 290px card
+    // the grid below uses), and at most two rows of them: three across read
+    // as a different list from the one underneath.
+    for (const [width, count] of [[280, 2], [569, 2], [570, 4], [859, 4], [860, 4], [1150, 4], [1440, 4], [280, 2]] as const) {
+      act(() => resizeRecent(width))
+      expect(names(recent())).toEqual(recentNames.slice(0, count))
+      expect(within(recent()).getAllByRole('button', { name: en.install })).toHaveLength(count)
+      expect(rankedNames(container)).toEqual(main)
+    }
+  })
+
+  it('observes the replacement row after retrying a failed cached catalog refresh', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    cleanup()
+    stubFetch({ '/dsh-market/registry': { __status: 503, error: 'catalog unavailable' } })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('catalog unavailable')
+    expectHidden()
+    const detachedRow = observedRecent
+    stubFetch({ '/dsh-market/registry': registry() })
+    fireEvent.click(screen.getByRole('button', { name: en.loadRetry }))
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    expect(observedRecent).not.toBe(detachedRow)
+    expect(observedRecent?.isConnected).toBe(true)
+    act(() => resizeRecent(280))
+    expect(names(recent())).toEqual(recentNames.slice(0, 2))
+  })
+
+  it('opens only one menu for either copy of a recent plugin', async () => {
+    stubFetch({ '/dsh-market/registry': registry([entry('duplicated-recent', 100, 1)]) })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const recentMore = within(recent()).getByRole('button', { name: en.groupMore })
+    const mainMore = within(container.querySelector(`.${css.masonry}`)!).getByRole('button', { name: en.groupMore })
+    for (const [opened, other] of [[recentMore, mainMore], [mainMore, recentMore]] as const) {
+      fireEvent.click(opened)
+      expect(screen.getAllByRole('menu')).toHaveLength(1)
+      expect(opened.getAttribute('aria-expanded')).toBe('true')
+      expect(other.getAttribute('aria-expanded')).toBe('false')
+      fireEvent.click(opened)
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(opened.getAttribute('aria-expanded')).toBe('false')
+    }
+  })
+
+  it('uses a seven-day downloads/Stars rank without changing the main default or selected sort', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    expect(names(recent())).toEqual(recentNames.slice(0, 4))
+    // Old, future and dateless entries still belong to the all-time main list.
+    expect(rankedNames(container)).toEqual([
+      'old-high', 'old', 'future', 'undated', 'recent-high', 'cutoff', 'zero', 'github-high', 'github-low',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.sortStars }))
+    await waitFor(() => {
+      const main = rankedNames(container)
+      expect(main.indexOf('cutoff')).toBeLessThan(main.indexOf('recent-high'))
+    })
+    expect(names(recent())).toEqual(recentNames.slice(0, 4))
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+  })
+
+  it('appears only without a search, category or time filter, and only in Discover', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    const themeSnapshot = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...props()} themeStore={{ subscribe: () => () => {}, getSnapshot: () => themeSnapshot }} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const search = screen.getByPlaceholderText(en.searchPh)
+    fireEvent.change(search, { target: { value: 'recent-high' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(expectHidden)
+    fireEvent.change(search, { target: { value: '' } })
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
+    expectHidden()
+    fireEvent.click(screen.getByRole('button', { name: /^All \(\d/ }))
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.timeWeek }))
+    expectHidden()
+    fireEvent.click(screen.getByRole('menuitem', { name: en.timeAll }))
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    for (const tab of [en.tabThemes, en.tabFavorites, en.tabInstalled, en.tabBlocked, en.tabAdvanced]) {
+      fireEvent.click(within(document.getElementsByClassName(css.tabs)[0] as HTMLElement).getByRole('button', { name: tab }))
+      expectHidden()
+      fireEvent.click(screen.getByRole('button', { name: en.tabDiscover }))
+      await screen.findByRole('region', { name: en.recentlyAdded })
+    }
+  })
+
+  it('hides an empty recent selection, including when its only recent entry is hidden', async () => {
+    stubFetch({ '/dsh-market/registry': registry([entry('old-only', 100, 1, daysAgo(8))]) })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('old-only')
+    expectHidden()
+    cleanup()
+    stubFetch({
+      '/dsh-market/registry': registry([entry('hidden-recent', 100, 1), entry('old-only', 100, 1, daysAgo(8))]),
+      '/dsh-market/installed': {
+        profile: 'web', installed: {}, live: [], disabled: [], groups: {}, groupOrder: [],
+        favorites: [], blocked: ['hidden-recent'],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await waitFor(() => {
+      expect(screen.getByText('old-only')).toBeTruthy()
+      expect(screen.queryByText('hidden-recent')).toBeNull()
+      expectHidden()
+    })
+  })
+
+  it('loads an off-page recent card requirement and opens its real install dialog', async () => {
+    const plugins = [
+      ...Array.from({ length: 24 }, (_, index) => entry(`old-${index}`, 1000 - index, 1, daysAgo(30))),
+      entry('off-page-recent', 1, 1),
+    ]
+    stubFetch({
+      '/dsh-market/registry': registry(plugins),
+      '/dsh-market/discovery-compatibility': (body: unknown) => ({
+        hostVersion: '0.1.2-alpha.2',
+        plugins: Object.fromEntries(((body as { packages: string[] }).packages).map(name => [name, {
+          status: 'compatible', basis: 'manifest', requirement: '^0.1.2-alpha.2',
+          declarations: [{ kind: 'engine', range: '^0.1.2-alpha.2' }],
+        }])),
+      }),
+    })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    expect(names(recent())).toEqual(['off-page-recent'])
+    expect(rankedNames(container)).toEqual(plugins.slice(0, 24).map(plugin => plugin.name))
+    expect(screen.getByRole('button', { name: en.nextPage })).toBeTruthy()
+    await waitFor(() => {
+      expect(fetchCalls.some(call => call.path === '/dsh-market/discovery-compatibility'
+        && (call.body as { packages?: string[] } | undefined)?.packages?.includes('off-page-recent'))).toBe(true)
+      expect(within(recent()).getByText(en.hostRequirement.replace('{0}', '^0.1.2-alpha.2'))).toBeTruthy()
+    })
+    fireEvent.click(within(recent()).getByRole('button', { name: en.install }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText('off-page-recent description')).toBeTruthy()
+    expect(dialog.getByTitle('Date added').textContent).toContain(daysAgo(2))
+    expect(dialog.getByRole('button', { name: en.confirmInstall })).toBeTruthy()
+    fireEvent.click(dialog.getByRole('button', { name: en.cancel }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: en.confirmInstall })).toBeNull())
+  })
+
+  it('calls catalog dates Date added / 收录时间 in both locale keys', () => {
+    expect([en.recentlyAdded, zh.recentlyAdded]).toEqual(['Recently added', '最近收录'])
+    expect([en.sortAdded, en.published]).toEqual(['Date added', 'Date added'])
+    expect([zh.sortAdded, zh.published]).toEqual(['收录时间', '收录时间'])
+  })
+})
+
+describe('empty filter recovery', () => {
+  it('clears Discover search and category without changing the chosen sort', async () => {
+    stubFetch({ '/dsh-market/installed': { profile: 'web', installed: {}, live: [], blocked: ['whale-skin'] } })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: 'Skills' }))
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.sortStars }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.sortAsc }))
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    const input = screen.getByPlaceholderText(en.searchPh) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'not-a-plugin' } })
+    await screen.findByText(en.empty)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await screen.findByText('dsh-notify')
+    expect(screen.queryByText('whale-skin')).toBeNull()
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe('')
+    expect(rankedNames(container)).toEqual(['dsh-loop', 'dsh-notify'])
+  })
+
+  it('recovers from an empty time range and cancels a pending search draft', async () => {
+    const plugins = REGISTRY.plugins.map(plugin => ({ ...plugin, added: '2020-01-01' }))
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry: { ...REGISTRY, plugins } } })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.timeWeek }))
+    await screen.findByText(en.empty)
+    const input = screen.getByPlaceholderText(en.searchPh) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'pending-query' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(input.value).toBe('')
+    await screen.findByText('dsh-loop')
+    await new Promise(resolve => setTimeout(resolve, SEARCH_DELAY_MS * 2))
+    expect(screen.getByText('dsh-loop')).toBeTruthy()
+  })
+
+  it('clears Themes filters independently of Discover', async () => {
+    const snapshot = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...props()} themeStore={{ subscribe: () => () => {}, getSnapshot: () => snapshot }} />)
+    await screen.findByText('dsh-loop')
+    fireEvent.change(screen.getByPlaceholderText(en.searchPh), { target: { value: 'loop' } })
+    await waitFor(() => expect(screen.queryByText('dsh-notify')).toBeNull())
+    fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0]!)
+    await screen.findByText('whale-skin')
+    const input = screen.getByPlaceholderText(en.searchPh) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'missing-theme' } })
+    await screen.findByText(en.empty)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await screen.findByText('whale-skin')
+    expect(input.value).toBe('')
+    expect(document.activeElement).toBe(input)
+    fireEvent.click(screen.getByRole('button', { name: en.tabDiscover }))
+    expect((screen.getByPlaceholderText(en.searchPh) as HTMLInputElement).value).toBe('loop')
+    expect(screen.getByText('dsh-loop')).toBeTruthy()
+    expect(screen.queryByText('dsh-notify')).toBeNull()
+  })
+
+  it('does not offer a filter reset for an empty catalog', async () => {
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry: { ...REGISTRY, count: 0, plugins: [] } } })
+    render(<MarketSection {...props()} />)
+    await screen.findByText(en.empty)
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull()
+  })
+})
+
+describe('sidebar shortcut tip (#846)', () => {
+  function fakeSidebar(options: { supported?: boolean; enabled?: boolean; ready?: boolean } = {}): {
+    supported(): boolean
+    enabled(): boolean
+    ready(): boolean
+    set(next: boolean): Promise<boolean>
+    subscribe(listener: () => void): () => void
+    settle(): void
+    sets: boolean[]
+  } {
+    let enabled = options.enabled === true
+    let ready = options.ready !== false
+    const listeners = new Set<() => void>()
+    const sets: boolean[] = []
+    const notify = (): void => { for (const listener of listeners) listener() }
+    return {
+      sets,
+      supported: () => options.supported !== false,
+      enabled: () => enabled,
+      ready: () => ready,
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+      settle: () => { ready = true; notify() },
+      set: async (next) => {
+        sets.push(next)
+        enabled = next
+        ready = true
+        notify()
+        return next
+      },
+    }
+  }
+
+  it('offers the shortcut on the settings page when the sidebar is off', async () => {
+    const sidebar = fakeSidebar()
+    render(<MarketSection {...props()} sidebar={sidebar} surface="settings" />)
+    expect(await screen.findByText(en.sidebarTip)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.setSidebarOn }))
+    await waitFor(() => { expect(sidebar.sets).toEqual([true]) })
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+  })
+
+  it('waits until the saved choice is known before offering the tip', async () => {
+    const sidebar = fakeSidebar({ ready: false })
+    render(<MarketSection {...props()} sidebar={sidebar} surface="settings" />)
+    await screen.findByText(en.nav)
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+    act(() => { sidebar.settle() })
+    expect(await screen.findByText(en.sidebarTip)).toBeTruthy()
+  })
+
+  it('stays quiet on the sidebar page and when the shortcut is already on', async () => {
+    const off = fakeSidebar()
+    const { rerender } = render(<MarketSection {...props()} sidebar={off} surface="sidebar" />)
+    await screen.findByText(en.nav)
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+
+    rerender(<MarketSection {...props()} sidebar={fakeSidebar({ enabled: true })} surface="settings" />)
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+  })
+
+  it('does not return after the user dismissed it', () => {
+    localStorage.setItem('dshm-sidebar-tip-dismissed', '1')
+    render(<MarketSection {...props()} sidebar={fakeSidebar()} surface="settings" />)
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+  })
+
+  it('hides the tip for good when the user dismisses it', async () => {
+    render(<MarketSection {...props()} sidebar={fakeSidebar()} surface="settings" />)
+    fireEvent.click(await screen.findByRole('button', { name: en.sidebarTipDismiss }))
+    expect(localStorage.getItem('dshm-sidebar-tip-dismissed')).toBe('1')
+    expect(screen.queryByText(en.sidebarTip)).toBeNull()
+  })
+})
+
+describe('最近收录 collapses and hides without losing its column measurement (#940)', () => {
+  // The block only renders for entries added in the last 7 days, so the dates
+  // are relative to the run, not fixed literals.
+  const today = new Date().toISOString().slice(0, 10)
+  const RECENT_REGISTRY = {
+    updated: '', count: 3,
+    categories: REGISTRY.categories,
+    plugins: [
+      { name: 'dsh-loop', owner: 'alice', url: 'https://github.com/alice/dsh-loop', category: ['tools'], npm: 'dsh-loop', stars: 50, added: today, description: { en: 'Loop task runner', zh: '循环执行' }, install: '' },
+      { name: 'dsh-notify', owner: 'bob', url: 'https://github.com/bob/dsh-notify', category: 'tools', npm: null, stars: 120, added: today, description: { en: 'Desktop notifications', zh: '桌面通知' }, install: '' },
+      { name: 'whale-skin', owner: 'carol', url: 'https://github.com/carol/whale-skin', category: 'theme', npm: null, stars: 80, added: '2020-01-01', description: { en: 'Whale theme', zh: '鲸鱼主题' }, install: '' },
+    ],
+  }
+  function mount() {
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry: RECENT_REGISTRY, hostVersion: '0.1.2-alpha.2' } })
+    return render(<MarketSection {...props()} />)
+  }
+  const gridOf = (container: HTMLElement) => container.querySelector('#dshm-recent-grid')
+
+  it('collapses in place and keeps the grid mounted', async () => {
+    const { container } = mount()
+    const toggle = await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(gridOf(container)).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    // The point of the change: clipped, not unmounted. Unmounting takes the
+    // measured element away from the column-counting ResizeObserver.
+    expect(gridOf(container)).toBeTruthy()
+    expect(gridOf(container)!.className).toContain(css.recentCollapsed)
+    expect(localStorage.getItem('dshm-recent-collapsed')).toBe('1')
+  })
+
+  it('hides the whole block and restores it from the one-line button', async () => {
+    const { container } = mount()
+    fireEvent.click(await screen.findByRole('button', { name: en.recentHide }))
+    expect(gridOf(container)).toBeNull()
+    expect(localStorage.getItem('dshm-recent-hidden')).toBe('1')
+    fireEvent.click(screen.getByRole('button', { name: en.recentShow }))
+    expect(gridOf(container)).toBeTruthy()
+    expect(localStorage.getItem('dshm-recent-hidden')).toBe('0')
+  })
+
+  it('remembers both choices across a remount', async () => {
+    localStorage.setItem('dshm-recent-collapsed', '1')
+    localStorage.setItem('dshm-recent-hidden', '1')
+    const { container } = mount()
+    const restore = await screen.findByRole('button', { name: en.recentShow })
+    expect(gridOf(container)).toBeNull()
+    fireEvent.click(restore)
+    expect(gridOf(container)!.className).toContain(css.recentCollapsed)
+  })
+
+  it('re-attaches the column observer after the block is hidden and shown again', async () => {
+    // An inert observer that hands the test its callback, so width changes are
+    // delivered on demand — jsdom has no layout.
+    const observers: Array<{ emit: (width: number) => void }> = []
+    class StubObserver {
+      constructor(callback: (entries: Array<{ contentRect: { width: number } }>) => void) {
+        observers.push({ emit: (width: number) => callback([{ contentRect: { width } }]) })
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', StubObserver)
+    const emitWidth = async (width: number, list: typeof observers) => {
+      await act(async () => { list.forEach(observer => observer.emit(width)) })
+    }
+    const { container } = mount()
+    await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
+    const before = observers.length
+    expect(before).toBeGreaterThan(0)
+    await emitWidth(600, observers)
+    expect(gridOf(container)!.getAttribute('style')).toContain('repeat(2')
+    fireEvent.click(screen.getByRole('button', { name: en.recentHide }))
+    fireEvent.click(screen.getByRole('button', { name: en.recentShow }))
+    // Restoring unmounts and remounts the measured element, so the effect has
+    // to run again. Without recentHidden in its deps no new observer appears
+    // and the block stops following a resize from here on.
+    const fresh = observers.slice(before)
+    expect(fresh.length).toBeGreaterThan(0)
+    await emitWidth(300, fresh)
+    expect(gridOf(container)!.getAttribute('style')).toContain('repeat(1')
+  })
+})
+
+describe('when DSH has unloaded the market (#962)', () => {
+  it('says the market stopped and that a restart brings it back, instead of loading forever', async () => {
+    // The host reloaded its plugins and did not mount the market again: every
+    // market route answers 404 while the page's own client keeps running.
+    stubFetch({
+      '/dsh-market/registry': { __status: 404 },
+      '/dsh-market/status': { __status: 404 },
+    })
+    render(<MarketSection {...props()} />)
+
+    expect(await screen.findByText(en.marketGoneTitle)).toBeTruthy()
+    expect(screen.getByText(en.marketGoneBody)).toBeTruthy()
+    // Neither the spinner nor the retry: nothing on this page can fix it, and
+    // a Retry button that 404s every time is a loop with no way out.
+    expect(screen.queryByText(en.loading)).toBeNull()
+    expect(screen.queryByRole('button', { name: en.loadRetry })).toBeNull()
+  })
+
+  it('settles an install whose answer was lost with the routes, and leaves nothing pending', async () => {
+    vi.useFakeTimers()
+    try {
+      let installStarted = false
+      vi.stubGlobal('fetch', vi.fn((url: string) => {
+        const path = String(url).split('?')[0]
+        if (path === '/dsh-market/install') {
+          installStarted = true
+          // The host unloaded the market mid-install: the response never comes.
+          return new Promise<Response>(() => {})
+        }
+        if (path === '/dsh-market/status' && installStarted) {
+          return Promise.resolve(new Response('', { status: 404 }))
+        }
+        const payload =
+          path === '/dsh-market/registry' ? { source: 'live', registry: REGISTRY, hostVersion: '0.1.2-alpha.2' }
+          : path === '/dsh-market/installed' ? { profile: 'web', installed: {}, live: [], disabled: [], groups: {}, groupOrder: [], favorites: [], blocked: [] }
+          : path === '/dsh-market/status' ? { active: false, pnpm: true, boot: 'boot-1', restart: true, installed: {} }
+          : path === '/dsh-market/updates' ? { updates: {} }
+          : path === '/dsh-market/discovery-compatibility' ? { hostVersion: '0.1.2-alpha.2', plugins: {} }
+          : null
+        if (payload === null) return Promise.reject(new Error(`unstubbed fetch: ${String(url)}`))
+        return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
+      }))
+
+      render(<MarketSection {...props()} />)
+      await vi.waitFor(() => { screen.getByText('dsh-loop') })
+      fireEvent.click(screen.getAllByRole('button', { name: en.install })[0]!)
+      await vi.waitFor(() => { screen.getByRole('button', { name: en.confirmInstall }) })
+      fireEvent.click(screen.getByRole('button', { name: en.confirmInstall }))
+      await vi.waitFor(() => { expect(installStarted, 'the install never started').toBe(true) })
+      await vi.advanceTimersByTimeAsync(2100)
+
+      await vi.waitFor(() => { screen.getAllByText(en.marketGoneTitle) })
+      // The "install in progress" marker must not survive: a remount would
+      // otherwise restore the row and spin on a host that is not there.
+      expect(sessionStorage.getItem('dshm-pending')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('OwnerAvatar icon', () => {
+  it('prefers the catalog-declared icon over the owner avatar', () => {
+    const icon = 'https://raw.githubusercontent.com/alice/dsh-loop/main/assets/icon.png'
+    const { container } = render(<OwnerAvatar name="dsh-loop" owner="alice" icon={icon} />)
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(icon)
+  })
+
+  it('refuses an icon outside the GitHub image hosts and falls back', () => {
+    const { container } = render(
+      <OwnerAvatar name="dsh-loop" owner="" icon="https://evil.example/icon.png" />,
+    )
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.textContent).toBe('L')
+  })
 })

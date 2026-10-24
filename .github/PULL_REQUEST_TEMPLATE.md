@@ -14,6 +14,15 @@ Plugin entries and screenshots merged there reach the market automatically on th
 
 ---
 
+### Branch and review / 分支与审查
+
+- **Base the PR on `nightly1014`, not `main`.** That is the line changes are merged into and releases are tagged from; CI runs on pull requests there. `main` trails behind on purpose and is back-filled from `nightly1014` by a maintainer.
+  **PR 的 base 选 `nightly1014`，不要用 `main`。** 那是代码真正合并、发版打 tag 的线，CI 也在 PR 上跑；`main` 有意落后，由维护者从 `nightly1014` 回灌。
+- **A PR with unresolved review comments is not merged** — the review has to be settled first, unless the change fixes something failing for users right now AND the maintainer says so in the PR, naming the follow-up. Merge happens on GitHub, so the PR ends up MERGED rather than left open.
+  **有未解决的审查意见不会合。** 唯一例外：这个改动修的是用户侧正在发生的故障，且维护者在 PR 里写明先合、并给出后续 issue/PR。合并走 GitHub，PR 会正常变 MERGED，不会被留在 open。
+
+---
+
 ### For code changes / 代码改动
 
 - [ ] `npm test` and `npm run check` pass locally / 本地通过

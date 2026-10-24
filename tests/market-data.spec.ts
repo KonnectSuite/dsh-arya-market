@@ -6,10 +6,10 @@
  * behind a working fallback.
  */
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  entryForDep, extractReadmeImageCandidates, extractReadmeImages, formatCount, groupSwitchState, installedForCatalog, isInstalled, isMarketItself, localizeBilingual, localizeBilingualList, looksTerminal, matchInstalledName, orderedCategories, pageItems, pluginCategories, pluginsForFavorites, previewDimensionScore, rankThemeScreenshots, releaseNotesHttpsImage, safeScreenshots, sanitizeReleaseNotesBody, staleFavoriteUrls, themePlugins, visiblePlugins, humanOutput, catalogEntryForInstalled} from '../src/client/market-data.ts'
-import type { RegistryPlugin, ScreenshotCandidate } from '../src/client/market-data.ts'
+  entryForDep, installCommandFor, extractReadmeImageCandidates, extractReadmeImages, formatCount, groupSwitchState, installedForCatalog, isInstalled, isMarketItself, localizeBilingual, localizeBilingualList, looksTerminal, matchInstalledName, orderedCategories, pageItems, pluginCategories, pluginScreenshotCandidates, pluginsForFavorites, previewDimensionScore, rankThemeScreenshots, releaseNotesHttpsImage, resetGithubRouting, resetScreenshotsCache, safeScreenshots, sanitizeReleaseNotesBody, staleFavoriteUrls, themePlugins, visiblePlugins, humanOutput, failureText, catalogEntryForInstalled} from '../src/client/market-data.ts'
+import type { RegistryPlugin, ScreenshotCandidate, ScreenshotRejection } from '../src/client/market-data.ts'
 
 function plugin(partial: Partial<RegistryPlugin>): RegistryPlugin {
   return { name: 'x', owner: 'o', url: 'https://github.com/o/x', category: 'tool', ...partial }
@@ -31,6 +31,24 @@ describe('looksTerminal', () => {
   it('still warns for plugins that positively target a terminal surface', () => {
     expect(looksTerminal(plugin({ name: 'dsh-tui' }), 'en')).toBe(true)
     expect(looksTerminal(plugin({ description: { zh: '为 DSH 提供命令行界面。' } }), 'zh')).toBe(true)
+    expect(looksTerminal(plugin({ description: { en: 'A terminal UI for DSH sessions.' } }), 'en')).toBe(true)
+  })
+
+  it('does not call a web plugin terminal-only because a companion CLI is mentioned (#931)', () => {
+    // Reported shape: a web plugin (client platform + bundle) whose catalog
+    // description also says the repository ships a CLI. The bare mention used
+    // to trigger "may not work in the web app" on the install confirmation.
+    expect(looksTerminal(plugin({
+      name: 'dsh-plugin-compat-check',
+      description: {
+        en: 'Web compatibility settings panel and plugin-detail findings. The repository also ships a CLI.',
+        zh: '网页兼容性设置面板与插件详情检查。仓库里另外提供了一个 CLI。',
+      },
+    }), 'en')).toBe(false)
+    expect(looksTerminal(plugin({
+      name: 'dsh-plugin-compat-check',
+      description: { zh: '网页兼容性设置面板与插件详情检查。仓库里另外提供了一个 CLI。' },
+    }), 'zh')).toBe(false)
   })
 })
 
@@ -418,6 +436,21 @@ describe('discover list (visiblePlugins)', () => {
     ])
   })
 
+  it('lets the selected sort order names that start with the query and names that contain it (#815)', () => {
+    // The reporter's search: both names hold `computer-use` as a phrase; only
+    // the less popular one happens to start with it.
+    const rows: RegistryPlugin[] = [
+      plugin({ name: 'computer-use-vision', downloads: 355, stars: 1 }),
+      plugin({ name: 'dsh-computer-use', downloads: 3_600, stars: 53 }),
+    ]
+    const names = (sort: string) => visiblePlugins(rows, {
+      category: 'all', query: 'computer-use', lang: 'zh', sort,
+    }).map(p => p.name)
+    expect(names('downloads-desc')).toEqual(['dsh-computer-use', 'computer-use-vision'])
+    expect(names('stars-desc')).toEqual(['dsh-computer-use', 'computer-use-vision'])
+    expect(names('downloads-asc')).toEqual(['computer-use-vision', 'dsh-computer-use'])
+  })
+
   it('normalizes punctuation and keeps exact package names ahead of longer prefixes', () => {
     const rows: RegistryPlugin[] = [
       plugin({ name: 'dsh-mcp-connector-guide', downloads: 50_000 }),
@@ -678,6 +711,13 @@ describe('group switch derivation (#60)', () => {
 })
 
 describe('screenshots (#61)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    resetScreenshotsCache()
+    resetGithubRouting()
+  })
+
   it('safeScreenshots keeps only https GitHub-hosted raster images, deduped and capped', () => {
     expect(safeScreenshots([
       'https://raw.githubusercontent.com/o/r/main/a.png',
@@ -695,6 +735,49 @@ describe('screenshots (#61)', () => {
     // capped at 6
     const many = Array.from({ length: 9 }, (_, i) => `https://raw.githubusercontent.com/o/r/main/s${i}.png`)
     expect(safeScreenshots(many)).toHaveLength(6)
+  })
+
+  it('reports each refused candidate with its reason, and refuses exactly the same values', () => {
+    const png = 'https://raw.githubusercontent.com/o/r/main/a.png'
+    const svg = 'https://raw.githubusercontent.com/o/r/main/logo.svg'
+    const badHost = 'https://evil.example/track.png'
+    const notHttps = 'http://raw.githubusercontent.com/o/r/main/b.png'
+    const unparseable = 'not a url'
+    const rejected: ScreenshotRejection[] = []
+
+    // The accepted list is byte-for-byte the old one — 42 included.
+    expect(safeScreenshots(
+      [png, svg, badHost, notHttps, unparseable, 42, png],
+      { onReject: rejection => { rejected.push(rejection) } },
+    )).toEqual([png])
+    expect(rejected).toEqual([
+      { value: svg, reason: 'svg is not rendered' },
+      { value: badHost, reason: 'host not allowlisted (evil.example)' },
+      { value: notHttps, reason: 'not https' },
+      { value: unparseable, reason: 'not a parseable URL' },
+      { value: 42, reason: 'not a string' },
+    ])
+  })
+
+  it('warns once per catalog entry whose declared screenshots are all refused, and still falls back to README', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const svg = 'https://raw.githubusercontent.com/o/r/HEAD/docs/preview.svg'
+    const fromReadme = 'https://raw.githubusercontent.com/o/r/HEAD/docs/readme-preview.png'
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      `## Screenshots / 截图\n![full preview](${fromReadme})\n`,
+      { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+    )))
+    const entry = plugin({ name: 'svg-only-entry', url: 'https://github.com/o/r', screenshots: [svg, svg] })
+
+    // Every declared shot is refused, so the README fallback is what renders —
+    // and that is worth one line, because nothing else says why.
+    expect((await pluginScreenshotCandidates(entry)).map(candidate => candidate.src)).toEqual([fromReadme])
+    await pluginScreenshotCandidates(entry)
+    expect(warn).toHaveBeenCalledTimes(1)
+    const line = String(warn.mock.calls[0]![0])
+    expect(line).toContain('svg-only-entry')
+    expect(line).toContain(svg)
+    expect(line).toContain('svg is not rendered')
   })
 
   it('sanitizeReleaseNotesBody drops pasted HTML images and other tags without eating prose', () => {
@@ -806,6 +889,47 @@ describe('humanOutput', () => {
   it('leaves ordinary output and malformed lines alone', () => {
     expect(humanOutput('plain error\n{not json\n')).toBe('plain error\n{not json')
     expect(humanOutput('')).toBe('')
+  })
+})
+
+describe('failureText', () => {
+  it('keeps the market\'s own sentence whole, and clips only pnpm\'s output (#848)', () => {
+    // The sentences the routes write are bilingual — Chinese first, then
+    // English — so keeping the last 600 characters kept the English and threw
+    // the Chinese away. Every one of them is bounded by construction; pnpm's
+    // output is the unbounded one.
+    const sentence = `${'中'.repeat(400)} / ${'en'.repeat(400)}`
+    expect(sentence.length).toBeGreaterThan(600)
+    const shown = failureText({ error: sentence, stderr: 'IGNORED', stdout: '', exitCode: 1 })
+    expect(shown).toBe(sentence)
+    expect(shown.startsWith('中')).toBe(true)
+  })
+
+  it('falls back to the tail of pnpm\'s output, dropping progress chatter', () => {
+    const shown = failureText({
+      stderr: [
+        '{"name":"pnpm:fetching-progress","downloaded":1}',
+        `ERR_PNPM_SOMETHING  ${'x'.repeat(700)}`,
+      ].join('\n'),
+      stdout: '',
+      exitCode: 1,
+    })
+    expect(shown.length).toBe(600)
+    expect(shown).not.toContain('fetching-progress')
+    expect(shown.endsWith('x'.repeat(10))).toBe(true)
+  })
+
+  it('honours the caller\'s window and its own fallback', () => {
+    // The uninstall path wants a shorter line and asks for it; the two
+    // callers that show 'error' rather than "exit undefined" say so.
+    expect(failureText({ stderr: 'y'.repeat(500) }, { tail: 400 }).length).toBe(400)
+    expect(failureText({ stderr: '', stdout: '', exitCode: '' }, { fallback: 'error' })).toBe('error')
+    expect(failureText({ stderr: '', stdout: '', exitCode: 3 })).toBe('exit 3')
+  })
+
+  it('reads a route field that arrived as an object with text', () => {
+    expect(failureText({ error: { text: 'the cause', other: 1 } })).toBe('the cause')
+    expect(failureText({ error: { code: 7 } })).toBe('{"code":7}')
   })
 })
 
@@ -1063,5 +1187,43 @@ describe('local link:/file: matching stays cheap as the catalog grows (#589)', (
     expect(catalogEntryForInstalled(plugins, 'solo', spec, [], [''])).toBeUndefined()
     // Re-ask in the other order: the cached answers must not have merged.
     expect(catalogEntryForInstalled(plugins, 'solo', spec, [], [])?.url).toBe('https://github.com/a/solo')
+  })
+})
+
+describe('installCommandFor (#872)', () => {
+  const catalog = 'dsh plugin --profile web add dsh-answer-reviewer'
+
+  it('names the profile this page actually runs in', () => {
+    // awesome-dsh-plugin writes the command once, for `web`. On any other
+    // profile — and the report's was `desktop` — copying it verbatim
+    // installed into the wrong place or nowhere at all.
+    expect(installCommandFor(catalog, 'work').command).toBe('dsh plugin --profile work add dsh-answer-reviewer')
+    expect(installCommandFor(catalog, 'web').command).toBe(catalog)
+  })
+
+  it('offers no command at all on a desktop profile, because none can work', () => {
+    // The DSH CLI refuses a profile by that name, so the command as printed
+    // cannot install anything there — handing it over would be worse than
+    // handing over nothing.
+    expect(installCommandFor(catalog, 'desktop')).toEqual({ command: null, unusable: true })
+    expect(installCommandFor(catalog, 'Desktop')).toEqual({ command: null, unusable: true })
+  })
+
+  it('leaves a command with no --profile token alone', () => {
+    const bare = 'dsh plugin add dsh-answer-reviewer'
+    expect(installCommandFor(bare, 'work')).toEqual({ command: bare, unusable: false })
+    expect(installCommandFor(bare, 'desktop')).toEqual({ command: bare, unusable: false })
+  })
+
+  it('keeps the catalog text when the profile is unknown', () => {
+    expect(installCommandFor(catalog, null).command).toBe(catalog)
+    expect(installCommandFor(catalog, '').command).toBe(catalog)
+    expect(installCommandFor(undefined, 'work')).toEqual({ command: null, unusable: false })
+    expect(installCommandFor('', 'work')).toEqual({ command: null, unusable: false })
+  })
+
+  it('handles the --profile=name spelling', () => {
+    expect(installCommandFor('dsh plugin --profile=web add x', 'work').command)
+      .toBe('dsh plugin --profile work add x')
   })
 })

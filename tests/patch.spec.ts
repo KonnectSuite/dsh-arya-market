@@ -13,11 +13,11 @@
 
 import { describe, expect, it } from 'vitest'
 import { load } from 'js-yaml'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  carrierDisableIds,
+  carrierRowIds,
   foreignRowIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
   readUserPatchState, removeRowBlocks, rowIdsForPackage, userPatchPackageReferences, type PatchHost,
 } from '../src/patch.ts'
@@ -63,6 +63,72 @@ describe('readUserPatchState', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('commented flag rows (#930)', () => {
+  it.each(['\n', '\r\n'])('reads flags through comments and blanks with %j line endings', eol => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, ['- id: alpha', '  # disabled: false is only a comment', '', '  disabled: true', '- id: beta', '  # another reason', '  disabled: false', '- id: missing', '  # no flag belongs to missing', '- id: gamma', '  disabled: true'].join(eol))
+      expect(readUserPatchState(patch)).toEqual({ disables: ['alpha', 'gamma'], forced: ['beta'], inserts: [] })
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it.each(['\n', '\r\n'])('flips a commented flag without dropping its explanation or duplicating it (%j)', async eol => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const text = ['- id: pet', '  # keep this explanation', '', '  disabled: false', '- id: keep', '  disabled: true', ''].join(eol)
+      writeFileSync(patch, text)
+      expect((await disableRow(patch, 'pet')).ok).toBe(true)
+      expect(readPatch(dir)).toBe(text.replace('disabled: false', 'disabled: true'))
+      await disableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe(text.replace('disabled: false', 'disabled: true'))
+      await enableRow(patch, 'pet')
+      expect(load(readPatch(dir))).toEqual([{ id: 'keep', disabled: true }])
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it.each(["'pet'", '"pet"'])('keeps quoted commented toggles idempotent (%s)', async id => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const text = `- id: ${id}\n  # rationale\n  disabled: false`
+      writeFileSync(patch, text)
+      expect(readUserPatchState(patch).forced).toEqual(['pet'])
+      await disableRow(patch, 'pet')
+      await disableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe(text.replace('disabled: false', 'disabled: true'))
+      expect(readUserPatchState(patch).disables).toEqual(['pet'])
+      await enableRow(patch, 'pet')
+      expect(load(readPatch(dir))).toEqual([])
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('removes commented standalone flags while preserving longer entries across blank lines', () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const longer = '- id: pet\n  # preserve config\n  disabled: false\n\n  # still part of pet\n  config:\n    size: 2\n'
+      const standalone = '- id: pet\n  # a standalone override\n\n  disabled: true'
+      writeFileSync(patch, longer + standalone)
+      expect(removeRowBlocks(patch, ['pet']).ok).toBe(true)
+      expect(readPatch(dir)).toBe(longer)
+      expect(load(readPatch(dir))).toEqual([{ id: 'pet', disabled: false, config: { size: 2 } }])
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('recognizes the last commented flag in a longer entry after a flip', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const longer = '- id: pet\n  # a later override\n  disabled: false\n  config:\n    size: 2\n'
+      writeFileSync(patch, '- id: pet\n  disabled: false\n' + longer)
+      expect((await disableRow(patch, 'pet')).ok).toBe(true)
+      expect(readPatch(dir)).toBe('- id: pet\n  disabled: true\n' + longer + '- id: pet\n  disabled: true\n')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })
 
@@ -242,18 +308,89 @@ describe('disableRow / enableRow', () => {
     }
   })
 
-  it('a disable after a force leaves both rows; composition resolves to disabled', async () => {
+  it('a disable after a force flips that block in place instead of adding a second (#821)', async () => {
     const dir = patchDir()
     try {
       const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: other\n  disabled: true\n')
       await enableRow(patch, 'workbench')
       await disableRow(patch, 'workbench')
-      const text = readPatch(dir)
-      expect(text).toContain('disabled: false')
-      expect(text).toContain('disabled: true')
-      const state = readUserPatchState(patch)
-      expect(state.forced).toEqual(['workbench'])
-      expect(state.disables).toEqual(['workbench'])
+      expect(readPatch(dir)).toBe('- id: other\n  disabled: true\n- id: workbench\n  disabled: true\n')
+      expect(readUserPatchState(patch)).toMatchObject({ forced: [], disables: ['other', 'workbench'] })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('folds the duplicate blocks an older version left into one when disabling (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: dsh-engram\n  disabled: false\n- id: keep\n  disabled: true\n- id: dsh-engram\n  disabled: true\n')
+      await disableRow(patch, 'dsh-engram')
+      expect(readPatch(dir)).toBe('- id: dsh-engram\n  disabled: true\n- id: keep\n  disabled: true\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('enable removes every disable block of the row, not only the first (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: pet\n  disabled: true\n- id: keep\n  disabled: true\n- id: pet\n  disabled: true\n')
+      await enableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe('- id: keep\n  disabled: true\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('enable finds a hand-written disable with trailing spaces and no final newline (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: keep\n  disabled: true\n- id: pet  \n  disabled: true')
+      await enableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe('- id: keep\n  disabled: true\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('enable that clears the last row puts the empty list back (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '# []\n- id: pet\n  disabled: true\n- id: pet\n  disabled: true\n')
+      await enableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe('[]\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('a flip in place keeps the line endings of a CRLF file (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: pet\r\n  disabled: false\r\n- id: keep\r\n  disabled: true\r\n')
+      await disableRow(patch, 'pet')
+      expect(readPatch(dir)).toBe('- id: pet\r\n  disabled: true\r\n- id: keep\r\n  disabled: true\r\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still ends disabled when a longer entry for the row comes after the flipped block (#821)', async () => {
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const longer = '- id: pet\n  disabled: false\n  config:\n    size: 2\n'
+      writeFileSync(patch, `- id: pet\n  disabled: false\n${longer}`)
+      const result = await disableRow(patch, 'pet')
+      expect(result.ok).toBe(true)
+      expect(readPatch(dir)).toBe(`- id: pet\n  disabled: true\n${longer}- id: pet\n  disabled: true\n`)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -367,6 +504,35 @@ describe('removeRowBlocks', () => {
       writeFileSync(patch, '- id: a\n  disabled: true\n- id: b\n  disabled: false\n- id: keep\n  disabled: true\n')
       removeRowBlocks(patch, ['a', 'b'])
       expect(readPatch(dir)).toBe('- id: keep\n  disabled: true\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('removes every block of a row, so no disable outlives the package (#821)', () => {
+    // The pair a force followed by a disable used to leave. Clearing only the
+    // first block kept `disabled: true`, which switched a reinstall off.
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: dsh-engram\n  disabled: false\n- id: dsh-engram\n  disabled: true\n')
+      removeRowBlocks(patch, ['dsh-engram'])
+      expect(readPatch(dir)).toBe('[]\n')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('leaves a row that carries more keys than the flag (#821)', () => {
+    // Cutting `- id` and `disabled` off this entry would hang its `config`
+    // on the entry above and break the file the profile boots from.
+    const dir = patchDir()
+    try {
+      const patch = join(dir, 'cordis.patch.yml')
+      const text = '- id: keep\n  disabled: true\n- id: pet\n  disabled: false\n  config:\n    size: 2\n'
+      writeFileSync(patch, text)
+      removeRowBlocks(patch, ['pet'])
+      expect(readPatch(dir)).toBe(text)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -575,6 +741,61 @@ describe('packagePatchFlags', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it('does not call a package disabled over a row it ships switched off itself (#876)', () => {
+    // dsh-mnemon's real shape: the bundle ships four `mnemon-strategy-*` rows
+    // as opt-in — `disabled: true` in its OWN patch, before the user ever saw
+    // it — and the user patch layer repeats one of them. Counting that as a
+    // user decision made the card say 「已停用 / 重启后保持关闭」 about a
+    // plugin that was demonstrably running, and offered an enable button that
+    // force-opened the other opt-in rows.
+    const dir = patchDir()
+    try {
+      mkdirSync(join(dir, 'node_modules', 'dsh-mnemon'), { recursive: true })
+      writeFileSync(join(dir, 'node_modules', 'dsh-mnemon', 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: mnemon',
+        '      name: dsh-mnemon',
+        '    - id: mnemon-strategy-general',
+        '      name: dsh-mnemon-strategy-general',
+        '      disabled: true',
+        '    - id: mnemon-strategy-light-context',
+        '      name: dsh-mnemon-strategy-light-context',
+        '      disabled: true',
+        '',
+      ].join('\n'))
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: mnemon-strategy-light-context\n  disabled: true\n')
+      const flags = packagePatchFlags(emptyHost, dir, ['dsh-mnemon'], readUserPatchState(patch))
+      expect(flags.disabled).toEqual([])
+      expect(flags.forced).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still reads a decision about the package\'s own core row', () => {
+    // The other half of the same rule: the user really did switch the package
+    // off, so the row that IS the package counts as before.
+    const dir = patchDir()
+    try {
+      mkdirSync(join(dir, 'node_modules', 'dsh-mnemon'), { recursive: true })
+      writeFileSync(join(dir, 'node_modules', 'dsh-mnemon', 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: mnemon',
+        '      name: dsh-mnemon',
+        '    - id: mnemon-strategy-general',
+        '      name: dsh-mnemon-strategy-general',
+        '      disabled: true',
+        '',
+      ].join('\n'))
+      const patch = join(dir, 'cordis.patch.yml')
+      writeFileSync(patch, '- id: mnemon\n  disabled: true\n')
+      expect(packagePatchFlags(emptyHost, dir, ['dsh-mnemon'], readUserPatchState(patch)).disabled).toEqual(['dsh-mnemon'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
 describe('the patch file always stays a top-level array', () => {
   /**
@@ -626,7 +847,7 @@ describe('the patch file always stays a top-level array', () => {
   })
 })
 
-describe('carrierDisableIds', () => {
+describe('carrierRowIds', () => {
   function installedBundle(dir: string, name: string, patch: string): void {
     mkdirSync(join(dir, 'node_modules', name), { recursive: true })
     writeFileSync(join(dir, 'node_modules', name, 'cordis.patch.yml'), patch)
@@ -661,7 +882,7 @@ describe('carrierDisableIds', () => {
         join(dir, 'node_modules', 'dsh-postgres-backends', 'package.json'),
         JSON.stringify({ name: 'dsh-postgres-backends', dsh: { bundle: { patch: './cordis.patch.yml' } } }),
       )
-      expect(carrierDisableIds(dir, 'dsh-postgres-backends')).toEqual(['session-persistence-jsonl'])
+      expect(carrierRowIds(dir, 'dsh-postgres-backends')).toEqual(['session-persistence-jsonl'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -671,7 +892,7 @@ describe('carrierDisableIds', () => {
     const dir = patchDir()
     try {
       // Shape of the e2e fixture-cross: inserts its own row and tweaks a
-      // DIFFERENT plugin's config — no `disabled: true`. Treating this as a
+      // DIFFERENT plugin's config — no `disabled: true` and no `inject`. Treating this as a
       // disable-carrier dropped it from the bundle stack and broke re-enabling
       // it in the web e2e; #147 requires disabling it to leave the neighbour
       // live, which the plain ownership path already guarantees.
@@ -684,7 +905,32 @@ describe('carrierDisableIds', () => {
         '    tweakedByCross: true',
         '',
       ].join('\n'))
-      expect(carrierDisableIds(dir, 'dshm-e2e-fixture-cross')).toEqual([])
+      expect(carrierRowIds(dir, 'dshm-e2e-fixture-cross')).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('counts a foreign row given a new inject requirement (#938)', () => {
+    const dir = patchDir()
+    try {
+      // billion-context 0.1.202: its own row provides biliBasicCompactionPolicy,
+      // and its patch makes the four official agent presets `inject` it. A
+      // row-level disable leaves those rows waiting for a service that is
+      // gone — every preset disappears. The bundle has to leave the stack.
+      installedBundle(dir, 'billion-context', [
+        '- insert:',
+        '    - id: bili-native',
+        "      name: 'billion-context'",
+        '- id: preset-standard',
+        '  inject:',
+        '    - biliBasicCompactionPolicy',
+        '- id: preset-ptc',
+        '  inject:',
+        '    - biliBasicCompactionPolicy',
+        '',
+      ].join('\n'))
+      expect(carrierRowIds(dir, 'billion-context')).toEqual(['preset-standard', 'preset-ptc'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -694,7 +940,7 @@ describe('carrierDisableIds', () => {
     const dir = patchDir()
     try {
       installedBundle(dir, 'dsh-loop', '- insert:\n    - id: loop-main\n      name: dsh-loop\n')
-      expect(carrierDisableIds(dir, 'dsh-loop')).toEqual([])
+      expect(carrierRowIds(dir, 'dsh-loop')).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -703,7 +949,7 @@ describe('carrierDisableIds', () => {
   it('is empty for a package that is not installed', () => {
     const dir = patchDir()
     try {
-      expect(carrierDisableIds(dir, 'not-installed')).toEqual([])
+      expect(carrierRowIds(dir, 'not-installed')).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -724,7 +970,7 @@ describe('carrierDisableIds', () => {
       }))
       writeFileSync(join(pkg, 'base.patch.yml'), '- insert:\n    - id: carrier-main\n      name: dsh-array-carrier\n')
       writeFileSync(join(pkg, 'carve.patch.yml'), '- id: session-persistence-jsonl\n  disabled: true\n')
-      expect(carrierDisableIds(dir, 'dsh-array-carrier')).toEqual(['session-persistence-jsonl'])
+      expect(carrierRowIds(dir, 'dsh-array-carrier')).toEqual(['session-persistence-jsonl'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -782,7 +1028,7 @@ describe('foreignRowIds', () => {
     const dir = patchDir()
     try {
       // dsh-postgres-backends shape: one foreign disable and one foreign config.
-      // carrierDisableIds reports the first alone (it is what bricks a boot);
+      // carrierRowIds reports the first alone (it is what bricks a boot);
       // this reports both, because leaving the stack takes both away.
       installedBundle(dir, 'dsh-postgres-backends', [
         '- id: session-persistence-jsonl',
@@ -843,6 +1089,55 @@ describe('foreignRowIds', () => {
       writeFileSync(join(pkg, 'own.patch.yml'), '- insert:\n    - id: carrier-main\n      name: dsh-array-carrier\n')
       writeFileSync(join(pkg, 'tweak.patch.yml'), '- id: neighbour-row\n  config:\n    tuned: true\n')
       expect(foreignRowIds(dir, 'dsh-array-carrier')).toEqual(['neighbour-row'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a patch file that cannot be written is refused in words, not by throwing', () => {
+  // Before this, the write threw: the route answered 500 with a raw errno
+  // ("EACCES: permission denied, open '…'") after the runtime half had already
+  // changed, and the durable layer silently kept the old state.
+  const chmod = (path: string, mode: number): void => { chmodSync(path, mode) }
+
+  it('disableRow, enableRow and removeRowBlocks report a read-only file instead of throwing', async () => {
+    const dir = patchDir()
+    const patch = join(dir, 'cordis.patch.yml')
+    try {
+      writeFileSync(patch, '- id: pet\n  disabled: false\n')
+      chmod(patch, 0o444)
+      const disabled = await disableRow(patch, 'pet')
+      expect(disabled.ok).toBe(false)
+      expect(disabled.reason).toContain('补丁层文件写不进去')
+      expect(disabled.reason).toContain('文件不可写')
+      // An enable only writes when it has a `disabled: true` block to remove;
+      // force-enabling an already-forced row is a no-op success by design.
+      chmod(patch, 0o644)
+      writeFileSync(patch, '- id: pet\n  disabled: true\n')
+      chmod(patch, 0o444)
+      const enabled = await enableRow(patch, 'pet')
+      expect(enabled.ok).toBe(false)
+      expect(enabled.reason).toContain('补丁层文件写不进去')
+      const removed = removeRowBlocks(patch, ['pet'])
+      expect(removed.ok).toBe(false)
+      expect(removed.reason).toContain('补丁层文件写不进去')
+      // Nothing was half-written on the way out.
+      expect(readFileSync(patch, 'utf8')).toBe('- id: pet\n  disabled: true\n')
+    } finally {
+      chmod(patch, 0o644)
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('removeRowBlocks still reports success when there is no file, and when rows are gone', () => {
+    const dir = patchDir()
+    try {
+      const missing = join(dir, 'cordis.patch.yml')
+      expect(removeRowBlocks(missing, ['pet']).ok).toBe(true)
+      writeFileSync(missing, '- id: keep\n  disabled: true\n')
+      expect(removeRowBlocks(missing, ['pet']).ok).toBe(true)
+      expect(readFileSync(missing, 'utf8')).toBe('- id: keep\n  disabled: true\n')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

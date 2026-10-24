@@ -159,10 +159,13 @@ describe('loadRegistry', () => {
     expect(stub).toHaveBeenCalledTimes(2)
   })
 
-  it('gives up after the second attempt rather than hammering', async () => {
+  it('gives up after the second attempt at each source rather than hammering', async () => {
+    // Two sources in the global region's list, two attempts each (#891's
+    // package rides the region's own registry, so the region whose own
+    // sources work never reaches it — but a dead network reaches it twice).
     const stub = scriptedFetch(new Error('fetch failed'))
     await expect(loadRegistry()).rejects.toThrow(/fetch failed/)
-    expect(stub).toHaveBeenCalledTimes(2)
+    expect(stub).toHaveBeenCalledTimes(4)
   })
 
   it('reports a failure instead of answering with an empty catalog', async () => {
@@ -200,7 +203,7 @@ describe('loadRegistry', () => {
     // operation was aborted due to timeout" on its own — the exact text a
     // reporter sent us — cannot tell a slow link from a blocked one.
     scriptedFetch(new Error('The operation was aborted due to timeout'))
-    await expect(loadRegistry()).rejects.toThrow(/aborted due to timeout.*\ds, 2 attempts/s)
+    await expect(loadRegistry()).rejects.toThrow(/aborted due to timeout.*\ds, 4 attempts/s)
   })
 })
 
@@ -248,6 +251,33 @@ describe('loadRegistry download regions', () => {
   it('reports every attempt it made when the whole list fails', async () => {
     byUrl([[/./, new Error('fetch failed')]])
     await expect(loadRegistry('china')).rejects.toThrow(/4 attempts/)
+  })
+
+  it('stops at its own region when that region answers (#891)', async () => {
+    // The cross-region list is a fallback, not a second opinion: a network
+    // where the official domain works must not also fetch a mirror.
+    const stub = byUrl([[/awesome-dsh-plugin\.com/, ok(CATALOG)]])
+    await loadRegistry('global')
+    expect(stub).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads on past its own region when every one of its sources is dead (#891)', async () => {
+    // The probe that picks a region measures the npm REGISTRY, and the
+    // catalog hangs off a second, independently blockable host. So "npm fast,
+    // GitHub Pages blocked" — the exact shape the mainland route exists for —
+    // measures `global`, whose only source is that host; and because the
+    // region is decided once and persisted, nothing ever reconsiders. The
+    // catalog's published package is the route that still works.
+    const stub = byUrl([[/./, new Error('fetch failed')]])
+    await expect(loadRegistry('global')).rejects.toThrow(/4 attempts/)
+    const asked = stub.mock.calls.map(call => String(call[0]))
+    // The origin twice (global's only own source), then the catalog's
+    // published package on the registry the probe measured, twice — and the
+    // failure message names it, so the route actually tried is the one a
+    // report will show.
+    expect(asked[0]).toContain('awesome-dsh-plugin.com')
+    expect(asked[2]).toContain('registry.npmjs.org')
+    expect(asked[2]).toContain('dsh-plugin-catalog')
   })
 
   it('keeps the primary source\'s own reason instead of the fallback\'s (#750)', async () => {
@@ -615,7 +645,11 @@ describe('loadRegistry body deadlines (the catalog outgrew a total one)', () => 
   it('ends a body that goes silent and says so, on every attempt', async () => {
     vi.useFakeTimers()
     try {
-      scriptedFetch(streamingOk(stalledStream()), streamingOk(stalledStream()))
+      // The origin's two attempts carry the stalled body; the catalog
+      // package's two fail on the metadata request that comes before any
+      // body, which is a different watchdog's business (#891).
+      scriptedFetch(streamingOk(stalledStream()), streamingOk(stalledStream()),
+        new Error('fetch failed'), new Error('fetch failed'))
       // Handler first: the rejection lands while the clock is being advanced,
       // and a promise that rejects before anyone is listening takes the whole
       // run down as an unhandled rejection even though the test then passes.

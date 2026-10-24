@@ -16,7 +16,7 @@
  * for the in-tree precedent).
  */
 
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -303,6 +303,20 @@ export interface MarketState {
   /** User-supplied HTTPS prefix used when the built-in GitHub routes fail. */
   githubProxy?: string
   /**
+   * Whether the market also opens from its own row in the sidebar (#846).
+   *
+   * Off unless the user turned it on: the sidebar's global rows are the
+   * host's own pages, and installing plugins is occasional, so a row nobody
+   * asked for would be a permanent fixture for an occasional task. The
+   * settings entry stays either way — it is the way in on hosts with no
+   * sidebar panels, and turning this off must never leave the market
+   * unreachable.
+   *
+   * Omission preserves, an explicit value wins — the githubProxy contract,
+   * because turning it off has to be expressible.
+   */
+  sidebarEntry?: boolean
+  /**
    * Packages the market removed from the profile's own declarations because
    * the build on disk can no longer compose (#663).
    *
@@ -483,6 +497,7 @@ export function readMarketState(profileDir: string): MarketState {
       blocked?: unknown
       updateExempt?: unknown
       brokenPlugins?: unknown
+      sidebarEntry?: unknown
     }
     const disabled = uniqueStrings(state.disabled !== undefined ? state.disabled : state.disabledSkins)
     const groups: Record<string, string[]> = {}
@@ -501,11 +516,21 @@ export function readMarketState(profileDir: string): MarketState {
     }
     const githubProxy = normalizeGithubProxy(state.githubProxy)
     const brokenPlugins = brokenPluginsFromUnknown(state.brokenPlugins)
+    // The order and the map are two halves of one fact, and a state file can
+    // carry them out of step (#964): the UI then lists a group the routes
+    // cannot find, so "assign to" and even "delete" answer group-not-found
+    // forever. Normalize on read — a name with no group disappears from the
+    // order, and a group with no order entry gets one appended — so the two
+    // cannot disagree however the file got that way.
+    const groupOrder = uniqueStrings(state.groupOrder).filter(name => groups[name] !== undefined)
+    for (const name of Object.keys(groups)) {
+      if (!groupOrder.includes(name)) groupOrder.push(name)
+    }
     return {
       disabled: new Set(disabled),
       groups,
       notes,
-      groupOrder: uniqueStrings(state.groupOrder),
+      groupOrder,
       channel: asChannel(state.channel) ?? undefined,
       region: asRegion(state.region) ?? undefined,
       // Only meaningful beside a region, and only when true: a stray flag
@@ -516,10 +541,50 @@ export function readMarketState(profileDir: string): MarketState {
       updateExempt: updateExemptNames(state.updateExempt),
       ...(githubProxy === null ? {} : { githubProxy }),
       ...(brokenPlugins === undefined ? {} : { brokenPlugins }),
+      // true AND false are both preserved: on a host with no settings page
+      // this switch is the market's only entry, so "the user turned it off"
+      // must be distinguishable from "nobody has chosen yet" (#846).
+      ...(typeof state.sidebarEntry === 'boolean' ? { sidebarEntry: state.sidebarEntry } : {}),
       buildEnv: buildEnvFromUnknown(state.buildEnv),
     }
-  } catch {
+  } catch (error) {
+    // An unreadable state file is the profile's whole market state gone: every
+    // disable, group, favourite and exemption in it. Say so — silently coming
+    // back empty reads to the user as "my disabled plugins all switched
+    // themselves on", with nothing anywhere connecting the two (#582's
+    // narrowest surviving point). Writing it back afterwards replaces the
+    // damaged file, so the log is the only trace there will be.
+    if (!(error !== null && typeof error === 'object' && 'code' in error && (error as { code?: unknown }).code === 'ENOENT')) {
+      logEvent('warn', 'state', `market state could not be read (${error instanceof Error ? error.message : String(error)}) — starting from an empty state`)
+    }
     return { disabled: new Set(), groups: {}, groupOrder: [], notes: {}, favorites: [], blocked: [], updateExempt: [] }
+  }
+}
+
+/**
+ * Publish a file so that a reader never sees it half-written.
+ *
+ * The state file carries every choice the user made about their plugins, and
+ * it is written on each switch: a process killed or a disk that fills up
+ * mid-write used to leave truncated JSON behind, which reads as an empty
+ * state — all of it gone, silently. A rename is atomic within one filesystem,
+ * so readers see either the old file or the new one.
+ *
+ * A symlinked state file is followed rather than replaced (#582): the write
+ * lands on the link's target, so a user who keeps their profile state
+ * somewhere else keeps it there.
+ */
+function publishFile(path: string, contents: string): void {
+  const target = (() => {
+    try { return realpathSync(path) } catch { return path }
+  })()
+  const temporary = `${target}.new`
+  writeFileSync(temporary, contents)
+  try {
+    renameSync(temporary, target)
+  } catch (error) {
+    rmSync(temporary, { force: true })
+    throw error
   }
 }
 
@@ -575,7 +640,10 @@ export function writeMarketState(profileDir: string, state: MarketState): void {
   const broken = Object.prototype.hasOwnProperty.call(state, 'brokenPlugins')
     ? state.brokenPlugins
     : onDisk.brokenPlugins
-  writeFileSync(stateFile(profileDir), JSON.stringify({
+  const sidebarEntry = Object.prototype.hasOwnProperty.call(state, 'sidebarEntry')
+    ? state.sidebarEntry
+    : onDisk.sidebarEntry
+  publishFile(stateFile(profileDir), JSON.stringify({
     disabled: [...state.disabled],
     groups: state.groups,
     groupOrder: state.groupOrder,
@@ -596,6 +664,10 @@ export function writeMarketState(profileDir: string, state: MarketState): void {
     // githubProxy above, and the one a repaired plugin needs: the entry
     // exists only while the declaration is still missing.
     ...(broken === undefined ? {} : { brokenPlugins: broken }),
+    // Written for both answers: on a host with no settings page this switch
+    // is the market's only entry, so a deliberate OFF has to survive a reload
+    // instead of being read back as "never chosen" (#846).
+    ...(typeof sidebarEntry === 'boolean' ? { sidebarEntry } : {}),
     ...(state.region === undefined ? {} : { region: state.region }),
     ...(state.regionAuto === true ? { regionAuto: true } : {}),
     // Omitted while not saved, so a card that was never touched keeps
@@ -638,6 +710,9 @@ const hotHandles = new Map<string, PluginHandle>()
 /** Activation did not settle within HOT_MOUNT_TIMEOUT_MS. */
 class ActivationTimeout extends Error {}
 
+/** Disposal did not settle within HOT_MOUNT_TIMEOUT_MS (see `hotUnmount`). */
+class DisposalTimeout extends Error {}
+
 /**
  * Race an activation awaitable against the hot-mount ceiling. The handlers
  * stay attached to the original promise, so a late rejection after a timeout
@@ -671,16 +746,46 @@ export interface HotMountResult {
 export async function hotUnmount(packageName: string): Promise<boolean> {
   const handle = hotHandles.get(packageName)
   if (handle === undefined) return false
+  // Dropped from the table BEFORE the wait, so a teardown that never finishes
+  // cannot keep this package registered: a later attempt starts from clean
+  // state instead of reusing a handle already being disposed.
   hotHandles.delete(packageName)
   shimNames.delete(packageName)
+  const disposal = Promise.resolve().then(() => handle.dispose())
+  // Same ceiling as mounting, and the same reason (#582, measured class of
+  // report): a plugin whose teardown waits for something that never arrives
+  // used to hold the toggle route open forever, and every later operation
+  // queued behind the lock it never released — the UI simply stopped
+  // answering until the host restarted. Handlers stay attached to the
+  // original promise, so a late settlement is logged rather than surfacing
+  // as an unhandled rejection.
+  let answered = false
+  void disposal.then(
+    () => { if (answered) logEvent('info', 'hot-unmount', `${packageName}: teardown finished after the wait`) },
+    (error: unknown) => {
+      logEvent('warn', 'hot-unmount', `${packageName}: dispose failed${answered ? ' after the wait' : ''} — ${error instanceof Error ? error.message : String(error)}`)
+    },
+  )
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    await handle.dispose()
+    await Promise.race([
+      disposal,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new DisposalTimeout(`${packageName}: teardown did not settle within ${HOT_MOUNT_TIMEOUT_MS / 1000}s`)), HOT_MOUNT_TIMEOUT_MS)
+      }),
+    ])
+    answered = true
     logEvent('info', 'hot-unmount', `${packageName}: removed live`)
     return true
   } catch (error) {
-    logEvent('warn', 'hot-unmount', `${packageName}: dispose failed — ${error instanceof Error ? error.message : String(error)}`)
+    answered = true
+    if (error instanceof DisposalTimeout) {
+      logEvent('warn', 'hot-unmount', `${packageName}: its teardown did not settle within ${HOT_MOUNT_TIMEOUT_MS / 1000}s, so it could not be confirmed stopped — it is off from the next start`)
+    } else {
+      logEvent('warn', 'hot-unmount', `${packageName}: dispose failed — ${error instanceof Error ? error.message : String(error)}`)
+    }
     return false
-  }
+  } finally { clearTimeout(timer) }
 }
 
 /**

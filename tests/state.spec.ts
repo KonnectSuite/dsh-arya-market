@@ -393,6 +393,41 @@ describe('a partial write must not erase the rest of the state (#435)', () => {
     }
   })
 
+  it('keeps the sidebar entry on across unrelated writes, and lets it be turned off (#846)', () => {
+    const dir = stateDir()
+    try {
+      expect(readMarketState(dir).sidebarEntry).toBeUndefined()
+      writeMarketState(dir, { disabled: new Set(), groups: {}, groupOrder: [], sidebarEntry: true })
+      expect(readMarketState(dir).sidebarEntry).toBe(true)
+
+      // A plugin toggle knows nothing about the sidebar and must not erase it.
+      writeMarketState(dir, { disabled: new Set(['dsh-loop']), groups: {}, groupOrder: [] })
+      expect(readMarketState(dir).sidebarEntry).toBe(true)
+
+      // Turning it off is a CHOICE, not an empty field: on a host with no
+      // settings page this row is the only way into the market, so a later
+      // read must not take "off" for "never asked" and put the row back
+      // (#846 on DSH 0.2.1+).
+      writeMarketState(dir, { ...readMarketState(dir), sidebarEntry: false })
+      expect(readMarketState(dir).sidebarEntry).toBe(false)
+      expect(readRaw(dir).sidebarEntry).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reads anything but a literal true as the sidebar entry being off', () => {
+    const dir = stateDir()
+    try {
+      for (const sidebarEntry of ['true', 1, null, {}]) {
+        writeFileSync(join(dir, '.dsh-market', 'state.json'), JSON.stringify({ sidebarEntry }))
+        expect(readMarketState(dir).sidebarEntry).toBeUndefined()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('ignores unsafe or malformed persisted GitHub prefixes', () => {
     const dir = stateDir()
     try {
@@ -405,6 +440,39 @@ describe('a partial write must not erase the rest of the state (#435)', () => {
         writeFileSync(join(dir, '.dsh-market', 'state.json'), JSON.stringify({ githubProxy }))
         expect(readMarketState(dir).githubProxy).toBeUndefined()
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('group state normalization (#964)', () => {
+  it('drops order entries with no group and appends groups with no order entry', () => {
+    const dir = stateDir()
+    try {
+      // The reported file: four names in the order, one key in the map. The
+      // UI lists all four, and every operation on the three ghosts answers
+      // group-not-found — including delete.
+      writeFileSync(join(dir, '.dsh-market', 'state.json'), JSON.stringify({
+        groups: { '本地化插件': ['dsh-loop'] },
+        groupOrder: ['插件', '工作', '学习', '本地化插件'],
+      }))
+      const state = readMarketState(dir)
+      expect(state.groupOrder).toEqual(['本地化插件'])
+      expect(Object.keys(state.groups)).toEqual(['本地化插件'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a group whose order entry is missing', () => {
+    const dir = stateDir()
+    try {
+      writeFileSync(join(dir, '.dsh-market', 'state.json'), JSON.stringify({
+        groups: { work: [], play: [] },
+        groupOrder: ['play'],
+      }))
+      expect(readMarketState(dir).groupOrder).toEqual(['play', 'work'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -427,6 +495,15 @@ describe('group CRUD (groups.ts)', () => {
     expect(renameGroup(state, 'work', 'work').ok).toBe(true)
 
     expect(deleteGroup(state, 'work').ok).toBe(true)
+    expect(state).toEqual({ groups: {}, groupOrder: [] })
+    expect(deleteGroup(state, 'ghost').ok).toBe(false)
+  })
+
+  it('deletes a name the order still lists but the map lost (#964)', () => {
+    // The impossible row the reporter was stuck with: listed, but every
+    // operation — including delete — answered group-not-found.
+    const state = { groups: {}, groupOrder: ['ghost'] }
+    expect(deleteGroup(state, 'ghost').ok).toBe(true)
     expect(state).toEqual({ groups: {}, groupOrder: [] })
     expect(deleteGroup(state, 'ghost').ok).toBe(false)
   })

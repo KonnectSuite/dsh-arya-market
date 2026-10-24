@@ -10,7 +10,7 @@
 import { chromium } from 'playwright'
 import type { Browser, Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { dshAvailable, launchMarketScaffold, openMarketPage } from './scaffold.ts'
+import { dshAvailable, launchMarketScaffold, openMarketPage, openMarketUi, waitMarketCatalog } from './scaffold.ts'
 import type { WebScaffold } from './scaffold.ts'
 
 describe.skipIf(!dshAvailable())('web e2e: search clear controls and sticky header', () => {
@@ -24,9 +24,8 @@ describe.skipIf(!dshAvailable())('web e2e: search clear controls and sticky head
       const b = page.getByRole('button', { name: /^(Continue|继续|Configure later|稍后配置)$/ }).first()
       try { await b.waitFor({ timeout: i === 0 ? 30_000 : 3000 }); await b.click() } catch { break }
     }
-    await page.getByRole('button', { name: /^(设置|Settings)$/ }).first().click()
-    await page.getByRole('button', { name: /插件市场|Plugin Market/ }).click()
-    await page.waitForSelector('[class*="masonryCol"] [class*="card"]', { timeout: 60_000 })
+    await openMarketUi(page)
+    await waitMarketCatalog(page)
     // Exercise the Favorites toolbar with an actual saved catalog entry in
     // this throwaway profile, without mocking the host's settings API.
     await page.getByRole('button', { name: /^(加入收藏|Add to favorites)$/ }).first().click()
@@ -104,7 +103,7 @@ describe.skipIf(!dshAvailable())('web e2e: search clear controls and sticky head
     ['Themes', /^(主题|Themes)$/],
     ['Installed', /^(已安装|Installed)( \(\d+\))?$/],
   ] as const)('keeps the %s clear control accessible beside long text in narrow windows', async (_tab, name) => {
-    await page.getByRole('button', { name }).click()
+    await page.locator('[data-dsh-market-root]').getByRole('button', { name }).first().click()
     const search = page.getByPlaceholder(/搜索插件|Search plugins|搜索收藏|Search favorites/)
     const clear = page.getByRole('button', { name: /^(清除搜索|Clear search)$/ })
     for (const width of [1200, 640]) {
@@ -112,7 +111,20 @@ describe.skipIf(!dshAvailable())('web e2e: search clear controls and sticky head
       await search.fill('long-search-text-'.repeat(30))
       expect(await search.getAttribute('spellcheck')).toBe('false')
       expect(await clear.getAttribute('type')).toBe('button')
-      // Resizing can leave the host repainting after fill has completed.
+      // Resizing can leave the host repainting after fill has completed, and
+      // the field commits its query 250ms later — on a narrow panel that
+      // commit reflows the toolbar and moves the clear button by ~60px.
+      // Clicking on Playwright's pre-reflow coordinates lands on the input
+      // instead and does nothing, so wait until the button stops moving.
+      let last = await clear.boundingBox()
+      for (let i = 0; i < 10; i++) {
+        await page.waitForTimeout(120)
+        const next = await clear.boundingBox()
+        const steady = last !== null && next !== null
+          && last.x === next.x && last.y === next.y && last.width === next.width
+        last = next
+        if (steady) break
+      }
       // Wait for stable geometry and pointer actionability before sampling,
       // without clearing the query or accepting a persistently covered button.
       await clear.click({ trial: true })
@@ -141,6 +153,65 @@ describe.skipIf(!dshAvailable())('web e2e: search clear controls and sticky head
       expect(await clear.count()).toBe(0)
       expect(await search.evaluate(input => input === input.ownerDocument.activeElement)).toBe(true)
     }
+    await page.setViewportSize({ width: 1200, height: 800 })
+  })
+
+  it.each([/^(发现|Discover)$/, /^(主题|Themes)$/])('clears empty filters in %s and returns keyboard focus', async tab => {
+    await page.locator('[data-dsh-market-root]').getByRole('button', { name: tab }).first().click()
+    const search = page.getByPlaceholder(/搜索插件|Search plugins/)
+    await search.fill('no-such-plugin-empty-filter-recovery')
+    const clear = page.getByRole('button', { name: /^(清除筛选|Clear filters)$/ })
+    await clear.waitFor()
+    for (const width of [1200, 640]) {
+      await page.setViewportSize({ width, height: 800 })
+      await clear.click({ trial: true })
+      const box = await clear.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    }
+    await page.setViewportSize({ width: 1200, height: 800 })
+    await clear.focus()
+    await page.keyboard.press('Enter')
+    expect(await search.inputValue()).toBe('')
+    expect(await search.evaluate(input => input === input.ownerDocument.activeElement)).toBe(true)
+    await expect.poll(() => clear.count()).toBe(0)
+  })
+
+  it('keeps navigation and task controls inside a narrow panel', async () => {
+    await page.setViewportSize({ width: 640, height: 800 })
+    const tabs = page.locator('[data-dsh-market-root] [class$="_tabs"]').first()
+    const stripBox = await tabs.boundingBox()
+    expect(stripBox).not.toBeNull()
+    for (const button of await tabs.getByRole('button').all()) {
+      // The strip scrolls in a narrow panel; the invariant is that every
+      // control can be brought into view and clicked, not that it is always
+      // visible without scrolling.
+      await button.scrollIntoViewIfNeeded()
+      await button.focus()
+      const box = await button.boundingBox()
+      expect(box).not.toBeNull()
+      // Re-read the strip: scrolling the button into view moves the content,
+      // and a box captured before the loop would compare two layouts.
+      const current = await tabs.boundingBox()
+      expect(current).not.toBeNull()
+      // The strip scrolls in a narrow panel, so a child may be clipped at
+      // either edge; what a user needs is that it overlaps the visible strip
+      // and can be clicked, which the trial click below proves.
+      expect(Math.min(box!.x + box!.width, current!.x + current!.width)
+        - Math.max(box!.x, current!.x)).toBeGreaterThan(0)
+      await button.click({ trial: true })
+    }
+    const tasks = tabs.getByRole('button', { name: /^(任务|Tasks)$/ })
+    await tasks.click()
+    const panel = page.locator('[data-dsh-market-root] [class$="_opPanel"]')
+    await panel.waitFor()
+    expect(await panel.evaluate(el => {
+      const box = el.getBoundingClientRect()
+      return el.contains(el.ownerDocument.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+    })).toBe(true)
+    await page.keyboard.press('Escape')
+    await panel.waitFor({ state: 'detached' })
     await page.setViewportSize({ width: 1200, height: 800 })
   })
 })

@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { InstallResult } from '../src/dsh-cli.ts'
-import { cleanOrphanedStore, cleanOrphanedStoreTmp } from '../src/store.ts'
+import { cleanOrphanedIgnored, cleanOrphanedStore, cleanOrphanedStoreTmp } from '../src/store.ts'
 
 let root: string
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'dshm-store-')) })
@@ -70,5 +70,40 @@ describe('cleanOrphanedStore', () => {
 
     const relative = async (): Promise<InstallResult> => ok('relative/path\n')
     expect(await cleanOrphanedStore(relative, 'web')).toEqual([])
+  })
+})
+
+describe('cleanOrphanedIgnored (#974)', () => {
+  it('removes quarantine copies and keeps .bak leftovers', () => {
+    // pnpm moves alien / interrupted packages into node_modules/.ignored
+    // and never reclaims them. Staging dirs, whole scoped copies, and the
+    // numbered `foo_1` rename all belong there; a `.bak` leftover does not.
+    const profile = join(root, 'profile')
+    const ignored = join(profile, 'node_modules', '.ignored')
+    mkdirSync(join(ignored, 'dshmarket_tmp_21960_12'), { recursive: true })
+    writeFileSync(join(ignored, 'dshmarket_tmp_21960_12', 'package.json'), '{}')
+    mkdirSync(join(ignored, '@jimp', 'png'), { recursive: true })
+    writeFileSync(join(ignored, '@jimp', 'png', 'package.json'), '{}')
+    mkdirSync(join(ignored, 'dsh-mnemon-source-skills_1'), { recursive: true })
+    writeFileSync(join(ignored, 'dsh-mnemon-source-skills_1', 'package.json'), '{}')
+    mkdirSync(join(ignored, 'dsh-workbuddy-connect.bak-20261017T153851'), { recursive: true })
+    writeFileSync(join(ignored, 'dsh-workbuddy-connect.bak-20261017T153851', 'package.json'), '{}')
+    mkdirSync(join(ignored, '@other', 'pkg.bak-asm'), { recursive: true })
+    writeFileSync(join(ignored, '@other', 'pkg.bak-asm', 'package.json'), '{}')
+
+    expect(cleanOrphanedIgnored(profile).sort()).toEqual([
+      '@jimp/png',
+      'dsh-mnemon-source-skills_1',
+      'dshmarket_tmp_21960_12',
+    ])
+    expect(existsSync(join(ignored, 'dshmarket_tmp_21960_12'))).toBe(false)
+    expect(existsSync(join(ignored, '@jimp'))).toBe(false)
+    expect(existsSync(join(ignored, 'dsh-mnemon-source-skills_1'))).toBe(false)
+    expect(existsSync(join(ignored, 'dsh-workbuddy-connect.bak-20261017T153851'))).toBe(true)
+    expect(existsSync(join(ignored, '@other', 'pkg.bak-asm'))).toBe(true)
+  })
+
+  it('is a no-op when .ignored is missing', () => {
+    expect(cleanOrphanedIgnored(join(root, 'empty-profile'))).toEqual([])
   })
 })

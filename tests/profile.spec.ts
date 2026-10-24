@@ -4,12 +4,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { load } from 'js-yaml'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { resolveDshHome } from '../src/home-paths.ts'
 import {
-  useInstallerDirectory, isInstallerBundle, addProfileBundle, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, entryArtifactExists, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, pluginSubdirs, profileDir,
+  useInstallerDirectory, isInstallerBundle, addProfileBundle, bundleOptOutRowIds, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, entryArtifactExists, generationManagedNames, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, parsePatchRows, pluginSubdirs, profileDir,
   readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledRepoIdentities, readInstalledVersion, readLockCommits,
   removeProfileBundle,
 } from '../src/profile.ts'
@@ -417,6 +418,23 @@ describe('readDependencyOwners (#634)', () => {
     expect(owners['dsh-office']).toBeUndefined()
   })
 
+  it('counts an optional dependency as ownership (#941)', () => {
+    // A platform-specific binary is payload, not a plugin the user chose. pnpm
+    // installs it, so it reaches the installed list; the manifest that asked
+    // for it must still name the owner so the card is not shown as a plugin.
+    writeProfile({})
+    installPackage('dsh-ops', {
+      dsh: {},
+      optionalDependencies: { '@dsh-ops/bash-win32-x64': '0.3.2' },
+    })
+    installPackage('@dsh-ops/bash-win32-x64', {})
+
+    const owners = readDependencyOwners('web', ['dsh-ops', '@dsh-ops/bash-win32-x64'])
+
+    expect(owners['@dsh-ops/bash-win32-x64']).toBe('dsh-ops')
+    expect(owners['dsh-ops']).toBeUndefined()
+  })
+
   it('ignores what is not installed, self-declarations, and manifest key order', () => {
     writeProfile({})
     installPackage('dsh-b', { dsh: {}, dependencies: { 'dsh-b': '1.0.0', 'not-installed': '1.0.0', shared: '1.0.0' } })
@@ -437,6 +455,33 @@ describe('readDependencyOwners (#634)', () => {
     writeProfile({})
     expect(readDependencyOwners('web', [])).toEqual({})
     expect(readDependencyOwners('web', ['absent'])).toEqual({})
+  })
+
+  it('finds an owner that is not a profile dependency itself (#892)', () => {
+    // `ws` is a plugin's dependency, so it is never in the profile manifest —
+    // but pnpm hoists its directory to the top level, and that is where the
+    // two native peers are declared. Asking only about the manifest's own
+    // entries could not name an owner for either, so both stayed on the
+    // installed list as plugins nobody chose.
+    writeProfile({})
+    installPackage('ws', { peerDependencies: { bufferutil: '^4.0.1', 'utf-8-validate': '>=5.0.2' } })
+    installPackage('bufferutil', {})
+    installPackage('utf-8-validate', {})
+    installPackage('dsh-better-sidebar', { dsh: {} })
+
+    const owners = readDependencyOwners('web', ['dsh-better-sidebar', 'bufferutil', 'utf-8-validate'])
+
+    expect(owners.bufferutil).toBe('ws')
+    expect(owners['utf-8-validate']).toBe('ws')
+  })
+
+  it('reads a scoped package at the top level as an owner too (#892)', () => {
+    writeProfile({})
+    installPackage('@scope/plugin', { dsh: {}, peerDependencies: { 'native-thing': '1.0.0' } })
+    installPackage('native-thing', {})
+
+    // The scope directory holds the package, not the package itself.
+    expect(readDependencyOwners('web', ['native-thing'])['native-thing']).toBe('@scope/plugin')
   })
 })
 
@@ -518,20 +563,58 @@ describe('readGitResolutionCommit', () => {
     writeFileSync(join(profileDir('web'), 'pnpm-lock.yaml'), body)
   }
 
-  it('gives a host shorthand nothing rather than another repository\'s commit (#637)', () => {
+  it('reads a host shorthand the same as the URL spelling of that install (#637, #851)', () => {
     // No pnpm the market supports resolves gitlab.com / bitbucket.org by
     // cloning — 9.15.4, 10.34.5, 11.8.0 and 12.4.1 all write an archive
     // tarball, which `readLockCommits` reads — so a `type: git` entry for one
-    // of these hosts does not occur today. This pins the direction the miss
-    // takes if some future pnpm writes one: nothing, which disables rollback
-    // with a clear reason, rather than a same-named repository's commit,
-    // which would roll back to the wrong tree.
+    // of these hosts does not occur today, and this is the shape a future one
+    // would take.
+    //
+    // The answer used to depend on the SPELLING: the URL read the commit and
+    // the shorthand read nothing, because the shorthand could not be keyed at
+    // all. #851 is that defect and it is not host-specific — the shorthand is
+    // how pnpm writes a host back into the manifest, so two spellings of one
+    // install have to give one answer. What #637 protected is untouched: the
+    // key is host-qualified, so another host's same-named repository still
+    // cannot answer for this one.
     writeLock(`lockfileVersion: 9\n  resolution: {commit: ${A}, repo: https://gitlab.com/me/themer.git, type: git}\n`)
 
-    expect(readGitResolutionCommit('web', 'gitlab:me/themer')).toBeNull()
-    expect(readGitResolutionCommit('web', 'bitbucket:me/themer')).toBeNull()
-    // The URL spelling of the same install still reads, untouched by #637.
+    expect(readGitResolutionCommit('web', 'gitlab:me/themer')).toBe(A)
     expect(readGitResolutionCommit('web', 'git+https://gitlab.com/me/themer.git')).toBe(A)
+    // Another host's repository of the same name still gets nothing, which is
+    // the direction #637 asked the miss to take.
+    expect(readGitResolutionCommit('web', 'bitbucket:me/themer')).toBeNull()
+    expect(readGitResolutionCommit('web', 'github:me/themer')).toBeNull()
+  })
+
+  it('finds the commit for a floating github: shorthand pnpm resolved as type: git (#851)', () => {
+    // The reporter's lockfile in shape: pnpm writes the `github:` shorthand
+    // back into the manifest and records the resolution's remote in SCP form,
+    // so before #851 the spec side and the lockfile side of the comparison
+    // shared no spelling at all — the shorthand keyed to nothing, and the URL
+    // spelling kept a `.git` suffix the SCP side also had, in a different
+    // scheme. `hostedRepoKey` is what the rest of the market compares specs
+    // by, and is now what both sides are keyed with here too.
+    writeLock(`lockfileVersion: 9\n  resolution: {commit: ${A}, repo: git@github.com:me/themer.git, type: git}\n`)
+
+    // Every spelling of one install. The reporter measured all four of the
+    // first group returning null on 1.66.18.
+    for (const spec of [
+      'github:me/themer',
+      'github:me/themer#main',
+      'https://github.com/me/themer',
+      'https://github.com/me/themer.git',
+      'git+https://github.com/me/themer.git',
+      'git+ssh://git@github.com/me/themer.git',
+      `github:me/themer#${A}`,
+      'git@github.com:me/themer.git',
+    ]) {
+      expect(readGitResolutionCommit('web', spec), spec).toBe(A)
+    }
+    // A different repository on the same host is still a different repository.
+    expect(readGitResolutionCommit('web', 'github:me/other')).toBeNull()
+    // And so is a repository on another host.
+    expect(readGitResolutionCommit('web', 'gitlab:me/themer')).toBeNull()
   })
 
   it('reads the commit pnpm recorded for a remote, whatever the spelling', () => {
@@ -644,6 +727,48 @@ describe('hasLoadableEntry — carrier bundles (#203)', () => {
     writeLoadable(join(carrier, 'node_modules', 'nested-dep'))
 
     expect(hasLoadableEntry(profile, 'carrier')).toBe(true)
+  })
+
+  it('finds a target that lives only in the host install tree (#906)', () => {
+    // A carrier mounting only in-box packages resolves nowhere under the
+    // profile. Before this, verifyActivation called it broken and
+    // validateAddedPlugins uninstalled it right after pnpm had installed it.
+    const profile = writeProfile({})
+    const carrier = join(profile, 'node_modules', 'dsh-mcp-context7')
+    mkdirSync(carrier, { recursive: true })
+    writeFileSync(join(carrier, 'package.json'), '{"dsh":{"bundle":{"patch":"cordis.patch.yml"}}}')
+    writeFileSync(join(carrier, 'cordis.patch.yml'), "- name: '@deepseek-ai/dsh-mcp-client'\n  config: {}\n")
+
+    const host = mkdtempSync(join(tmpdir(), 'dshm-host-'))
+    try {
+      writeFileSync(join(host, 'package.json'), '{"name":"@deepseek-ai/dsh"}')
+      writeLoadable(join(host, 'node_modules', '@deepseek-ai', 'dsh-mcp-client'))
+      // Nothing under the profile resolves; the host's tree does.
+      expect(hasLoadableEntry(profile, 'dsh-mcp-context7')).toBe(false)
+      expect(hasLoadableEntry(profile, 'dsh-mcp-context7', host)).toBe(true)
+      // null means "do not consult the install tree" — the pre-#906 answer.
+      expect(hasLoadableEntry(profile, 'dsh-mcp-context7', null)).toBe(false)
+    } finally {
+      rmSync(host, { recursive: true, force: true })
+    }
+  })
+
+  it('trusts the official scope inside a packaged desktop archive (#676, #906)', () => {
+    // Electron archives cannot be probed reliably by plain fs, so inside
+    // app.asar the name is the evidence — the same rule check.ts already
+    // applies to loader rows.
+    const profile = writeProfile({})
+    const carrier = join(profile, 'node_modules', 'carrier')
+    mkdirSync(carrier, { recursive: true })
+    writeFileSync(join(carrier, 'package.json'), '{"dsh":{"bundle":{"patch":"cordis.patch.yml"}}}')
+    writeFileSync(join(carrier, 'cordis.patch.yml'), "- name: '@deepseek-ai/dsh-mcp-client'\n  config: {}\n")
+    const asarHost = join(tmpdir(), 'some-app', 'resources', 'app.asar', 'dsh')
+    expect(hasLoadableEntry(profile, 'carrier', asarHost)).toBe(true)
+
+    // A non-official name gets no such benefit: without a readable package
+    // there is no evidence it exists.
+    writeFileSync(join(carrier, 'cordis.patch.yml'), "- name: 'third-party-missing'\n  config: {}\n")
+    expect(hasLoadableEntry(profile, 'carrier', asarHost)).toBe(false)
   })
 
   it('refuses a carrier whose target genuinely does not exist anywhere', () => {
@@ -836,6 +961,48 @@ describe('manifest rollback (#65)', () => {
 })
 
 describe('setAllowBuilds (#6)', () => {
+  it('writes exact monorepo build keys and repairs their undecided placeholders', async () => {
+    const { setAllowBuilds } = await import('../src/profile.ts')
+    const dir = writeProfile({})
+    const sha = '6322be7665112d5caecaf2522b5496e4c21a5d5a'
+    const archive = `@cyrus/dsh-sessions-insight@https://codeload.github.com/Mt-Youya/dsh-plugins/tar.gz/${sha}`
+    const clone = '@cyrus/dsh-sessions-insight@git+https://github.com/Mt-Youya/dsh-plugins.git'
+    const keys = [
+      `${archive}#path:/plugins/sessions-insight`,
+      `${clone}#${sha}&path:/plugins/sessions-insight`,
+      `${clone}#path:/plugins/sessions-insight`,
+      `${archive}#path:/.plugins/sessions-insight`,
+      `p@https://gitlab.com/group/mono/-/archive/${sha}/mono-${sha}.tar.gz#path:/packages/p`,
+      `p@https://bitbucket.org/o/mono/get/${sha}.tar.gz#path:/packages/p`,
+    ]
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'),
+      `packages:\n  - .\nallowBuilds:\n  '${keys[0]}': set this to true or false\n  other: false\n`)
+
+    const approved = setAllowBuilds('web', keys)
+    expect(approved).toEqual(['other', ...keys])
+    const workspace = load(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')) as { allowBuilds: Record<string, boolean> }
+    expect(workspace.allowBuilds).toEqual({ other: false, ...Object.fromEntries(keys.map(key => [key, true])) })
+    // Approval remains stable across a second click.
+    expect(setAllowBuilds('web', keys)).toEqual(approved)
+  })
+
+  it('still rejects unsafe or malformed monorepo build keys', async () => {
+    const { setAllowBuilds } = await import('../src/profile.ts')
+    writeProfile({})
+    const archive = `p@https://codeload.github.com/o/r/tar.gz/${'a'.repeat(40)}`
+    expect(setAllowBuilds('web', [
+      `${archive}#path:/../outside`,
+      `${archive}#path:/packages/./p`,
+      `${archive}#path:/packages/../../outside`,
+      `${archive}#path:/packages/p\n  evil: true`,
+      `${archive}#path:/packages/p&evil:true`,
+      `${archive}#path:/packages\\p`,
+      `${archive}#path:/packages/%2e%2e/outside`,
+      `${archive}#path:`,
+      'p@git+https://github.com/o/r.git#HEAD&path:/packages/p',
+    ])).toEqual([])
+  })
+
   it('accepts the clone-URL and archive keys off GitHub, and only in those exact shapes (#637)', async () => {
     // Same bargain as the codeload widening below: the allowlist is what
     // stops a caller writing arbitrary text into a file pnpm parses, so each
@@ -1039,6 +1206,254 @@ describe('setAllowBuilds (#6)', () => {
   })
 })
 
+/**
+ * #841: an insert row's `config:` is its payload, and payloads carry `id:`
+ * keys of their own — a preset row lists the plugins it will instantiate
+ * under `config.plugins[].id`. Counting those as inserted loader entry ids
+ * made two bundles that instantiate the same official plugins read as two
+ * bundles inserting the same entry ids, and the market then refused the
+ * second one over a clash the host does not have.
+ */
+describe('parsePatchRows — an insert row\'s payload is not a loader entry (#841)', () => {
+  const presetShaped = [
+    '- insert:',
+    '    - id: preset-a',
+    "      name: '@deepseek-ai/dsh-agent-preset'",
+    '      config:',
+    '        id: a',
+    '        plugins:',
+    '          - id: persona',
+    "            name: '@deepseek-ai/dsh-persona'",
+    '          - id: tool-todo',
+    "            name: '@deepseek-ai/dsh-tool-todo'",
+    '',
+  ].join('\n')
+
+  it('counts the row and nothing the row configures', () => {
+    // Exactly the input from the report, on 1.66.17 and unchanged on main:
+    // four ids came out, and only the first is a row.
+    expect(parsePatchRows(presetShaped).insertedIds).toEqual(['preset-a'])
+  })
+
+  it('still counts the children of a group, whose config IS more rows', () => {
+    // The shape the fix must not lose: a group's list-valued config holds
+    // child loader entries, and two bundles sharing a child id really do
+    // brick the next boot (tests/patch.spec.ts pins the reference side).
+    const groupShaped = [
+      '- insert:',
+      '    - id: group-x',
+      '      name: cordis:group',
+      '      group: true',
+      '      config:',
+      '        - id: real-child',
+      '          name: some-plugin',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(groupShaped).insertedIds).toEqual(['group-x', 'real-child'])
+  })
+
+  it('leaves a plain plugin\'s list-valued config alone, as the strict parser does', () => {
+    // Only a GROUP row reads a list config as child rows; for anyone else a
+    // list is ordinary options. userPatchPackageReferences has drawn that
+    // line since it was written — the line scanner now agrees with it.
+    const optionsShaped = [
+      '- insert:',
+      '  - id: array-options',
+      '    name: options-plugin',
+      '    config:',
+      '      - id: not-a-row',
+      '        name: nested-array-value',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(optionsShaped).insertedIds).toEqual(['array-options'])
+  })
+
+  it('ends the payload at the next row, so later rows still count', () => {
+    const twoRows = [
+      '- insert:',
+      '    - id: preset-a',
+      "      name: '@deepseek-ai/dsh-agent-preset'",
+      '      config:',
+      '        id: a',
+      '        plugins:',
+      '          - id: persona',
+      '            name: dsh-persona',
+      '    - id: plain-b',
+      '      name: plain-plugin',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(twoRows).insertedIds).toEqual(['preset-a', 'plain-b'])
+  })
+
+  it('finds the group no matter which side of config the keys are written', () => {
+    // `group:` after `config:` is unusual but legal YAML. A scan that only
+    // looked upwards would read this row's children as payload and lose the
+    // collision it exists to catch, so the row is read as a whole.
+    const reordered = [
+      '- insert:',
+      '    - config:',
+      '        - id: real-child',
+      '          name: some-plugin',
+      '      name: cordis:group',
+      '      group: true',
+      '      id: group-x',
+      '',
+    ].join('\n')
+    // Set comparison: which of the two ids is listed first is an artefact of
+    // their order in the file, not something callers depend on.
+    expect([...parsePatchRows(reordered).insertedIds].sort()).toEqual(['group-x', 'real-child'])
+  })
+
+  it('ends a payload opened on the marker line at the row\'s own next key', () => {
+    // `- config:` puts the key two columns right of the `-`. The row's later
+    // keys sit at that column too; measured from the `-`, `id: real-row`
+    // read as payload and the row lost its own id.
+    const configFirst = [
+      '- insert:',
+      '    - config:',
+      '        foo: 1',
+      '      id: real-row',
+      '      name: x',
+      '    - id: next-row',
+      '      name: y',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(configFirst).insertedIds).toEqual(['real-row', 'next-row'])
+  })
+
+  it('finds the group past a list-valued key written before config', () => {
+    // The `- foo` under `tags:` is a list item, not the row's marker; taking
+    // it for one read the row from there and never saw `group: true`.
+    const tagged = [
+      '- insert:',
+      '    - id: group-x',
+      '      name: cordis:group',
+      '      group: true',
+      '      tags:',
+      '        - foo',
+      '      config:',
+      '        - id: real-child',
+      '          name: some-plugin',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(tagged).insertedIds).toEqual(['group-x', 'real-child'])
+  })
+
+  it('reads a row whose marker is followed by more than one space', () => {
+    // `-   id:` is legal YAML; the row's keys then sit four columns right of
+    // the `-`, not two.
+    const wideMarker = [
+      '- insert:',
+      '  -   id: group-x',
+      '      name: cordis:group',
+      '      group: true',
+      '      config:',
+      '        - id: real-child',
+      '          name: some-plugin',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(wideMarker).insertedIds).toEqual(['group-x', 'real-child'])
+  })
+
+  it('reads a group row opened by a bare `-`', () => {
+    const bareMarker = [
+      '- insert:',
+      '    -',
+      '      id: group-x',
+      '      group: true',
+      '      config:',
+      '        - id: real-child',
+      '          name: some-plugin',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(bareMarker).insertedIds).toEqual(['group-x', 'real-child'])
+  })
+
+  it('keeps a payload\'s own `config:` keys inside the payload', () => {
+    // A preset's plugin list may configure each plugin. That inner `config:`
+    // is payload too; letting it move the payload's edge ended the payload
+    // early, and `official` read as a row this package inserts — #841 again.
+    const nestedConfig = [
+      '- insert:',
+      '    - id: preset',
+      '      name: x',
+      '      config:',
+      '        plugins:',
+      '          - config:',
+      '              a: 1',
+      '            id: official',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(nestedConfig).insertedIds).toEqual(['preset'])
+  })
+
+  it('reads a list under any other key of a row as data, not rows', () => {
+    // Only a group's config holds rows. A list under `tags:` (or any other
+    // key) is the row's data, whatever keys its items carry.
+    const tagged = [
+      '- insert:',
+      '    - id: a',
+      '      tags:',
+      '        - id: tag-one',
+      '        - config:',
+      '            x: 1',
+      '          id: tag-two',
+      '      name: z',
+      '    - id: b',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(tagged).insertedIds).toEqual(['a', 'b'])
+  })
+
+  it('reads a list written at its key\'s own column as that key\'s value', () => {
+    // YAML lets a block sequence sit at its key's column instead of one level
+    // in. Read as a sibling, the payload ended at its first item and the
+    // item's id counted as a row this package inserts — #841 again.
+    const rows = (compact: boolean): string => [
+      '- insert:',
+      '    - id: plain',
+      '      name: p',
+      '      config:',
+      `${compact ? '      ' : '        '}- id: payload-id`,
+      `${compact ? '        ' : '          '}name: x`,
+      '    - id: next',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(rows(false)).insertedIds).toEqual(['plain', 'next'])
+    expect(parsePatchRows(rows(true)).insertedIds).toEqual(['plain', 'next'])
+  })
+
+  it('still reads a group\'s children when its config list sits at the key\'s column', () => {
+    // The other side of the same rule: a group's list config holds rows
+    // however it is indented.
+    const compactGroup = [
+      '- insert:',
+      '    - id: group-x',
+      '      group: true',
+      '      config:',
+      '      - id: real-child',
+      '        name: some-plugin',
+      '      - id: second-child',
+      '    - id: next',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(compactGroup).insertedIds).toEqual(['group-x', 'real-child', 'second-child', 'next'])
+  })
+
+  it('reads a compact list under any other key as data too', () => {
+    const compactTags = [
+      '- insert:',
+      '    - id: a',
+      '      tags:',
+      '      - id: tag-one',
+      '      name: z',
+      '    - id: b',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(compactTags).insertedIds).toEqual(['a', 'b'])
+  })
+})
+
 describe('conflictingEntryIds (#122)', () => {
   /** Write a package whose bundle patch holds the given rows. */
   function bundle(dir: string, name: string, patch: string): void {
@@ -1072,6 +1487,70 @@ describe('conflictingEntryIds (#122)', () => {
       // distinction #147 drew for the disable path.
       bundle(dir, 'newcomer', '- insert:\n    - id: mine\n      name: newcomer\n- id: theirs\n  config:\n    tweaked: true\n')
       expect(conflictingEntryIds(dir, 'newcomer', ['incumbent'])).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not flag two preset bundles whose payloads instantiate the same plugins (#841)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-clash-'))
+    try {
+      // Two bundles, each inserting ONE preset row, each instantiating the
+      // same official plugins. Their loader ids are disjoint (`preset-a` vs
+      // `preset-b`, and `a` vs `b` are preset ids in their own namespace),
+      // and the host boots the combination — 6 presets declaring `id:
+      // persona` each is a normal tree. Reading the payloads as entry ids
+      // made this a 16-id "conflict" and uninstalled the newcomer.
+      const preset = (row: string, presetId: string): string =>
+        `- insert:\n    - id: ${row}\n      name: '@deepseek-ai/dsh-agent-preset'\n      config:\n        id: ${presetId}\n        plugins:\n          - id: persona\n            name: '@deepseek-ai/dsh-persona'\n          - id: tool-todo\n            name: '@deepseek-ai/dsh-tool-todo'\n`
+      bundle(dir, 'smart-fount', preset('preset-a', 'a'))
+      bundle(dir, 'clearai-dsh', preset('preset-b', 'b'))
+      expect(conflictingEntryIds(dir, 'clearai-dsh', ['smart-fount'])).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still flags a real collision among the children of a group (#841)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-clash-'))
+    try {
+      // Narrowing the guard must not cost it the case it exists for: the
+      // group's children ARE entries, so one shared child id is a duplicate
+      // loader entry id and the host will refuse the next boot.
+      const group = (row: string, child: string): string =>
+        `- insert:\n    - id: ${row}\n      name: cordis:group\n      group: true\n      config:\n        - id: ${child}\n          name: some-plugin\n`
+      bundle(dir, 'incumbent', group('group-a', 'real-child'))
+      bundle(dir, 'newcomer', group('group-b', 'real-child'))
+      expect(conflictingEntryIds(dir, 'newcomer', ['incumbent']))
+        .toEqual([{ id: 'real-child', owner: 'incumbent' }])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not flag a payload id written as a list at its key\'s column', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-clash-'))
+    try {
+      // One bundle inserts `persona`; the other only names `persona` in its
+      // preset payload, written without the extra indent. The host has one
+      // `persona` entry, so the newcomer must not be refused over it.
+      bundle(dir, 'other-plugin', '- insert:\n    - id: persona\n      name: other-plugin\n')
+      bundle(dir, 'preset-a', "- insert:\n    - id: preset-a\n      name: '@deepseek-ai/dsh-agent-preset'\n      config:\n      - id: persona\n        name: '@deepseek-ai/dsh-persona'\n")
+      expect(conflictingEntryIds(dir, 'preset-a', ['other-plugin'])).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still flags a group child collision when the child list sits at the key\'s column', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-clash-'))
+    try {
+      const group = (row: string): string =>
+        `- insert:\n    - id: ${row}\n      name: cordis:group\n      group: true\n      config:\n      - id: real-child\n        name: some-plugin\n`
+      bundle(dir, 'incumbent', group('group-a'))
+      bundle(dir, 'newcomer', group('group-b'))
+      expect(conflictingEntryIds(dir, 'newcomer', ['incumbent']))
+        .toEqual([{ id: 'real-child', owner: 'incumbent' }])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -1131,6 +1610,179 @@ describe('mergeDuplicateReleaseAgeExcludes (#732)', () => {
     return dir
   }
 
+  it.each(['\n', '\r\n'])('merges a pnpm folded union and shadowed duplicates with %j (#820)', (eol) => {
+    const dir = workspace([
+      'packages:',
+      '  - .',
+      'minimumReleaseAgeExclude:',
+      "  - '@scope/a@1.0.0 || 1.0.1 ||",
+      "    1.0.2'",
+      '  - dshmarket@1.66.14',
+      '  - dshmarket@1.66.15',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join(eol))
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['dshmarket'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'packages:',
+      '  - .',
+      'minimumReleaseAgeExclude:',
+      "  - '@scope/a@1.0.0 || 1.0.1 ||",
+      "    1.0.2'",
+      '  - dshmarket@1.66.14 || 1.66.15',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join(eol))
+  })
+
+  it.each([
+    ["'", '@scope/pkg'],
+    ["'", 'ordinary'],
+    ['"', '@scope/pkg'],
+    ['"', 'ordinary'],
+    ['', 'ordinary'],
+  ])('merges a folded %s scalar for %s without widening its versions (#820)', (quote, name) => {
+    const dir = workspace([
+      'minimumReleaseAgeExclude:',
+      `  - ${quote}${name}@1.0.0 ||`,
+      `    1.0.1${quote}`,
+      `  - '${name}@1.0.2-beta.1+build.2'`,
+      '',
+    ].join('\n'))
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([name])
+    const parsed = load(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+    expect(parsed).toEqual({ minimumReleaseAgeExclude: [`${name}@1.0.0 || 1.0.1 || 1.0.2-beta.1+build.2`] })
+  })
+
+  it('decodes YAML escapes before grouping and re-emits the same rule (#820)', () => {
+    const dir = workspace('minimumReleaseAgeExclude:\n  - "pkg\\u00401.0.0 ||\n    1.0.1"\n  - pkg@1.0.2\n')
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['pkg'])
+    expect(load(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')))
+      .toEqual({ minimumReleaseAgeExclude: ['pkg@1.0.0 || 1.0.1 || 1.0.2'] })
+  })
+
+  it('honours an escaped line break in a double-quoted scalar (#820)', () => {
+    const dir = workspace('minimumReleaseAgeExclude:\n  - "pkg@1.0.\\\n    1"\n  - pkg@1.0.2\n')
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['pkg'])
+    expect(load(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')))
+      .toEqual({ minimumReleaseAgeExclude: ['pkg@1.0.1 || 1.0.2'] })
+  })
+
+  it.each(['\n', '\r\n'])('preserves full-line and trailing comments around folded entries with %j (#816, #820)', (eol) => {
+    const dir = workspace([
+      'minimumReleaseAgeExclude:',
+      '# before',
+      "  - '@scope/pkg@1.0.0 ||",
+      "    1.0.1'  # first",
+      '',
+      '  # between',
+      "  - '@scope/pkg@1.0.2 ||",
+      "    1.0.3' # duplicate",
+      '  - other@1.0.0   # untouched',
+      'allowBuilds:',
+      '  esbuild: true # unrelated',
+      '',
+    ].join(eol))
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['@scope/pkg'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'minimumReleaseAgeExclude:',
+      '# before',
+      "  - '@scope/pkg@1.0.0 || 1.0.1 || 1.0.2 || 1.0.3' # first",
+      '',
+      '  # between',
+      '  # duplicate',
+      '  - other@1.0.0   # untouched',
+      'allowBuilds:',
+      '  esbuild: true # unrelated',
+      '',
+    ].join(eol))
+  })
+
+  it('converges for a long two-line rule over 20 consecutive runs (#820)', () => {
+    const versions = Array.from({ length: 10 }, (_, i) => `1.0.${i}`)
+    const original = [
+      'minimumReleaseAgeExclude:',
+      `  - '@scope/pkg@${versions.slice(0, 6).join(' || ')} ||`,
+      `    ${versions.slice(6).join(' || ')}'`,
+      "  - '@scope/pkg@1.0.10'",
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n')
+    const dir = workspace(original)
+    const file = join(dir, 'pnpm-workspace.yaml')
+    const expected = { minimumReleaseAgeExclude: [`@scope/pkg@${[...versions, '1.0.10'].join(' || ')}`], allowBuilds: { esbuild: true } }
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['@scope/pkg'])
+    const repaired = readFileSync(file)
+    expect(load(repaired.toString())).toEqual(expected)
+    utimesSync(file, 1, 1)
+    const mtime = statSync(file).mtimeMs
+    for (let i = 1; i < 20; i++) {
+      expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+      expect(readFileSync(file)).toEqual(repaired)
+      expect(statSync(file).mtimeMs).toBe(mtime)
+    }
+  })
+
+  it.each([
+    "  - '@scope/pkg@1.0.0 ||\n    1.0.1'",
+    '  - "pkg@1.0.0 ||\n    1.0.1"',
+    '  - pkg@1.0.0 ||\n    1.0.1',
+  ])('does not write a folded block that needs no merge: %s (#820)', (entry) => {
+    const original = `minimumReleaseAgeExclude:\r\n${entry.replaceAll('\n', '\r\n')}  # keep\r\n\r\nallowBuilds:\r\n  esbuild: true`
+    const dir = workspace(original)
+    const file = join(dir, 'pnpm-workspace.yaml')
+    utimesSync(file, 1, 1)
+    const mtime = statSync(file).mtimeMs
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+    expect(readFileSync(file, 'utf8')).toBe(original)
+    expect(statSync(file).mtimeMs).toBe(mtime)
+  })
+
+  it.each([
+    "  - '@scope/pkg@1.0.0 ||\n    1.0.1", // unterminated
+    "  - '@scope/pkg@1.0.0 ||\n    1.0.1\"", // mismatched quotes
+    "  - 'pkg@1.0.0'junk", // content after closing quote
+    "  - 'pkg@1.0.0''", // unmatched escaped quote
+    "  - 'pkg@1.0.0''suffix'", // decoded quote is not a version
+    '  - "pkg@1.0.0\\q"', // invalid YAML escape
+    "  - '''@scope/pkg@1.0.0 ||'\n    1.0.1'", // already damaged file
+    "  - '@scope/pkg@1.0.\n    1'", // a newline inside a version is a space, not concatenation
+    "  - ' pkg@1.0.0'", // quoted whitespace must not be stripped
+    "  - 'pkg@1.0.0 # literal'", // not a YAML comment
+    '  - pkg@1.0.0 # ends the scalar\n    || 1.0.1',
+    '  - pkg@1.0.0\n\n    || 1.0.1', // a blank line must not truncate validation
+    '  - pkg@1.0.0\n  # interrupts\n    || 1.0.1',
+    '  - pkg@1.0.0\n  orphan@1.0.1', // insufficient continuation indent
+    '  - pkg@1.0.0\n\t|| 1.0.1',
+    '  - pkg@1.0.0\n    nested: true',
+    '  - &rule pkg@1.0.0',
+    '  - *rule',
+    '  - !!str pkg@1.0.0',
+    '  - >\n    pkg@1.0.0',
+    '  - |\n    pkg@1.0.0',
+    '  - [pkg@1.0.0]',
+    '  - {pkg: 1.0.0}',
+    "  - 'pkg@*'", // complex selectors are left alone, never widened
+    "  - 'pkg@>=1.0.0'",
+    "  - 'pkg@1.0.0-.'",
+    "  - 'pkg@1.0.0-01'",
+    "  - 'pkg@01.0.0'",
+  ])('refuses unsafe or unsupported input without a write over 20 runs: %s (#820)', (entry) => {
+    const original = `minimumReleaseAgeExclude:\n  - a@1.0.0\n  - a@2.0.0\n${entry}\nallowBuilds:\n  esbuild: true\n`
+    const dir = workspace(original)
+    const file = join(dir, 'pnpm-workspace.yaml')
+    utimesSync(file, 1, 1)
+    const mtime = statSync(file).mtimeMs
+    for (let i = 0; i < 20; i++) {
+      expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+      expect(readFileSync(file, 'utf8')).toBe(original)
+      expect(statSync(file).mtimeMs).toBe(mtime)
+    }
+  })
+
   it('merges a shadowed duplicate rule into one union (#732)', () => {
     // pnpm appended the second rule when it let 1.65.4 through, then honoured
     // only the first per name — so its own entry was shadowed and every later
@@ -1183,13 +1835,94 @@ describe('mergeDuplicateReleaseAgeExcludes (#732)', () => {
       .toBe("minimumReleaseAgeExclude:\n  - '@scope/pkg@1.0.0'\n")
   })
 
+  it('retains the repair of a single unquoted scoped name (#732)', () => {
+    const dir = workspace('minimumReleaseAgeExclude:\n  - @scope/pkg@1.0.0 # keep\n')
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['@scope/pkg'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8'))
+      .toBe("minimumReleaseAgeExclude:\n  - '@scope/pkg@1.0.0' # keep\n")
+  })
+
   it('does not touch a block it cannot read exactly', () => {
-    // A comment on an entry, or a flow list, is a line this cannot re-emit
-    // without losing something: leaving it alone beats guessing.
+    // A `#` that is not a YAML comment (no whitespace before it), or a flow
+    // list, is a line this cannot re-emit without losing something: leaving
+    // it alone beats guessing.
     for (const contents of [
-      'minimumReleaseAgeExclude:\n  - a@1.0.0 # keep\n  - a@2.0.0\n',
+      'minimumReleaseAgeExclude:\n  - a@1.0.0#keep\n  - a@2.0.0\n',
       'minimumReleaseAgeExclude: [a@1.0.0, a@2.0.0]\n',
       'minimumReleaseAgeExclude:\n  - a@1.0.0\n  - a@\n',
+    ]) {
+      const dir = workspace(contents)
+      expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+      expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(contents)
+    }
+  })
+
+  it('merges past comment lines inside the block and keeps every comment (#816)', () => {
+    // The reporter's file: they had merged a duplicate by hand and written
+    // down why, inside the block. The host then appended another rule below
+    // the comment. The comment used to end the block (or veto the repair), so
+    // the new duplicate stayed shadowed and every command kept failing.
+    const dir = workspace([
+      'minimumReleaseAgeExclude:',
+      '  - billion-context@0.1.187 || 0.1.188',
+      '  # 注意：同一个包名只能出现一条 —— pnpm 11.7.0 只认每个包名的第一条匹配项，',
+      '  # 必须合并成一条用 ` || ` 连接（2026-10-09 修复）。',
+      '  - dshmarket@1.66.12 || 1.66.14',
+      '  - dsh-think-translate@1.2.7',
+      '  - dshmarket@1.66.15',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['dshmarket'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'minimumReleaseAgeExclude:',
+      '  - billion-context@0.1.187 || 0.1.188',
+      '  # 注意：同一个包名只能出现一条 —— pnpm 11.7.0 只认每个包名的第一条匹配项，',
+      '  # 必须合并成一条用 ` || ` 连接（2026-10-09 修复）。',
+      '  - dshmarket@1.66.12 || 1.66.14 || 1.66.15',
+      '  - dsh-think-translate@1.2.7',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+  })
+
+  it('keeps comments written at the end of entries, including on a dropped duplicate (#816)', () => {
+    const dir = workspace([
+      'minimumReleaseAgeExclude:',
+      '# exempted by hand',
+      '  - dshmarket@1.66.12 || 1.66.14  # 保留',
+      '  - other@1.0.0',
+      '  - dshmarket@1.66.15 # host added this',
+      '',
+    ].join('\n'))
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['dshmarket'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'minimumReleaseAgeExclude:',
+      '# exempted by hand',
+      '  - dshmarket@1.66.12 || 1.66.14 || 1.66.15 # 保留',
+      '  - other@1.0.0',
+      '  # host added this',
+      '',
+    ].join('\n'))
+  })
+
+  it('leaves a commented block with no duplicates byte-for-byte alone (#816)', () => {
+    const original = 'minimumReleaseAgeExclude:\n  # why\n  - a@1.0.0   # keep\n  - b\n'
+    const dir = workspace(original)
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(original)
+  })
+
+  it('refuses to rewrite a name that is not a package name (#820)', () => {
+    // The last line of defence: whatever shape misleads the reader, a name
+    // that cannot be a package name must never reach the writer — that is how
+    // a stray quote used to double once per operation until the profile broke.
+    for (const contents of [
+      "minimumReleaseAgeExclude:\n  - '''''': true\n  - a@1.0.0\n",
+      'minimumReleaseAgeExclude:\n  - name with space@1.0.0\n  - a@1.0.0\n  - a@2.0.0\n',
+      'minimumReleaseAgeExclude:\n  - @scope/@1.0.0\n  - a@1.0.0\n  - a@2.0.0\n',
     ]) {
       const dir = workspace(contents)
       expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
@@ -1201,6 +1934,46 @@ describe('mergeDuplicateReleaseAgeExcludes (#732)', () => {
     const dir = workspace('minimumReleaseAgeExclude:\n  - pkg\n  - pkg@1.0.0\n')
     expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual(['pkg'])
     expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe('minimumReleaseAgeExclude:\n  - pkg\n')
+  })
+
+  it('leaves a line break inside a version alone instead of guessing its meaning (#820)', () => {
+    // pnpm wraps a long `||` union across two lines. The continuation is
+    // indented but does not start with `-`, so the block used to end at it:
+    // only the truncated first line survived, its unterminated quote was read
+    // as a package name, and the repair re-emitted that line with the quote
+    // doubled — once per run, until the file grew large enough to break every
+    // pnpm command in the profile. YAML folds `1.0.` + `2` to `1.0. 2`, which
+    // is not an exact version: even with scalar decoding this stays unreadable.
+    const original = [
+      'minimumReleaseAgeExclude:',
+      "  - '@scope/thing@1.0.0 || 1.0.1 || 1.0.",
+      "    2 || 1.0.3'",
+      '  - dshmarket@1.66.14',
+      '  - dshmarket@1.66.12 || 1.66.14',
+      '',
+    ].join('\n')
+    const dir = workspace(original)
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(original)
+  })
+
+  it('leaves the whole block alone when folding splits a version between readable rules (#820)', () => {
+    // The readable rules around it are still a duplicate pair, so a repair
+    // that only read up to the continuation would rewrite part of the block
+    // while leaving the entry it misread untouched — worse than not acting.
+    const original = [
+      'minimumReleaseAgeExclude:',
+      '  - dshmarket@1.66.14',
+      "  - '@scope/thing@1.0.0 || 1.0.",
+      "    1 || 1.0.2'",
+      '  - dshmarket@1.66.12',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n')
+    const dir = workspace(original)
+    expect(mergeDuplicateReleaseAgeExcludes('web')).toEqual([])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(original)
   })
 })
 
@@ -1261,5 +2034,141 @@ describe('bundlesDroppedFromProfile (#720)', () => {
     const dir = writeProfile(manifest(['dshmarket'], { dshmarket: '^1', 'dsh-off': '^1' }))
     bundlesDroppedFromProfile(before, 'web', undefined)
     expect(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dsh.profile.bundles).toEqual(['dshmarket'])
+  })
+})
+
+describe('generationManagedNames (#874)', () => {
+  const link = (name: string, version: string) =>
+    `link:../.generations/live/${name}+${version}+01080f24f124/node_modules/${name}`
+
+  it('reads the host\'s own projection list', () => {
+    writeProfile({
+      dependencies: { 'dsh-codex-subscription': '2.6.5' },
+      dsh: { desktop: { generationProjection: { plugins: ['dsh-codex-subscription'] } } },
+    })
+    expect([...generationManagedNames('web')]).toEqual(['dsh-codex-subscription'])
+  })
+
+  it('reads a generation link in overrides, which is where the host writes it', () => {
+    // The shape from #874's report: `dependencies` keeps the plain version,
+    // `pnpm.overrides` carries the link into `.generations/live`.
+    writeProfile({
+      dependencies: { 'dsh-codex-subscription': '2.6.5' },
+      pnpm: { overrides: { 'dsh-codex-subscription': link('dsh-codex-subscription', '2.6.5') } },
+    })
+    expect([...generationManagedNames('web')]).toEqual(['dsh-codex-subscription'])
+  })
+
+  it('reads a generation link in dependencies', () => {
+    writeProfile({ dependencies: { 'dsh-loop': link('dsh-loop', '1.2.0') } })
+    expect([...generationManagedNames('web')]).toEqual(['dsh-loop'])
+  })
+
+  it('counts neither ordinary ranges nor a developer checkout', () => {
+    writeProfile({
+      dependencies: { 'dsh-loop': '^1.0.0', 'local-work': 'link:../local-work' },
+      peerDependencies: { 'peer-thing': link('peer-thing', '1.0.0') },
+    })
+    // The generation link inside peerDependencies IS one; the range and the
+    // hand-written `link:` are not.
+    expect([...generationManagedNames('web')]).toEqual(['peer-thing'])
+  })
+
+  it('answers with nothing on a profile with no manifest', () => {
+    mkdirSync(profileDir('web'), { recursive: true })
+    expect([...generationManagedNames('web')]).toEqual([])
+  })
+
+  it('ignores a malformed projection list instead of throwing', () => {
+    writeProfile({ dependencies: {}, dsh: { desktop: { generationProjection: { plugins: 'dsh-loop' } } } })
+    expect([...generationManagedNames('web')]).toEqual([])
+  })
+})
+
+describe('parsePatchRows — the rows a patch ships switched off (#876)', () => {
+  it('reads an opt-in row whose keys sit between id and disabled', () => {
+    // dsh-mnemon's real shape: `id`, then `name`, then `disabled: true`. The
+    // line scanner the market uses for the USER layer requires `disabled` on
+    // the very next line, so it never saw these; the row parser has to.
+    const optIn = [
+      '- id: mnemon-strategy-general',
+      '  name: dsh-mnemon-strategy-general',
+      '# an inserted comment must not end the row',
+      '  disabled: true',
+      '- id: mnemon',
+      '  name: dsh-mnemon',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(optIn).disabledIds).toEqual(['mnemon-strategy-general'])
+  })
+
+  it('reads an opt-in row nested inside an insert block', () => {
+    const nested = [
+      '- insert:',
+      '    - id: off-by-default',
+      '      name: some-strategy',
+      '      disabled: true',
+      '    - id: on-by-default',
+      '      name: some-core',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(nested).disabledIds).toEqual(['off-by-default'])
+  })
+
+  it('never counts disabled: false, and never counts a payload id (#841)', () => {
+    const rows = [
+      '- insert:',
+      '    - id: forced-on',
+      '      name: forced-plugin',
+      '      disabled: false',
+      '    - id: preset-a',
+      '      name: cordis:preset',
+      '      config:',
+      '        plugins:',
+      '          - id: payload-entry',
+      '            name: payload-plugin',
+      '            disabled: true',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(rows).disabledIds).toEqual([])
+  })
+})
+
+describe('bundleOptOutRowIds (#876)', () => {
+  it('reads both patch sources a package may ship', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-optout-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'dsh-mnemon',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }))
+      writeFileSync(join(dir, 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: mnemon',
+        '      name: dsh-mnemon',
+        '    - id: mnemon-strategy-general',
+        '      name: dsh-mnemon-strategy-general',
+        '      disabled: true',
+        '',
+      ].join('\n'))
+      // #792: a declared LIST contributes every file it names.
+      writeFileSync(join(dir, 'extra.patch.yml'), '- id: extra-opt-in\n  disabled: true\n')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      manifest.dsh.bundle.patch = ['./cordis.patch.yml', './extra.patch.yml']
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      expect([...bundleOptOutRowIds(dir)].sort()).toEqual(['extra-opt-in', 'mnemon-strategy-general'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers with nothing for a package that ships no patch', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-optout-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'plain' }))
+      expect(bundleOptOutRowIds(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

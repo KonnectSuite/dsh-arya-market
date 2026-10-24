@@ -4,17 +4,19 @@
  * staleness detection (#22's silent no-op).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { InstallResult } from '../src/dsh-cli.ts'
 import {
-  diagnosticsTail, failureDetail, FETCH_TIMEOUT_OVERRIDE, groupConflictsByOwner, hostNodeModulesRoot, isStaleUpdate, normalizedLinkTarget,
-  parseIgnoredBuildEntries, parseIgnoredBuilds, parsePrepareNotAllowed, pnpmNeverStarted, removeDanglingHostBridge, retargetCollections,
-  RELEASE_AGE_OVERRIDE, validateAddedPlugins, withHoistRecovery,
+  diagnosticsTail, failureDetail, FETCH_TIMEOUT_OVERRIDE, groupConflictsByOwner, hostNodeModulesRoot, installApplied,
+  isHostPortCollision, isStaleUpdate, normalizedLinkTarget, parseIgnoredBuildEntries, parseIgnoredBuilds,
+  parsePrepareNotAllowed, pnpmNeverStarted, pnpmRefusedYoungRelease, refusedReleaseAgePackage, removeDanglingHostBridge,
+  retargetCollections, RELEASE_AGE_OVERRIDE, updateApplied, validateAddedPlugins, withHoistRecovery,
 } from '../src/install.ts'
 import { dropUnparseableBuildKeys, profileDir } from '../src/profile.ts'
+import * as profileHelpers from '../src/profile.ts'
 import { canCreateSymlink } from './symlink-support.ts'
 
 let home: string
@@ -559,6 +561,43 @@ describe('withHoistRecovery', () => {
     expect(result.stderr).toContain('下载超时')
   })
 
+  it('retries the same argv once when an exact pin is missing from the registry packument (#927)', async () => {
+    const stderr = [
+      '[ERR_PNPM_NO_MATCHING_VERSION] No matching version found for @michengai/dsh-archive-manager@1.1.3 while fetching it from https://mirrors.cloud.tencent.com/npm/',
+      'The latest release of @michengai/dsh-archive-manager is "1.1.2".',
+    ].join('\n')
+    const calls: string[][] = []
+    let failFirst = true
+    const run = async (_profile: string, args: string[]): Promise<InstallResult> => {
+      calls.push(args)
+      if (failFirst) {
+        failFirst = false
+        return { exitCode: 1, timedOut: false, stdout: '', stderr, cancelled: false }
+      }
+      return ok
+    }
+    const result = await withHoistRecovery(run, 'web', ['add', '@michengai/dsh-archive-manager@1.1.3'])
+    expect(result.exitCode).toBe(0)
+    expect(calls).toEqual([
+      ['add', '@michengai/dsh-archive-manager@1.1.3'],
+      ['add', '@michengai/dsh-archive-manager@1.1.3'],
+    ])
+  })
+
+  it('keeps the sync-lag sentence when the exact-pin retry also loses (#927)', async () => {
+    const stderr = [
+      '[ERR_PNPM_NO_MATCHING_VERSION] No matching version found for @michengai/dsh-archive-manager@1.1.3 while fetching it from https://mirrors.cloud.tencent.com/npm/',
+      'The latest release of @michengai/dsh-archive-manager is "1.1.2".',
+    ].join('\n')
+    const run = async (): Promise<InstallResult> => (
+      { exitCode: 1, timedOut: false, stdout: '', stderr, cancelled: false }
+    )
+    const result = await withHoistRecovery(run, 'web', ['add', '@michengai/dsh-archive-manager@1.1.3'])
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toContain('还没同步')
+    expect(result.stderr).not.toContain('通常是该版本被弃用或从未发布')
+  })
+
   it('replaces cmd.exe\'s undecodable output rather than printing it (#502)', async () => {
     // Windows answers 9009 for "command not found" and writes its message in
     // the OEM code page, which reaches us as replacement characters. Leaving
@@ -592,9 +631,9 @@ describe('withHoistRecovery', () => {
     expect(result.exitCode).toBe(1)
     // The one command, then only the orphan-store probe — never the override.
     expect(calls).toEqual([['add', 'thing'], ['store', 'path']])
-    // And the message does not claim a retry that could not happen.
+    // And the message does not claim a retry that could not happen (#732 / #919).
     expect(result.stderr).toContain('没有自动重试')
-    expect(result.stderr).toContain(RELEASE_AGE_OVERRIDE)
+    expect(result.stderr).not.toMatch(/已自动放行重试|already retried|retries once with a one-shot/)
   })
 
   describe('a locked package directory on the official desktop app (#798)', () => {
@@ -624,6 +663,71 @@ describe('withHoistRecovery', () => {
       const result = await withHoistRecovery(other, 'desktop', ['add', 'thing'], undefined, { marketFlags: false })
       expect(result.stderr).not.toContain('设置 → 插件')
     })
+
+    it.each(['dshmarket@1.66.48', 'dsh-market@1.66.48'])('does not send a market overlay to Settings → Plugins (%s, #909, #982)', async spec => {
+      // That page has no update entry for a package already in the profile.
+      // The #798 note is for other plugins; for the market it is a shut door.
+      const result = await withHoistRecovery(failing, 'desktop', ['add', spec], undefined, { marketFlags: false })
+      expect(result.stderr).not.toContain('设置 → 插件')
+      expect(result.stderr).not.toContain("the \"run it from the command line\" option above is not available here")
+    })
+  })
+
+  it('tells a desktop user on the fresh-release wait what to do, without a door that is shut (#852, #919)', async () => {
+    // "no retry happened" is not an answer here: the plugin IS published, pnpm
+    // simply will not take it yet. #852 pointed at plain `dsh web`, but that
+    // profile is desktop-managed — the same door #909 already proved shut.
+    // Say the wait, and (when pnpm named the publish time) how long is left.
+    // The classifier's "market already retried" sentence must not stay: the
+    // client prefers body.error / stderr's classified half over the note.
+    const published = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString()
+    const stderr = `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 1 lockfile entries failed verification:\n  thing@1.0.0 was published at ${published}, within the minimumReleaseAge cutoff`
+    const run = async (): Promise<InstallResult> => ({ exitCode: 1, timedOut: false, stdout: '', stderr, cancelled: false })
+    const result = await withHoistRecovery(run, 'desktop', ['add', 'thing'], undefined, { marketFlags: false })
+    expect(result.stderr).toContain('等这个版本过了等待期再更新一次即可')
+    expect(result.stderr).toContain('没有自动重试')
+    expect(result.stderr).not.toMatch(/dsh web|plain dsh web/)
+    expect(result.stderr).not.toMatch(/已自动放行重试|already retried|retries once with a one-shot/)
+    expect(result.stderr).toMatch(/还剩|约|小时|hour/i)
+  })
+
+  it('still names the wait when pnpm did not include a publish time (#919)', async () => {
+    const run = async (): Promise<InstallResult> => ({ exitCode: 1, timedOut: false, stdout: '', stderr: AGE_VIOLATION_STDERR, cancelled: false })
+    const result = await withHoistRecovery(run, 'desktop', ['add', 'thing'], undefined, { marketFlags: false })
+    expect(result.stderr).toContain('等这个版本过了等待期再更新一次即可')
+    expect(result.stderr).not.toMatch(/dsh web|plain dsh web/)
+    expect(result.stderr).not.toMatch(/已自动放行重试|already retried|retries once with a one-shot/)
+    expect(result.stderr).toContain('没有自动重试')
+  })
+
+  it('does not invent a remaining wait when the profile\'s age window cannot be read (#919)', async () => {
+    const dir = writeProfile({})
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: not-a-number\n')
+    const published = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString()
+    const stderr = `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 1 lockfile entries failed verification:\n  thing@1.0.0 was published at ${published}, within the minimumReleaseAge cutoff`
+    const run = async (): Promise<InstallResult> => ({ exitCode: 1, timedOut: false, stdout: '', stderr, cancelled: false })
+    const result = await withHoistRecovery(run, 'desktop', ['add', 'thing'], dir, { marketFlags: false })
+    expect(result.stderr).toContain('等这个版本过了等待期再更新一次即可')
+    expect(result.stderr).not.toMatch(/还剩 \d+ 小时|about \d+ hour/i)
+  })
+
+  it('uses the profile\'s own minimumReleaseAge window for the remaining wait (#919)', async () => {
+    const dir = writeProfile({})
+    // 48 hours: a release 10 hours old still has ~38 hours left, not ~14.
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 2880\n')
+    const published = new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString()
+    const stderr = `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] 1 lockfile entries failed verification:\n  thing@1.0.0 was published at ${published}, within the minimumReleaseAge cutoff`
+    const run = async (): Promise<InstallResult> => ({ exitCode: 1, timedOut: false, stdout: '', stderr, cancelled: false })
+    const result = await withHoistRecovery(run, 'desktop', ['add', 'thing'], dir, { marketFlags: false })
+    expect(result.stderr).toMatch(/还剩 3[0-9] 小时|about 3[0-9] hours/)
+  })
+
+  it('keeps the plain "no retry" note for a skipped step that is not the wait', async () => {
+    const run = async (): Promise<InstallResult> => ({ exitCode: 1, timedOut: false, stdout: '', stderr: 'ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF', cancelled: false })
+    const result = await withHoistRecovery(run, 'desktop', ['add', 'thing'], undefined, { marketFlags: false })
+    expect(result.stderr).toContain('没有自动重试')
+    expect(result.stderr).toContain('--no-frozen-lockfile')
+    expect(result.stderr).not.toContain('过了等待期')
   })
 
   it('still uses the one-shot override where the host accepts options', async () => {
@@ -772,6 +876,100 @@ describe('withHoistRecovery', () => {
   })
 })
 
+describe('successful release-age cleanup (#883, #878)', () => {
+  const initial = 'minimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - keep@1.0.0\n'
+  const appended = `${initial}  - keep@2.0.0\n`
+  const merged = initial.replace('keep@1.0.0', 'keep@1.0.0 || 2.0.0')
+
+  it.each([
+    ['add', 'thing'],
+    ['remove', 'thing'],
+    ['--no-frozen-lockfile', 'install'],
+    ['update', 'thing'],
+  ])('merges rules written by a successful %j before returning, without rerunning it', async (...args) => {
+    const dir = writeProfile({})
+    const workspace = join(dir, 'pnpm-workspace.yaml')
+    writeFileSync(workspace, initial)
+    const calls: string[][] = []
+    const success = { ...ok, stdout: 'installed', stderr: 'warning', resolvedNpmVersion: '2.0.0' }
+    const run = async (_profile: string, argv: string[]): Promise<InstallResult> => {
+      calls.push(argv)
+      expect(readFileSync(workspace, 'utf8')).toBe(initial)
+      writeFileSync(workspace, appended)
+      return success
+    }
+
+    expect(await withHoistRecovery(run, 'web', args, dir, { releaseAgeBypass: false })).toBe(success)
+    expect(readFileSync(workspace, 'utf8')).toBe(merged)
+    expect(calls).toEqual([args])
+  })
+
+  it.each(['duplicate rule', 'release age', 'network', 'hoist', 'profile lock'])('cleans the successful retry after %s without adding another retry', async failure => {
+    const dir = writeProfile({})
+    const workspace = join(dir, 'pnpm-workspace.yaml')
+    writeFileSync(workspace, initial)
+    const calls: string[][] = []
+    const args = ['add', 'thing']
+    const retryRule = '  - keep@3.0.0\n'
+    const run = async (_profile: string, argv: string[]): Promise<InstallResult> => {
+      calls.push(argv)
+      if (calls.length === 1) {
+        if (failure === 'duplicate rule') writeFileSync(workspace, appended)
+        const stderr = {
+          'duplicate rule': '{"code":"install-failed"}',
+          'release age': 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION',
+          network: 'ERR_PNPM_META_FETCH_FAIL request failed, reason: read ECONNRESET',
+          hoist: 'ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF',
+          'profile lock': String.raw`EPERM: operation not permitted, rename 'C:\profile\pnpm-lock.yaml.3015012533' -> 'C:\profile\pnpm-lock.yaml'`,
+        }[failure]!
+        return { ...ok, exitCode: 1, stderr }
+      }
+      writeFileSync(workspace, readFileSync(workspace, 'utf8') + retryRule)
+      return ok
+    }
+
+    expect(await withHoistRecovery(run, 'web', args, dir)).toBe(ok)
+    expect(calls).toEqual(failure === 'hoist'
+      ? [args, ['install', '--no-frozen-lockfile'], args]
+      : [args, failure === 'release age' ? ['add', RELEASE_AGE_OVERRIDE, 'thing'] : args])
+    expect(readFileSync(workspace, 'utf8')).toBe(failure === 'duplicate rule'
+      ? merged.replace('2.0.0', '2.0.0 || 3.0.0')
+      : initial.replace('keep@1.0.0', 'keep@1.0.0 || 3.0.0'))
+  })
+
+  it('leaves a file without duplicate rules byte-for-byte and does not write it', async () => {
+    const dir = writeProfile({})
+    const workspace = join(dir, 'pnpm-workspace.yaml')
+    writeFileSync(workspace, initial)
+    utimesSync(workspace, new Date(0), new Date(0))
+    const mtime = statSync(workspace).mtimeMs
+    const { run, calls } = recordingRunner()
+
+    expect(await withHoistRecovery(run, 'web', ['add', 'thing'], dir)).toBe(ok)
+    expect(readFileSync(workspace, 'utf8')).toBe(initial)
+    expect(statSync(workspace).mtimeMs).toBe(mtime)
+    expect(calls).toEqual([['add', 'thing']])
+  })
+
+  it('keeps a successful result and never reruns the operation if cleanup throws', async () => {
+    const dir = writeProfile({})
+    const calls: string[][] = []
+    const merge = vi.spyOn(profileHelpers, 'mergeDuplicateReleaseAgeExcludes')
+    try {
+      const run = async (_profile: string, args: string[]): Promise<InstallResult> => {
+        calls.push(args)
+        merge.mockImplementationOnce(() => { throw new Error('workspace is read-only') })
+        return ok
+      }
+      expect(await withHoistRecovery(run, 'web', ['add', 'thing'], dir)).toBe(ok)
+      expect(calls).toEqual([['add', 'thing']])
+      expect(merge).toHaveBeenCalledTimes(2)
+    } finally {
+      merge.mockRestore()
+    }
+  })
+})
+
 describe('pnpmNeverStarted (#502)', () => {
   it('is true only when the failure happened before pnpm could run', () => {
     const failed = (over: Partial<InstallResult>): InstallResult =>
@@ -786,6 +984,95 @@ describe('pnpmNeverStarted (#502)', () => {
     // inspect this profile" notice is equally an alarm about nothing.
     expect(pnpmNeverStarted(failed({ stderr: "Error: spawnSync pnpm EACCES\n  code: 'EACCES',\n  syscall: 'spawnSync pnpm'," }))).toBe(true)
     expect(pnpmNeverStarted(failed({ stderr: 'some other failure' }))).toBe(false)
+    // #919: release-age is a different "untouched" shape — pnpm DID start —
+    // covered by pnpmRefusedYoungRelease, not by this predicate.
+    expect(pnpmNeverStarted(failed({ stderr: '[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] young' }))).toBe(false)
+  })
+})
+
+describe('pnpmRefusedYoungRelease (#919)', () => {
+  it('is true when pnpm refused a too-young release without writing', () => {
+    const failed = (over: Partial<InstallResult>): InstallResult =>
+      ({ exitCode: 1, timedOut: false, stdout: '', stderr: '', cancelled: false, ...over })
+    expect(pnpmRefusedYoungRelease(failed({ stderr: '[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] young' }))).toBe(true)
+    expect(pnpmRefusedYoungRelease(failed({ stderr: 'ERR_PNPM_NO_MATURE_MATCHING_VERSION No matching version' }))).toBe(true)
+    expect(pnpmRefusedYoungRelease(failed({ stderr: 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/ghost: Not Found - 404' }))).toBe(false)
+  })
+})
+
+describe('host port collision after pnpm wrote (#975)', () => {
+  const failed = (over: Partial<InstallResult>): InstallResult =>
+    ({ exitCode: 1, timedOut: false, stdout: '', stderr: '', cancelled: false, ...over })
+  const collision = [
+    'webserver (required) listen EADDRINUSE: address already in use 127.0.0.1:3080',
+    'Plugins waiting for services: client-hmr',
+    'Full diagnostics: C:\\Users\\u\\.dsh\\logs\\startup-2026-10-22T05-05-40.541Z-37a0b6ec-b8f2-4699-82ce-c53428afc403.log',
+  ].join('\n')
+
+  it('is true only for DSH listen EADDRINUSE plus Full diagnostics on a startup log', () => {
+    expect(isHostPortCollision(failed({ stderr: collision }))).toBe(true)
+    expect(isHostPortCollision(failed({ stdout: collision, stderr: '' }))).toBe(true)
+    expect(isHostPortCollision(failed({ stderr: 'listen EADDRINUSE 127.0.0.1:3080' }))).toBe(false)
+    expect(isHostPortCollision(failed({
+      stderr: 'Full diagnostics: C:\\Users\\u\\.dsh\\logs\\startup-2026-10-22T05-05-40.541Z-x.log',
+    }))).toBe(false)
+    expect(isHostPortCollision(failed({ stderr: 'EADDRINUSE: address already in use' }))).toBe(false)
+    expect(isHostPortCollision(failed({ stderr: '[ERR_PNPM_FETCH_404] GET https://registry.npmjs.org/ghost: Not Found - 404' }))).toBe(false)
+  })
+
+  it('installApplied is true only when this run added a loadable plugin', () => {
+    const dir = writeProfile({})
+    expect(installApplied('web', new Set(), dir)).toBe(false)
+    writePkg(dir, 'dsh-loop', { name: 'dsh-loop', version: '0.1.204', dsh: {}, main: 'lib/index.js' }, ['lib/index.js'])
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { 'dsh-loop': '^0.1.204' } }))
+    expect(installApplied('web', new Set(), dir)).toBe(true)
+    expect(installApplied('web', new Set(['dsh-loop']), dir)).toBe(false)
+    writePkg(dir, 'junk', { name: 'junk', version: '1.0.0' })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { junk: '^1.0.0' } }))
+    expect(installApplied('web', new Set(), dir)).toBe(false)
+  })
+
+  it('updateApplied is true only when this run changed the installed version or commit', () => {
+    const dir = writeProfile({ 'dsh-loop': '^1.0.0' })
+    writePkg(dir, 'dsh-loop', { name: 'dsh-loop', version: '1.2.0', dsh: {}, main: 'lib/index.js' }, ['lib/index.js'])
+    expect(updateApplied({
+      profile: 'web', name: 'dsh-loop', isGit: false,
+      beforeVersion: '1.0.0', beforeCommit: null, explicitDir: dir,
+    })).toBe(true)
+    writePkg(dir, 'dsh-loop', { name: 'dsh-loop', version: '1.0.0', dsh: {}, main: 'lib/index.js' }, ['lib/index.js'])
+    expect(updateApplied({
+      profile: 'web', name: 'dsh-loop', isGit: false,
+      beforeVersion: '1.0.0', beforeCommit: null, explicitDir: dir,
+    })).toBe(false)
+    expect(updateApplied({
+      profile: 'web', name: 'missing', isGit: false,
+      beforeVersion: '1.0.0', beforeCommit: null, explicitDir: dir,
+    })).toBe(false)
+  })
+
+  it('updateApplied sees a commit change in the codeload lock a github: install leaves', () => {
+    // pnpm records floating github: as `resolution: {tarball: …/tar.gz/<sha>}`,
+    // not `type: git`. Version often stays put; the lock commit is the only
+    // proof the update landed. Reading only the git-resolution shape would
+    // say nothing changed and the route would roll the new build back.
+    const oldCommit = 'a'.repeat(40)
+    const newCommit = 'b'.repeat(40)
+    const dir = writeProfile({ themer: 'github:owner/themer' })
+    writePkg(dir, 'themer', { name: 'themer', version: '1.0.0', dsh: {}, main: 'lib/index.js' }, ['lib/index.js'])
+    writeFileSync(join(dir, 'pnpm-lock.yaml'),
+      `lockfileVersion: 9\n  resolution: {tarball: https://codeload.github.com/owner/themer/tar.gz/${newCommit}}\n`)
+    expect(updateApplied({
+      profile: 'web', name: 'themer', isGit: true,
+      beforeVersion: '1.0.0', beforeCommit: oldCommit,
+      spec: 'github:owner/themer', explicitDir: dir,
+    })).toBe(true)
+    writeFileSync(join(dir, 'pnpm-lock.yaml'),
+      `lockfileVersion: 9\n  resolution: {tarball: https://codeload.github.com/owner/themer/tar.gz/${oldCommit}}\n`)
+    expect(updateApplied({
+      profile: 'web', name: 'themer', isGit: true,
+      beforeVersion: '1.0.0', beforeCommit: oldCommit,
+      spec: 'github:owner/themer', explicitDir: dir,
+    })).toBe(false)
   })
 })
 
@@ -830,6 +1117,22 @@ describe('store hygiene (#119)', () => {
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
+  })
+
+  it('reclaims node_modules/.ignored after success and after cancel (#974)', async () => {
+    // Garbage lands in .ignored on the NEXT pnpm run. Cleaning only on
+    // failure would miss the successful run that just moved it there.
+    const ignored = join(profileDir('web'), 'node_modules', '.ignored')
+    const run = async (): Promise<InstallResult> => ok
+    mkdirSync(join(ignored, 'orphan_tmp_1_a'), { recursive: true })
+    await withHoistRecovery(run, 'web', ['add', 'dsh-loop'])
+    expect(existsSync(join(ignored, 'orphan_tmp_1_a'))).toBe(false)
+
+    mkdirSync(join(ignored, 'orphan_tmp_1_a'), { recursive: true })
+    const cancel = async (): Promise<InstallResult> =>
+      ({ exitCode: 1, timedOut: false, stdout: '', stderr: '', cancelled: true })
+    await withHoistRecovery(cancel, 'web', ['add', 'dsh-loop'])
+    expect(existsSync(join(ignored, 'orphan_tmp_1_a'))).toBe(false)
   })
 })
 
@@ -932,6 +1235,26 @@ describe("pnpm's own error survives to the surface (#244/#192/#138)", () => {
   it('uses stdout when stderr is empty, as before', () => {
     expect(failureDetail({ ...base, stderr: '', stdout: 'something on stdout' }))
       .toBe('something on stdout')
+  })
+
+  it('cuts a long tail at a sentence end, and says something was dropped (#852)', () => {
+    // The shape that reached a user's UI: the market appends its own
+    // explanation to pnpm's output, and the 300-character tail used to land
+    // inside the middle sentence — the log read
+    // "（is, export the log and report it这台宿主…", a fragment of one sentence
+    // welded to the next. Two things have to hold: the cut starts at a
+    // sentence, and the reader is told the front is missing.
+    const explanation = 'a recently-published plugin version in this profile trips the fresh-release check, blocking any change (even to other plugins); the market retries once with a one-shot bypass — if you still see this, export the log and report it'
+    const note = '这台宿主（官方桌面端）自己执行安装，不接受市场附加的 pnpm 参数（--config.minimum-release-age=0），所以这一步没有自动重试。 / This host (the official desktop app) runs the install itself and takes no pnpm options from the market (--config.minimum-release-age=0), so that automatic retry could not be attempted.'
+    const detail = failureDetail({ ...base, stderr: `${explanation}\n\n${note}` })
+    expect(detail.startsWith('…')).toBe(true)
+    expect(detail).not.toContain('it这台宿主')
+    expect(detail.endsWith('so that automatic retry could not be attempted.')).toBe(true)
+  })
+
+  it('marks a tail with no sentence boundary rather than pretending it is whole', () => {
+    const blob = 'x'.repeat(500)
+    expect(failureDetail({ ...base, stderr: blob })).toBe(`…${blob.slice(-300)}`)
   })
 
   it('appends pnpm\'s own words when nothing classified the failure', async () => {
@@ -1175,5 +1498,31 @@ describe('host bridge cleanup after removal (#662)', () => {
     mkdirSync(join(hostDeploy, 'node_modules'), { recursive: true })
     expect(removeDanglingHostBridge('pkg-any', dir, null)).toBe(false)
     expect(removeDanglingHostBridge('pkg-any', dir, hostDeploy)).toBe(false)
+  })
+})
+
+describe('naming the package pnpm actually refused (#944)', () => {
+  it('reads the offender out of the violation line, scoped and plain', () => {
+    expect(refusedReleaseAgePackage('  dshmarket@1.66.44 was published at 2026-10-19T18:21:57.000Z, within the cutoff'))
+      .toEqual({ name: 'dshmarket', version: '1.66.44' })
+    expect(refusedReleaseAgePackage('  @liustack/modsearch@5.10.9 was published at 2026-10-18T00:24:18.000Z'))
+      .toEqual({ name: '@liustack/modsearch', version: '5.10.9' })
+    // A prerelease keeps its whole version string.
+    expect(refusedReleaseAgePackage('  dsh-cost-meter@1.9.6-rc.1 was published at 2026-10-19T18:21:57.000Z'))
+      .toEqual({ name: 'dsh-cost-meter', version: '1.9.6-rc.1' })
+    // The capture stops at the space: the timestamp and the cutoff on the same
+    // line must never end up inside the version.
+    expect(refusedReleaseAgePackage('  dsh-loop@1.2.0 was published at 2026-10-19T18:21:57.000Z')?.version)
+      .toBe('1.2.0')
+  })
+
+  it('returns null rather than guessing when the output names no package', () => {
+    // The whole point of the attribution is that a wrong name is worse than no
+    // name — the caller keeps its existing wording when this is null.
+    expect(refusedReleaseAgePackage('within the minimumReleaseAge cutoff (2026-10-19T06:02:25.725Z)')).toBeNull()
+    expect(refusedReleaseAgePackage('  dshmarket was published at 2026-10-19T18:21:57.000Z')).toBeNull()
+    expect(refusedReleaseAgePackage('')).toBeNull()
+    // An unrelated package name that pnpm never attributed to a publish time.
+    expect(refusedReleaseAgePackage('dsh-loop@1.2.0 could not be resolved')).toBeNull()
   })
 })
