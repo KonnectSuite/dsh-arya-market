@@ -12,7 +12,7 @@ import type { RegistryPlugin } from '../src/registry.ts'
 const bytes = Buffer.from('published package bytes')
 const plugin: RegistryPlugin = {
   name: 'dsh-example', owner: 'KonnectSuite', url: '', category: '', description: {}, added: '', install: '', arya: true,
-  releases: [{ version: '0.1.0', tarball: 'https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v0.1.0/dsh-example-0.1.0.tgz', sha256: createHash('sha256').update(bytes).digest('hex') }],
+  releases: [{ version: '0.1.0', tarball: 'https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-dsh-example-v0.1.0/dsh-example-0.1.0.tgz', sha256: createHash('sha256').update(bytes).digest('hex') }],
 }
 let directory: string | undefined
 afterEach(async () => {

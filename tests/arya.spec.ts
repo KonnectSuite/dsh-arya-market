@@ -9,7 +9,7 @@ import type { Registry } from '../src/registry.ts'
 function catalog(): Registry {
   return { updated: '', count: 1, categories: {}, plugins: [{
     name: 'dsh-example', owner: 'KonnectSuite', url: 'https://github.com/KonnectSuite/dsh-example', category: 'tools', description: {}, added: '', install: '', arya: true,
-    releases: ['0.2.0', '0.1.0'].map(version => ({ version, sha256: '0'.repeat(64), tarball: `https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v${version}/dsh-example-${version}.tgz` })),
+    releases: ['0.2.0', '0.1.0'].map(version => ({ version, sha256: '0'.repeat(64), tarball: `https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-dsh-example-v${version}/dsh-example-${version}.tgz` })),
   }] }
 }
 let directory: string | undefined
@@ -26,8 +26,8 @@ describe('Arya release catalog', () => {
   it.each([
     'https://evil.example/plugin.tgz',
     'https://github.com/other/dsh-market/releases/download/plugin-dsh-example-v0.2.0/dsh-example-0.2.0.tgz',
-    'https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v0.2.0/dsh-other-0.2.0.tgz',
-    'https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v0.2.0/dsh-example-0.2.0.tgz?redirect=1',
+    'https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-dsh-example-v0.2.0/dsh-other-0.2.0.tgz',
+    'https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-dsh-example-v0.2.0/dsh-example-0.2.0.tgz?redirect=1',
   ])('rejects an archive outside the named published release: %s', target => {
     const registry = catalog(); registry.plugins[0].releases![0].tarball = target
     expect(() => validateAryaRegistry(registry)).toThrow()

@@ -9,9 +9,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KonnectSuite/dsh-market.git"
+    "url": "git+https://github.com/KonnectSuite/dsh-arya-market.git"
   },
-  "homepage": "https://github.com/KonnectSuite/dsh-market",
+  "homepage": "https://github.com/KonnectSuite/dsh-arya-market",
   "keywords": [
     "deepseek",
     "harness",

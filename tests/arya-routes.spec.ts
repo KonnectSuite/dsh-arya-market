@@ -10,7 +10,7 @@ import { stageAryaRelease } from '../src/arya.ts'
 import { forgetCatalog } from '../src/registry.ts'
 
 const versions = ['0.2.0', '0.1.0']
-const target = (version: string) => `https://github.com/KonnectSuite/dsh-market/releases/download/plugin-dsh-example-v${version}/dsh-example-${version}.tgz`
+const target = (version: string) => `https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-dsh-example-v${version}/dsh-example-${version}.tgz`
 vi.mock('../src/registry.ts', async importOriginal => {
   const original = await importOriginal<typeof import('../src/registry.ts')>()
   return { ...original, loadRegistry: async (_region?: unknown, catalogUrl?: string) => catalogUrl === undefined ? ({ updated: '', count: 1, categories: { tools: { en: 'Tools' } }, plugins: [{ name: 'community-example', owner: 'Community', url: 'https://github.com/example/community-example', category: 'tools', description: {}, install: 'npm:community-example', npm: 'community-example', added: '' }] }) : ({ updated: '', count: 1, categories: {}, plugins: [{ name: 'dsh-example', owner: 'KonnectSuite', url: 'https://github.com/KonnectSuite/dsh-example', arya: true, category: 'arya', description: {}, install: '', added: '', releases: versions.map(version => ({ version, sha256: '0'.repeat(64), tarball: target(version) })) }] }) }

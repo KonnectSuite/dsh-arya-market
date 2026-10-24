@@ -21,7 +21,7 @@ export interface AryaRelease {
  * its own `catalog` branch. Pinning a feature branch here would make the URL a
  * reason never to restructure branches.
  */
-export const ARYA_CATALOG_URL = 'https://raw.githubusercontent.com/KonnectSuite/dsh-market/catalog/data/arya-plugins.json'
+export const ARYA_CATALOG_URL = 'https://raw.githubusercontent.com/KonnectSuite/dsh-arya-market/catalog/data/arya-plugins.json'
 
 /** Validate a configured catalog address before mounting HTTP routes. */
 export function validateCatalogUrl(value: string): void {
@@ -52,7 +52,7 @@ export function validateAryaRegistry(registry: Registry): Registry {
       versions.add(release.version)
       const url = new URL(release.tarball)
       const fileName = plugin.name.replace(/^@/, '').replaceAll('/', '-')
-      const expected = `/KonnectSuite/dsh-market/releases/download/plugin-${fileName}-v${release.version}/${fileName}-${release.version}.tgz`
+      const expected = `/KonnectSuite/dsh-arya-market/releases/download/plugin-${fileName}-v${release.version}/${fileName}-${release.version}.tgz`
       if (url.origin !== 'https://github.com' || url.pathname !== expected || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
         throw new Error(`${plugin.name}: release archive does not match its package and version`)
       }

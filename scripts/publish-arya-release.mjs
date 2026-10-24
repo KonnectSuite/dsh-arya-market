@@ -40,7 +40,7 @@ for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies
 const fileName = `${name.replace(/^@/, '').replaceAll('/', '-')}-${version}.tgz`
 if (basename(tarball) !== fileName) throw new Error(`Archive must be named ${fileName}`)
 const tag = `plugin-${name.replace(/^@/, '').replaceAll('/', '-')}-v${version}`
-const archiveUrl = `https://github.com/KonnectSuite/dsh-market/releases/download/${tag}/${fileName}`
+const archiveUrl = `https://github.com/KonnectSuite/dsh-arya-market/releases/download/${tag}/${fileName}`
 const catalogPath = resolve(root, 'data/arya-plugins.json')
 let catalog
 try { catalog = JSON.parse(readFileSync(catalogPath, 'utf8')) } catch (error) {
@@ -65,17 +65,17 @@ plugin.tarball = plugin.releases[0].tarball
 catalog.count = catalog.plugins.length
 validateAryaRegistry(catalog)
 if (values.publish) {
-  const lookup = spawnSync('gh', ['release', 'view', tag, '--repo', 'KonnectSuite/dsh-market', '--json', 'assets,isDraft'], { encoding: 'utf8', windowsHide: true })
+  const lookup = spawnSync('gh', ['release', 'view', tag, '--repo', 'KonnectSuite/dsh-arya-market', '--json', 'assets,isDraft'], { encoding: 'utf8', windowsHide: true })
   if (lookup.status !== 0) {
     const bodyPath = resolve(root, '.arya-release-artifacts', `${tag}.md`)
     mkdirSync(dirname(bodyPath), { recursive: true })
     writeFileSync(bodyPath, `${name} ${version}\n\nPackaged from https://github.com/${values.source}.\n\nSHA256: \`${sha256}\`\n`, 'utf8')
-    run('gh', ['release', 'create', tag, tarball, '--repo', 'KonnectSuite/dsh-market', '--draft', '--latest=false', '--title', `${name} ${version}`, '--notes-file', bodyPath])
+    run('gh', ['release', 'create', tag, tarball, '--repo', 'KonnectSuite/dsh-arya-market', '--draft', '--latest=false', '--title', `${name} ${version}`, '--notes-file', bodyPath])
   }
-  const release = JSON.parse(run('gh', ['release', 'view', tag, '--repo', 'KonnectSuite/dsh-market', '--json', 'assets,isDraft']))
+  const release = JSON.parse(run('gh', ['release', 'view', tag, '--repo', 'KonnectSuite/dsh-arya-market', '--json', 'assets,isDraft']))
   const asset = release.assets.find(asset => asset.name === fileName)
   if (!asset || asset.digest !== `sha256:${sha256}` || asset.size !== bytes.length) throw new Error('Uploaded archive differs from the verified package; release remains unpublished')
-  if (release.isDraft) run('gh', ['release', 'edit', tag, '--repo', 'KonnectSuite/dsh-market', '--draft=false', '--latest=false'])
+  if (release.isDraft) run('gh', ['release', 'edit', tag, '--repo', 'KonnectSuite/dsh-arya-market', '--draft=false', '--latest=false'])
 }
 catalog.updated = new Date().toISOString()
 mkdirSync(dirname(catalogPath), { recursive: true })

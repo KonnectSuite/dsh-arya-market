@@ -222,7 +222,7 @@ describe('profile the launcher booted (#639)', () => {
     } })
     apply(ctx as never)
     expect(state.mounts[0].config.dshInstallDir).toBe('/opt/arya')
-    expect(state.mounts[0].config.catalogUrl).toContain('KonnectSuite/dsh-market')
+    expect(state.mounts[0].config.catalogUrl).toContain('KonnectSuite/dsh-arya-market')
   })
 
   it('lets an explicit cordis.yml profile win, and never carries the other profile\'s directory', () => {

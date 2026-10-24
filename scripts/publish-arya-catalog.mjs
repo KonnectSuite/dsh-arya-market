@@ -24,7 +24,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const REPO = 'KonnectSuite/dsh-market'
+const REPO = 'KonnectSuite/dsh-arya-market'
 const BRANCH = 'catalog'
 const REPO_PATH = 'data/arya-plugins.json'
 const LOCAL = join(ROOT, REPO_PATH)

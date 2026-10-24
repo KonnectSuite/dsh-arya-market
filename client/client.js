@@ -13150,11 +13150,11 @@ window.__ModuleLoader__.load({ id: "dshmarket", factory: (require) => {
 									children: [
 										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("a", {
 											className: Market_module_css_default.repoLink,
-											href: "https://github.com/KonnectSuite/dsh-market",
+											href: "https://github.com/KonnectSuite/dsh-arya-market",
 											target: "_blank",
 											rel: "noreferrer",
-											title: "dsh-market · GitHub",
-											children: "dsh-market"
+											title: "dsh-arya-market · GitHub",
+											children: "dsh-arya-market"
 										}),
 										version !== null && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 											className: Market_module_css_default.version,

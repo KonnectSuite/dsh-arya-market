@@ -75,7 +75,7 @@ describe('matchInstalledName / isInstalled', () => {
       name: '@deepseek-ai/dsh-client-ui-mobile',
       url: 'https://github.com/KonnectSuite/dsh-client-ui-mobile',
       arya: true,
-      releases: [{ version: '0.2.1-rc.2', tarball: 'https://github.com/KonnectSuite/dsh-market/releases/download/plugin-x/x.tgz', sha256: 'a'.repeat(64) }],
+      releases: [{ version: '0.2.1-rc.2', tarball: 'https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-x/x.tgz', sha256: 'a'.repeat(64) }],
     })
     const installed = { '@deepseek-ai/dsh-client-ui-mobile': '0.2.1-rc.2' }
     const identities = { '@deepseek-ai/dsh-client-ui-mobile': ['deepseek-ai/deepseek-harness'] }
