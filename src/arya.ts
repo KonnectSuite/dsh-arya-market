@@ -53,7 +53,15 @@ export function validateAryaRegistry(registry: Registry): Registry {
       const url = new URL(release.tarball)
       const fileName = plugin.name.replace(/^@/, '').replaceAll('/', '-')
       const expected = `/KonnectSuite/dsh-arya-market/releases/download/plugin-${fileName}-v${release.version}/${fileName}-${release.version}.tgz`
-      if (url.origin !== 'https://github.com' || url.pathname !== expected || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
+      // The published package may come from a GitHub release (the original
+      // distribution) or from the npm registry, whose tarball path is derived
+      // from the package name and version. Anything else is rejected, so a
+      // catalog entry can never point at an archive it does not describe.
+      const baseName = plugin.name.slice(plugin.name.lastIndexOf('/') + 1)
+      const npmPath = `/${plugin.name}/-/${baseName}-${release.version}.tgz`
+      const fromGitHub = url.origin === 'https://github.com' && url.pathname === expected
+      const fromNpm = url.origin === 'https://registry.npmjs.org' && url.pathname === npmPath
+      if ((!fromGitHub && !fromNpm) || url.search !== '' || url.hash !== '' || url.username !== '' || url.password !== '') {
         throw new Error(`${plugin.name}: release archive does not match its package and version`)
       }
     }

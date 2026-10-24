@@ -7,7 +7,7 @@
   ],
   "plugins": [
     {
-      "name": "@deepseek-ai/dsh-client-ui-images",
+      "name": "@aryacode/dsh-client-ui-images",
       "source": "KonnectSuite/dsh-client-ui-images",
       "description": {
         "en": "ComfyUI image generation and the local gallery",
@@ -15,7 +15,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-arya-pet",
+      "name": "@aryacode/dsh-client-ui-arya-pet",
       "source": "KonnectSuite/dsh-client-ui-arya-pet",
       "description": {
         "en": "Arya's animated pet overlay",
@@ -23,7 +23,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-skills-mcp",
+      "name": "@aryacode/dsh-client-ui-skills-mcp",
       "source": "KonnectSuite/dsh-client-ui-skills-mcp",
       "description": {
         "en": "Manage skills and MCP servers, and add public MCP servers from a catalog",
@@ -31,7 +31,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-no-repo",
+      "name": "@aryacode/dsh-client-ui-no-repo",
       "source": "KonnectSuite/dsh-client-ui-no-repo",
       "description": {
         "en": "Sidebar group for chats not attached to a workspace",
@@ -39,7 +39,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-github",
+      "name": "@aryacode/dsh-github",
       "source": "KonnectSuite/dsh-github",
       "description": {
         "en": "Sign in to GitHub, list repositories, and clone one as a workspace",
@@ -47,7 +47,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-mobile",
+      "name": "@aryacode/dsh-client-ui-mobile",
       "source": "KonnectSuite/dsh-client-ui-mobile",
       "description": {
         "en": "Phone shell and the Mobile & Remote pairing popover",
@@ -55,7 +55,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-sidebar-switcher",
+      "name": "@aryacode/dsh-client-ui-sidebar-switcher",
       "source": "KonnectSuite/dsh-client-ui-sidebar-switcher",
       "description": {
         "en": "Conversation-header buttons that open the right sidebar panels",
@@ -63,7 +63,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-release-notes",
+      "name": "@aryacode/dsh-client-ui-release-notes",
       "source": "KonnectSuite/dsh-client-ui-release-notes",
       "description": {
         "en": "Settings page listing AryaAI version history",
@@ -71,7 +71,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-deepseek-chat",
+      "name": "@aryacode/dsh-client-ui-deepseek-chat",
       "source": "KonnectSuite/dsh-client-ui-deepseek-chat",
       "description": {
         "en": "Optional DeepSeek Chat desktop page",
@@ -79,7 +79,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-rockwell-resources",
+      "name": "@aryacode/dsh-client-ui-rockwell-resources",
       "source": "KonnectSuite/dsh-client-ui-rockwell-resources",
       "description": {
         "en": "Optional Rockwell Resources desktop page with a retained sign-in",
@@ -87,7 +87,7 @@
       }
     },
     {
-      "name": "dsh-projects",
+      "name": "@aryacode/dsh-projects",
       "source": "KonnectSuite/dsh-projects",
       "description": {
         "en": "Give one workspace several folders",
@@ -95,7 +95,7 @@
       }
     },
     {
-      "name": "dsh-native-window",
+      "name": "@aryacode/dsh-native-window",
       "source": "KonnectSuite/dsh-native-window",
       "description": {
         "en": "Dock native Windows applications inside Arya",
@@ -103,7 +103,7 @@
       }
     },
     {
-      "name": "dsh-clear-light",
+      "name": "@aryacode/dsh-clear-light",
       "source": "KonnectSuite/dsh-clear-light",
       "description": {
         "en": "Clearer navigation, surfaces, selections and text",
@@ -111,7 +111,7 @@
       }
     },
     {
-      "name": "dsh-local-llm",
+      "name": "@aryacode/dsh-local-llm",
       "source": "KonnectSuite/dsh-local-llm",
       "description": {
         "en": "AryaStrata local model controls and monitoring",
@@ -119,7 +119,7 @@
       }
     },
     {
-      "name": "dsh-agent-learning",
+      "name": "@aryacode/dsh-agent-learning",
       "source": "KonnectSuite/dsh-agent-learning",
       "description": {
         "en": "Agent learning surfaces",
@@ -127,7 +127,7 @@
       }
     },
     {
-      "name": "@deepseek-ai/dsh-client-ui-googleremotedesktop",
+      "name": "@aryacode/dsh-client-ui-googleremotedesktop",
       "source": "KonnectSuite/dsh-client-ui-googleremotedesktop",
       "description": {
         "en": "Google Remote Desktop sidebar page with a persistent sign-in",
