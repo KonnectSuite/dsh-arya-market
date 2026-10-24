@@ -32,9 +32,9 @@ Build and test the plugin, increment its package version, and pack its built fil
 npm run publish:arya -- --tarball /path/to/dsh-example-0.2.0.tgz --source KonnectSuite/dsh-example --publish
 ```
 
-The publisher creates a draft release, uploads the archive, verifies GitHub's SHA256 digest and byte count, and publishes it. Commit and push `data/arya-plugins.json` on `codex/arya-plugin-market` after successful validation. Keep previous release records and assets: they provide version restoration. The default catalog URL names this branch; hosts can override `catalogUrl` in the market's configuration using another trusted HTTPS catalog with the same release format. Catalog failures are reported instead of showing an unverified stale catalog. The existing process-only `DSHM_REGISTRY_URL` override remains available for administrator-controlled catalogs and isolated upstream fixtures.
+The publisher creates a draft release, uploads the archive, verifies GitHub's SHA256 digest and byte count, and publishes it. The catalog lives on the `catalog` branch, so publishing the entry is a separate step: `npm run publish:arya:catalog` validates the checkout and pushes `data/arya-plugins.json` there. Keep previous release records and assets: they provide version restoration. The default catalog URL names that branch, which keeps generated data out of the product history; hosts can override `catalogUrl` in the market's configuration using another trusted HTTPS catalog with the same release format. Catalog failures are reported instead of showing an unverified stale catalog. The existing process-only `DSHM_REGISTRY_URL` override remains available for administrator-controlled catalogs and isolated upstream fixtures.
 
-发布工具创建草稿发布、上传压缩包、核对 GitHub 的 SHA256 摘要和字节数，再公开发布。验证成功后，在 `codex/arya-plugin-market` 分支提交并推送 `data/arya-plugins.json`。保留旧版本记录和发布资源，以支持版本恢复。默认目录地址指向该分支；主程序可通过市场配置的 `catalogUrl` 指定采用相同发布格式的其他可信 HTTPS 目录。目录读取失败会显示错误，不会提供未经确认的过期目录。仅限进程配置的 `DSHM_REGISTRY_URL` 覆盖仍可用于管理员提供的目录及隔离的上游测试。
+发布工具创建草稿发布、上传压缩包、核对 GitHub 的 SHA256 摘要和字节数，再公开发布。目录保存在 `catalog` 分支，因此发布条目是单独一步：运行 `npm run publish:arya:catalog` 校验工作区并把 `data/arya-plugins.json` 推送上去。保留旧版本记录和发布资源，以支持版本恢复。默认目录地址指向该分支，使生成的数据不进入产品历史；主程序可通过市场配置的 `catalogUrl` 指定采用相同发布格式的其他可信 HTTPS 目录。目录读取失败会显示错误，不会提供未经确认的过期目录。仅限进程配置的 `DSHM_REGISTRY_URL` 覆盖仍可用于管理员提供的目录及隔离的上游测试。
 
 ## Validation
 
@@ -65,5 +65,5 @@ The batch prints one line per plugin and a failure summary; it exits non-zero
 when any plugin failed, so a release can stop before it ships an installer whose
 plugins the catalog cannot offer. Re-running is safe: a version already present
 with the same bytes is reused, and a different tarball for an existing version
-is rejected rather than overwritten. Commit and push `data/arya-plugins.json`
-after a successful batch.
+is rejected rather than overwritten. Publish the updated catalog with
+`npm run publish:arya:catalog` after a successful batch.
