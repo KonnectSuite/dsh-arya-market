@@ -81,8 +81,7 @@
                   "UPDATE-API-V1.md",
                   "cordis.patch.yml",
                   "LICENSE",
-                  "ARYA.md",
-                  "data/arya-plugins.json"
+                  "ARYA.md"
               ],
     "devDependencies":  {
                             "@deepseek-ai/cordis":  "^4.0.1",

@@ -15,8 +15,13 @@ export interface AryaRelease {
   sha256: string
 }
 
-/** Catalog shipped and maintained by the Arya fork. */
-export const ARYA_CATALOG_URL = 'https://raw.githubusercontent.com/KonnectSuite/dsh-market/codex/arya-plugin-market/data/arya-plugins.json'
+/** Catalog shipped and maintained by the Arya fork.
+ *
+ * The catalog is generated data that changes on every publish, so it lives on
+ * its own `catalog` branch. Pinning a feature branch here would make the URL a
+ * reason never to restructure branches.
+ */
+export const ARYA_CATALOG_URL = 'https://raw.githubusercontent.com/KonnectSuite/dsh-market/catalog/data/arya-plugins.json'
 
 /** Validate a configured catalog address before mounting HTTP routes. */
 export function validateCatalogUrl(value: string): void {

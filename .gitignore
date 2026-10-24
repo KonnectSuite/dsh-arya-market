@@ -15,4 +15,8 @@ client/*.map
 # live catalog.
 data/registry-snapshot.json
 
+# The published Arya catalog lives on the `catalog` branch. Publishing writes it
+# there, and this checkout keeps only a working copy.
+data/arya-plugins.json
+
 .arya-release-artifacts/
