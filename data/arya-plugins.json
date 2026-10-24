@@ -15,7 +15,7 @@
       "category": "arya",
       "description": {
         "en": "Dock native Windows applications inside Arya",
-        "zh": "åœ¨ Arya ä¸­åµŒå…¥ Windows æœ¬åœ°åº”ç”¨"
+        "zh": "在 Arya 中嵌入 Windows 本地应用"
       },
       "added": "2026-10-09",
       "install": "",
@@ -67,7 +67,7 @@
       "category": "arya",
       "description": {
         "en": "AryaStrata Control Center with included engine controller, monitoring web UI and adjustable chat output limits. One package; no agent preset required.",
-        "zh": "AryaStrata æŽ§åˆ¶ä¸­å¿ƒï¼šå†…ç½®å¼•æ“ŽæŽ§åˆ¶å™¨ã€ç½‘é¡µç›‘æŽ§ç•Œé¢åŠå¯è°ƒèŠå¤©è¾“å‡ºä¸Šé™ã€‚åªéœ€ä¸€ä¸ªæ’ä»¶ï¼Œæ— éœ€ä»£ç†é¢„è®¾ã€‚"
+        "zh": "AryaStrata 本地模型控制与监控"
       },
       "added": "2026-10-09",
       "install": "",
@@ -184,7 +184,7 @@
       "category": "arya",
       "description": {
         "en": "Skill improvement with evaluation, approval, and rollback",
-        "zh": "å…·å¤‡è¯„ä¼°ã€å®¡æ‰¹å’Œå›žæ»šçš„æŠ€èƒ½æ”¹è¿›"
+        "zh": "智能体学习界面"
       },
       "added": "2026-10-09",
       "install": "",
@@ -206,7 +206,7 @@
       "category": "arya",
       "description": {
         "en": "Multi-folder projects and workspace organization",
-        "zh": "å¤šæ–‡ä»¶å¤¹é¡¹ç›®ä¸Žå·¥ä½œåŒºç®¡ç†"
+        "zh": "为一个工作区提供多个文件夹"
       },
       "added": "2026-10-09",
       "install": "",
@@ -246,7 +246,7 @@
       ],
       "description": {
         "en": "Clearer navigation, surfaces, selections and text",
-        "zh": "æ›´æ¸…æ™°çš„å¯¼èˆªã€é¢æ¿ã€é€‰ä¸­çŠ¶æ€ä¸Žæ–‡å­—"
+        "zh": "更清晰的导航、界面、选中状态与文字"
       },
       "added": "2026-10-09",
       "install": "",
@@ -273,7 +273,7 @@
       "category": "arya",
       "description": {
         "en": "Optional DeepSeek Chat desktop page",
-        "zh": "å¯é€‰çš„ DeepSeek å¯¹è¯æ¡Œé¢é¡µé¢"
+        "zh": "可选的 DeepSeek 对话桌面页面"
       },
       "added": "2026-10-17",
       "install": "",
@@ -305,7 +305,7 @@
       "category": "arya",
       "description": {
         "en": "Arya's animated pet overlay",
-        "zh": "Arya çš„åŠ¨ç”»å® ç‰©æµ®å±‚"
+        "zh": "Arya 的动画宠物浮层"
       },
       "added": "2026-10-20",
       "install": "",
@@ -327,7 +327,7 @@
       "category": "arya",
       "description": {
         "en": "Google Remote Desktop sidebar page with a persistent sign-in",
-        "zh": "å¸¦æŒä¹…ç™»å½•çš„ Google è¿œç¨‹æ¡Œé¢ä¾§è¾¹æ é¡µé¢"
+        "zh": "带持久登录的 Google 远程桌面侧边栏页面"
       },
       "added": "2026-10-20",
       "install": "",
@@ -349,7 +349,7 @@
       "category": "arya",
       "description": {
         "en": "ComfyUI image generation and the local gallery",
-        "zh": "ComfyUI å›¾åƒç”Ÿæˆä¸Žæœ¬åœ°ç”»å»Š"
+        "zh": "ComfyUI 图像生成与本地画廊"
       },
       "added": "2026-10-20",
       "install": "",
@@ -376,7 +376,7 @@
       "category": "arya",
       "description": {
         "en": "Phone shell and the Mobile & Remote pairing popover",
-        "zh": "æ‰‹æœºå¤–å£³ä¸Žç§»åŠ¨ç«¯é…å¯¹é¢æ¿"
+        "zh": "手机外壳与移动端配对面板"
       },
       "added": "2026-10-20",
       "install": "",
@@ -398,7 +398,7 @@
       "category": "arya",
       "description": {
         "en": "Sidebar group for chats not attached to a workspace",
-        "zh": "æœªå…³è”å·¥ä½œåŒºçš„ä¼šè¯åˆ†ç»„"
+        "zh": "未关联工作区的会话分组"
       },
       "added": "2026-10-20",
       "install": "",
@@ -420,7 +420,7 @@
       "category": "arya",
       "description": {
         "en": "Settings page listing AryaAI version history",
-        "zh": "åˆ—å‡º AryaAI ç‰ˆæœ¬åŽ†å²çš„è®¾ç½®é¡µé¢"
+        "zh": "列出 AryaAI 版本历史的设置页面"
       },
       "added": "2026-10-20",
       "install": "",
@@ -442,7 +442,7 @@
       "category": "arya",
       "description": {
         "en": "Conversation-header buttons that open the right sidebar panels",
-        "zh": "ä¼šè¯æ ‡é¢˜æ ä¸­æ‰“å¼€å³ä¾§è¾¹æ é¢æ¿çš„æŒ‰é’®"
+        "zh": "会话标题栏中打开右侧边栏面板的按钮"
       },
       "added": "2026-10-20",
       "install": "",
@@ -464,7 +464,7 @@
       "category": "arya",
       "description": {
         "en": "Manage skills and MCP servers, and add public MCP servers from a catalog",
-        "zh": "ç®¡ç†æŠ€èƒ½ä¸Ž MCP æœåŠ¡å™¨ï¼Œå¹¶ä»Žç›®å½•æ·»åŠ å…¬å…± MCP æœåŠ¡å™¨"
+        "zh": "管理技能与 MCP 服务器，并从目录添加公共 MCP 服务器"
       },
       "added": "2026-10-20",
       "install": "",
@@ -486,7 +486,7 @@
       "category": "arya",
       "description": {
         "en": "Sign in to GitHub, list repositories, and clone one as a workspace",
-        "zh": "ç™»å½• GitHubã€åˆ—å‡ºä»“åº“å¹¶å…‹éš†ä¸ºå·¥ä½œåŒº"
+        "zh": "登录 GitHub、列出仓库并克隆为工作区"
       },
       "added": "2026-10-20",
       "install": "",
@@ -508,7 +508,7 @@
       "category": "arya",
       "description": {
         "en": "Optional Rockwell Resources desktop page with a retained sign-in",
-        "zh": "å¯é€‰ Rockwell èµ„æºæ¡Œé¢é¡µé¢ï¼Œä¿ç•™ç™»å½•çŠ¶æ€"
+        "zh": "可选 Rockwell 资源桌面页面，保留登录状态"
       },
       "added": "2026-10-22",
       "install": "",
