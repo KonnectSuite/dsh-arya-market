@@ -1,5 +1,5 @@
 {
-  "name": "dshmarket",
+  "name": "@aryacode/dsh-arya-market",
   "description": "Arya Plugin Market: packaged releases, updates, and version restoration.",
   "version": "1.70.1-arya.0.1",
   "icon": "assets/logo.svg",

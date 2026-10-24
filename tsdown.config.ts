@@ -16,7 +16,7 @@ import { basename, dirname, relative, resolve as resolvePath } from 'node:path'
 import { defineConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
-const id = 'dshmarket'
+const id = '@aryacode/dsh-arya-market'
 
 /**
  * Externals resolved from the loader module table at runtime. Only the

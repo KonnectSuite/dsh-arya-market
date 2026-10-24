@@ -294,7 +294,7 @@ export function SettingsCard({ t, onRemoved, sidebar }: SettingsCardProps): Reac
       try {
         const response = await fetch(api('/dsh-market/updates'), { cache: 'no-store' })
         const body = (await response.json()) as { updates?: Record<string, RawUpdate> }
-        const own = body.updates?.['dshmarket'] ?? body.updates?.['dsh-market']
+        const own = body.updates?.['@aryacode/dsh-arya-market'] ?? body.updates?.['dshmarket'] ?? body.updates?.['dsh-market']
         if (live && own !== undefined) setUpdate(readUpdate(own))
       } catch { /* an update check that fails leaves the row without an offer */ }
     })()
@@ -365,7 +365,7 @@ export function SettingsCard({ t, onRemoved, sidebar }: SettingsCardProps): Reac
   const refreshUpdate = useCallback(async (): Promise<void> => {
     const response = await fetch(api('/dsh-market/updates') + '?force=1', { cache: 'no-store' })
     const body = (await response.json()) as { updates?: Record<string, RawUpdate> }
-    const own = body.updates?.['dshmarket'] ?? body.updates?.['dsh-market']
+    const own = body.updates?.['@aryacode/dsh-arya-market'] ?? body.updates?.['dshmarket'] ?? body.updates?.['dsh-market']
     setUpdate(own === undefined ? null : readUpdate(own))
   }, [])
 

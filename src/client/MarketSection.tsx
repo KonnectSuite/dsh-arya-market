@@ -5109,7 +5109,7 @@ export function MarketSection(props: MarketSectionProps) {
 
   // The market itself stays out of the batch: its update reloads this page
   // mid-run, which would strand the remaining items.
-  const selfName = installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
+  const selfName = installed['@aryacode/dsh-arya-market'] !== undefined ? '@aryacode/dsh-arya-market' : installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
   const updatableNames = Object.keys(installed).filter(
     name => name !== selfName
       && !effectiveDisabledSet.has(name)
@@ -6263,7 +6263,7 @@ export function MarketSection(props: MarketSectionProps) {
 
   /** Installed plugins the market itself cannot group (#60). */
   const groupableNames = Object.keys(installed)
-    .filter(name => name !== 'dsh-market' && name !== 'dshmarket' && !dependencyOnlyNames.has(name))
+    .filter(name => name !== 'dsh-market' && name !== 'dshmarket' && name !== '@aryacode/dsh-arya-market' && !dependencyOnlyNames.has(name))
   /** Names already inside some group; everything else shows under "ungrouped". */
   const groupedNames = useMemo(() => new Set(Object.values(groups).flat()), [groups])
   const ungroupedNames = groupableNames.filter(name => !groupedNames.has(name))
@@ -6369,7 +6369,7 @@ export function MarketSection(props: MarketSectionProps) {
             onClick={doExportLog}
           >{exportState === 'busy' ? t('exportingLog') : t('exportLog')}</Button>
           {(() => {
-            const self = installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
+            const self = installed['@aryacode/dsh-arya-market'] !== undefined ? '@aryacode/dsh-arya-market' : installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
             const status = updates[self]
             return status && status.updateAvailable && !updatedNames.includes(self)
               && !quietUpdateSet.has(self)
@@ -7572,7 +7572,7 @@ export function MarketSection(props: MarketSectionProps) {
                                     </span>
                                     {entry?.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
                                   </div>
-                                  {!missing && name !== 'dsh-market' && name !== 'dshmarket' && (
+                                  {!missing && name !== 'dsh-market' && name !== 'dshmarket' && name !== '@aryacode/dsh-arya-market' && (
                                     <span className={css.irowMenu}>{renderInstalledBlockMenu(name)}</span>
                                   )}
                                   </div>
