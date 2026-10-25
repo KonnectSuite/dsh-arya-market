@@ -47,14 +47,6 @@
       }
     },
     {
-      "name": "@aryacode/dsh-client-ui-sidebar-switcher",
-      "source": "KonnectSuite/dsh-client-ui-sidebar-switcher",
-      "description": {
-        "en": "Conversation-header buttons that open the right sidebar panels",
-        "zh": "会话标题栏中打开右侧边栏面板的按钮"
-      }
-    },
-    {
       "name": "@aryacode/dsh-client-ui-release-notes",
       "source": "KonnectSuite/dsh-client-ui-release-notes",
       "description": {
@@ -108,14 +100,6 @@
       "description": {
         "en": "AryaStrata local model controls and monitoring",
         "zh": "AryaStrata 本地模型控制与监控"
-      }
-    },
-    {
-      "name": "@aryacode/dsh-agent-learning",
-      "source": "KonnectSuite/dsh-agent-learning",
-      "description": {
-        "en": "Agent learning surfaces",
-        "zh": "智能体学习界面"
       }
     },
     {
