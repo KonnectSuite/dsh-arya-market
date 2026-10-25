@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-24T06:50:47.596Z",
+  "updated": "2026-10-25T06:36:09.971Z",
   "count": 16,
   "categories": {
     "arya": {
@@ -11,7 +11,7 @@
     {
       "name": "@aryacode/dsh-client-ui-images",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-images",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-images",
       "category": "arya",
       "description": {
         "en": "ComfyUI image generation and the local gallery",
@@ -33,7 +33,7 @@
     {
       "name": "@aryacode/dsh-client-ui-arya-pet",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-arya-pet",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-arya-pet",
       "category": "arya",
       "description": {
         "en": "Arya's animated pet overlay",
@@ -55,7 +55,7 @@
     {
       "name": "@aryacode/dsh-client-ui-skills-mcp",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-skills-mcp",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-skills-mcp",
       "category": "arya",
       "description": {
         "en": "Manage skills and MCP servers, and add public MCP servers from a catalog",
@@ -77,7 +77,7 @@
     {
       "name": "@aryacode/dsh-client-ui-no-repo",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-no-repo",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-no-repo",
       "category": "arya",
       "description": {
         "en": "Sidebar group for chats not attached to a workspace",
@@ -99,7 +99,7 @@
     {
       "name": "@aryacode/dsh-github",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-github",
+      "url": "https://github.com/KonnectSuite/dsh-github",
       "category": "arya",
       "description": {
         "en": "Sign in to GitHub, list repositories, and clone one as a workspace",
@@ -121,7 +121,7 @@
     {
       "name": "@aryacode/dsh-client-ui-mobile",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-mobile",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-mobile",
       "category": "arya",
       "description": {
         "en": "Phone shell and the Mobile & Remote pairing popover",
@@ -143,7 +143,7 @@
     {
       "name": "@aryacode/dsh-client-ui-sidebar-switcher",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-sidebar-switcher",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-sidebar-switcher",
       "category": "arya",
       "description": {
         "en": "Conversation-header buttons that open the right sidebar panels",
@@ -165,7 +165,7 @@
     {
       "name": "@aryacode/dsh-client-ui-release-notes",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-release-notes",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-release-notes",
       "category": "arya",
       "description": {
         "en": "Settings page listing AryaAI version history",
@@ -187,7 +187,7 @@
     {
       "name": "@aryacode/dsh-client-ui-deepseek-chat",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-deepseek-chat",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-deepseek-chat",
       "category": "arya",
       "description": {
         "en": "Optional DeepSeek Chat desktop page",
@@ -209,7 +209,7 @@
     {
       "name": "@aryacode/dsh-client-ui-rockwell-resources",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-rockwell-resources",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-rockwell-resources",
       "category": "arya",
       "description": {
         "en": "Optional Rockwell Resources desktop page with a retained sign-in",
@@ -231,7 +231,7 @@
     {
       "name": "@aryacode/dsh-projects",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-projects",
+      "url": "https://github.com/KonnectSuite/dsh-projects",
       "category": "arya",
       "description": {
         "en": "Give one workspace several folders",
@@ -253,7 +253,7 @@
     {
       "name": "@aryacode/dsh-native-window",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-native-window",
+      "url": "https://github.com/KonnectSuite/dsh-native-window",
       "category": "arya",
       "description": {
         "en": "Dock native Windows applications inside Arya",
@@ -275,7 +275,7 @@
     {
       "name": "@aryacode/dsh-clear-light",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-clear-light",
+      "url": "https://github.com/KonnectSuite/dsh-clear-light",
       "category": "arya",
       "description": {
         "en": "Clearer navigation, surfaces, selections and text",
@@ -297,7 +297,7 @@
     {
       "name": "@aryacode/dsh-local-llm",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-local-llm",
+      "url": "https://github.com/KonnectSuite/dsh-local-llm",
       "category": "arya",
       "description": {
         "en": "AryaStrata local model controls and monitoring",
@@ -319,7 +319,7 @@
     {
       "name": "@aryacode/dsh-agent-learning",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-agent-learning",
+      "url": "https://github.com/KonnectSuite/dsh-agent-learning",
       "category": "arya",
       "description": {
         "en": "Agent learning surfaces",
@@ -341,7 +341,7 @@
     {
       "name": "@aryacode/dsh-client-ui-googleremotedesktop",
       "owner": "KonnectSuite",
-      "url": "https://www.npmjs.com/package/@aryacode/dsh-client-ui-googleremotedesktop",
+      "url": "https://github.com/KonnectSuite/dsh-client-ui-googleremotedesktop",
       "category": "arya",
       "description": {
         "en": "Google Remote Desktop sidebar page with a persistent sign-in",
