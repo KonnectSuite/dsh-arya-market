@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-25T08:08:28.229Z",
+  "updated": "2026-10-25T08:20:00.839Z",
   "count": 16,
   "categories": {
     "arya": {
@@ -352,6 +352,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.4.2",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.2/aryacode-dsh-engineering-0.4.2.tgz",
+          "sha256": "ca2f2dc691bcba12a753d83d25ab24b104ecf88b767040ed531e15da58aebfe7"
+        },
+        {
           "version": "0.4.1",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.1/aryacode-dsh-engineering-0.4.1.tgz",
           "sha256": "7bcc461afb03e31a3ab542e613c6adcf6d702c3f6a01cc0d4ebc1643c769e0d5"
@@ -362,8 +367,8 @@
           "sha256": "ea70178e252e1878e90474951ed2ad1a1a97b526144a6c2a5c7c39b7f99b6392"
         }
       ],
-      "version": "0.4.1",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.1/aryacode-dsh-engineering-0.4.1.tgz"
+      "version": "0.4.2",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.2/aryacode-dsh-engineering-0.4.2.tgz"
     }
   ]
 }
