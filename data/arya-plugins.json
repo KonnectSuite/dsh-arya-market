@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-25T09:50:19.174Z",
-  "count": 16,
+  "updated": "2026-10-25T09:53:00.896Z",
+  "count": 14,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -117,28 +117,6 @@
       ],
       "version": "0.2.1-rc.3",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-mobile/-/dsh-client-ui-mobile-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-sidebar-switcher",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-sidebar-switcher",
-      "category": "arya",
-      "description": {
-        "en": "Conversation-header buttons that open the right sidebar panels",
-        "zh": "会话标题栏中打开右侧边栏面板的按钮"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-sidebar-switcher/-/dsh-client-ui-sidebar-switcher-0.2.1-rc.3.tgz",
-          "sha256": "baf90804ec1499a49e22839dac2be26e869cc726c9604870e379d236023386d9"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-sidebar-switcher/-/dsh-client-ui-sidebar-switcher-0.2.1-rc.3.tgz"
     },
     {
       "name": "@aryacode/dsh-client-ui-release-notes",
@@ -293,28 +271,6 @@
       ],
       "version": "0.8.1",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.1.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-agent-learning",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-agent-learning",
-      "category": "arya",
-      "description": {
-        "en": "Agent learning surfaces",
-        "zh": "智能体学习界面"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.1.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-agent-learning/-/dsh-agent-learning-0.1.0.tgz",
-          "sha256": "92d593100eea8e301b09a42568bfb32c26fd18625ca0e5f33eedc72117021041"
-        }
-      ],
-      "version": "0.1.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-agent-learning/-/dsh-agent-learning-0.1.0.tgz"
     },
     {
       "name": "@aryacode/dsh-client-ui-googleremotedesktop",
