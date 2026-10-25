@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-25T14:58:47.365Z",
+  "updated": "2026-10-25T15:24:39.114Z",
   "count": 14,
   "categories": {
     "arya": {
@@ -264,6 +264,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.8.5",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.5.tgz",
+          "sha256": "1cbe26a40628bfc1d72482257526325a00b2187ae893dd0262bb6ace52d91f84"
+        },
+        {
           "version": "0.8.4",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.4.tgz",
           "sha256": "04c6142606f43e20984ce7edbd5482acac38c414f98d561324bf17206170f286"
@@ -279,8 +284,8 @@
           "sha256": "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
         }
       ],
-      "version": "0.8.4",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.4.tgz"
+      "version": "0.8.5",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.5.tgz"
     },
     {
       "name": "@aryacode/dsh-client-ui-googleremotedesktop",
