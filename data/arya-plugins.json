@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-25T09:47:56.197Z",
+  "updated": "2026-10-25T09:50:19.174Z",
   "count": 16,
   "categories": {
     "arya": {
@@ -358,37 +358,37 @@
         },
         {
           "version": "0.4.6",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.6/aryacode-dsh-engineering-0.4.6.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.6.tgz",
           "sha256": "e246bb24a747663b9cd09243af92313a8602646171dc0d05e572c7b9a7f13d27"
         },
         {
           "version": "0.4.5",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.5/aryacode-dsh-engineering-0.4.5.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.5.tgz",
           "sha256": "ec7891d29e88bda748a5be0a48783cffddcd46951211c44a329b7d52ef78b81a"
         },
         {
           "version": "0.4.4",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.4/aryacode-dsh-engineering-0.4.4.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.4.tgz",
           "sha256": "e6713752fa6869ca74303838af804c2c20b5101e68d33b03b5921c163e972f5e"
         },
         {
           "version": "0.4.3",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.3/aryacode-dsh-engineering-0.4.3.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.3.tgz",
           "sha256": "f348eb2c25eff9d51b8937c9d215beb4846196e191bd713ba6647175f1934c07"
         },
         {
           "version": "0.4.2",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.2/aryacode-dsh-engineering-0.4.2.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.2.tgz",
           "sha256": "ca2f2dc691bcba12a753d83d25ab24b104ecf88b767040ed531e15da58aebfe7"
         },
         {
           "version": "0.4.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.1/aryacode-dsh-engineering-0.4.1.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.1.tgz",
           "sha256": "7bcc461afb03e31a3ab542e613c6adcf6d702c3f6a01cc0d4ebc1643c769e0d5"
         },
         {
           "version": "0.4.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.0/aryacode-dsh-engineering-0.4.0.tgz",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.0.tgz",
           "sha256": "ea70178e252e1878e90474951ed2ad1a1a97b526144a6c2a5c7c39b7f99b6392"
         }
       ],
