@@ -15,14 +15,6 @@
       }
     },
     {
-      "name": "@aryacode/dsh-client-ui-arya-pet",
-      "source": "KonnectSuite/dsh-client-ui-arya-pet",
-      "description": {
-        "en": "Arya's animated pet overlay",
-        "zh": "Arya 的动画宠物浮层"
-      }
-    },
-    {
       "name": "@aryacode/dsh-client-ui-skills-mcp",
       "source": "KonnectSuite/dsh-client-ui-skills-mcp",
       "description": {
