@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-25T06:36:09.971Z",
-  "count": 16,
+  "updated": "2026-10-25T06:50:01.567Z",
+  "count": 15,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -29,28 +29,6 @@
       ],
       "version": "0.2.1-rc.3",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-images/-/dsh-client-ui-images-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-arya-pet",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-arya-pet",
-      "category": "arya",
-      "description": {
-        "en": "Arya's animated pet overlay",
-        "zh": "Arya 的动画宠物浮层"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-arya-pet/-/dsh-client-ui-arya-pet-0.2.1-rc.3.tgz",
-          "sha256": "0d2d2cdf2712848159e9816770f8f4c7f92a1308fcfbe3b4149a94846b3f0935"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-arya-pet/-/dsh-client-ui-arya-pet-0.2.1-rc.3.tgz"
     },
     {
       "name": "@aryacode/dsh-client-ui-skills-mcp",
