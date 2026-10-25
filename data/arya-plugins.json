@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-25T06:50:01.567Z",
-  "count": 15,
+  "updated": "2026-10-25T07:55:58.041Z",
+  "count": 16,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -337,6 +337,28 @@
       ],
       "version": "0.1.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-googleremotedesktop/-/dsh-client-ui-googleremotedesktop-0.1.0.tgz"
+    },
+    {
+      "name": "@aryacode/dsh-engineering",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-engineering",
+      "category": "arya",
+      "description": {
+        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with the ladder and display previews.",
+        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含梯形图与画面预览。"
+      },
+      "added": "2026-10-25",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.4.0",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.0/aryacode-dsh-engineering-0.4.0.tgz",
+          "sha256": "ea70178e252e1878e90474951ed2ad1a1a97b526144a6c2a5c7c39b7f99b6392"
+        }
+      ],
+      "version": "0.4.0",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.0/aryacode-dsh-engineering-0.4.0.tgz"
     }
   ]
 }
