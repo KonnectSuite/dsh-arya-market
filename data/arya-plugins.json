@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-25T07:55:58.041Z",
+  "updated": "2026-10-25T08:08:28.229Z",
   "count": 16,
   "categories": {
     "arya": {
@@ -352,13 +352,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.4.1",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.1/aryacode-dsh-engineering-0.4.1.tgz",
+          "sha256": "7bcc461afb03e31a3ab542e613c6adcf6d702c3f6a01cc0d4ebc1643c769e0d5"
+        },
+        {
           "version": "0.4.0",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.0/aryacode-dsh-engineering-0.4.0.tgz",
           "sha256": "ea70178e252e1878e90474951ed2ad1a1a97b526144a6c2a5c7c39b7f99b6392"
         }
       ],
-      "version": "0.4.0",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.0/aryacode-dsh-engineering-0.4.0.tgz"
+      "version": "0.4.1",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.1/aryacode-dsh-engineering-0.4.1.tgz"
     }
   ]
 }
