@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-25T23:26:37.857Z",
+  "updated": "2026-10-26T01:54:06.332Z",
   "count": 14,
   "categories": {
     "arya": {
@@ -264,6 +264,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.10.1",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.1/aryacode-dsh-local-llm-0.10.1.tgz",
+          "sha256": "9a602d1d25dc967d75cf66471e7d977f817eef5a1b7c328455a9f31d9c94f68a"
+        },
+        {
           "version": "0.10.0",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.0/aryacode-dsh-local-llm-0.10.0.tgz",
           "sha256": "fbd47f4c26ae93c0c3d682a2888142bc42f0f672b874e5958e11153f0c856401"
@@ -339,8 +344,8 @@
           "sha256": "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
         }
       ],
-      "version": "0.10.0",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.0/aryacode-dsh-local-llm-0.10.0.tgz"
+      "version": "0.10.1",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.1/aryacode-dsh-local-llm-0.10.1.tgz"
     },
     {
       "name": "@aryacode/dsh-client-ui-googleremotedesktop",
