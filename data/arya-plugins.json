@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-27T21:49:24.311Z",
-  "count": 14,
+  "updated": "2026-10-27T21:56:14.789Z",
+  "count": 15,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -415,6 +415,28 @@
       ],
       "version": "0.10.8",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.10.8.tgz"
+    },
+    {
+      "name": "@aryacode/dsh-aryacode-polish",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-aryacode-polish",
+      "category": "arya",
+      "description": {
+        "en": "AryaCode Polish: one install for the small things that make AryaCode feel finished. One Plugins row, one switch per quality-of-life feature.",
+        "zh": "AryaCode 润色：一次安装，补齐让 AryaCode 更顺手的小细节。一个插件行，每个体验功能一个开关。"
+      },
+      "added": "2026-10-27",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.2.4",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz",
+          "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
+        }
+      ],
+      "version": "0.2.4",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz"
     }
   ]
 }
