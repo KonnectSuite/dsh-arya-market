@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-27T15:12:22.249Z",
+  "updated": "2026-10-27T15:12:32.354Z",
   "count": 14,
   "categories": {
     "arya": {
@@ -386,9 +386,15 @@
       "added": "2026-10-25",
       "install": "",
       "arya": true,
-      "releases": [],
-      "version": "0.8.1",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.8.1.tgz"
+      "releases": [
+        {
+          "version": "0.8.2",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.8.2.tgz",
+          "sha256": "53f2509da07baa3cdb7d0a43829cb2d076e1f4df29de074c8145111b749635a2"
+        }
+      ],
+      "version": "0.8.2",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.8.2.tgz"
     }
   ]
 }
