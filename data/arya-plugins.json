@@ -393,11 +393,6 @@
           "sha256": "8e9ad295ead3b8c1385c707baa04708a429a43ed7c806a69b32c457c5dc22d6d"
         },
         {
-          "version": "0.4.8",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-engineering-v0.4.8/aryacode-dsh-engineering-0.4.8.tgz",
-          "sha256": "a7d86ef8920c896bc7dfe9bf71e16fca2c30be596d8ca11d37f1b4c2b840247c"
-        },
-        {
           "version": "0.4.7",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.4.7.tgz",
           "sha256": "54cb311328b45b38a6e45f357af45e518ea6182eb2859d28a1a9545d91028eb7"
