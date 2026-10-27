@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-27T21:56:14.789Z",
+  "updated": "2026-10-27T22:25:21.080Z",
   "count": 15,
   "categories": {
     "arya": {
@@ -430,13 +430,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.3.3",
+          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.3.3/aryacode-dsh-aryacode-polish-0.3.3.tgz",
+          "sha256": "2e176598e3ccdf50378e819ea27ccc74b22d6a8d9cb99740bb3f44d779535db1"
+        },
+        {
           "version": "0.2.4",
           "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz",
           "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
         }
       ],
-      "version": "0.2.4",
-      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz"
+      "version": "0.3.3",
+      "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.3.3/aryacode-dsh-aryacode-polish-0.3.3.tgz"
     }
   ]
 }
