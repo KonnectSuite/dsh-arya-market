@@ -128,6 +128,9 @@ if (fromNpm) {
   if (basename(tarball) !== fileName) throw new Error(`Archive must be named ${fileName}`)
   const tag = `plugin-${name.replace(/^@/, '').replaceAll('/', '-')}-v${version}`
   archiveUrl = `https://github.com/KonnectSuite/dsh-arya-market/releases/download/${tag}/${fileName}`
+  // Digest the exact local archive the GitHub release will carry, so the entry
+  // records the bytes the installer downloads and verifies.
+  sha256 = createHash('sha256').update(readFileSync(tarball)).digest('hex')
 }
 
 const catalogPath = resolve(root, 'data/arya-plugins.json')
