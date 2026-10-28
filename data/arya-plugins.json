@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-28T12:56:28.872Z",
+  "updated": "2026-10-28T13:21:36.224Z",
   "count": 15,
   "categories": {
     "arya": {
@@ -430,6 +430,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.74.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.74.0.tgz",
+          "sha256": "b6fb21d9e055db01ee369a0a2e347c3c0210d76e6983c1eee1248fbb4d77d73e"
+        },
+        {
           "version": "0.71.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.71.0.tgz",
           "sha256": "57b009d0c712f83a060a6c5df2176d97cad12b4f99524c6606f333995e36e27c"
@@ -785,8 +790,8 @@
           "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
         }
       ],
-      "version": "0.71.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.71.0.tgz"
+      "version": "0.74.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.74.0.tgz"
     }
   ]
 }
