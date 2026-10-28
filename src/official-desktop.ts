@@ -51,7 +51,24 @@ export interface OfficialPluginManagerLike {
   installBundle(spec: string, options?: { requestId?: string; registry?: string }): Promise<ManagedResult>
   removeBundle(name: string): Promise<ManagedResult>
   cancelInstall(requestId: string): Promise<unknown>
+  /**
+   * The host's supported upgrade for a package that is already installed.
+   *
+   * Optional because it is newer than the rest of this contract. Without HMR
+   * the host installs the target OVER the running copy and reports
+   * `restart-required`; the remove-then-add pair below cannot do that, because
+   * a plugin whose code is mounted is refused with `bundle-in-use` (#935).
+   */
+  updateBundle?(name: string, version: string, options?: { requestId?: string; registry?: string }): Promise<{
+    from?: string
+    to?: string
+    step?: string
+    result?: ManagedResult
+  }>
 }
+
+/** An exact published version, the only shape `updateBundle` accepts. */
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u
 
 /**
  * What a user can actually do when the market cannot perform an operation on
@@ -366,6 +383,28 @@ async function installOrReinstall(
   // (#900). Overlay the version with the host's own pnpm instead — no remove.
   if (SELF_NAMES.has(name)) {
     return updateMarketInPlace(spec, name, options, context)
+  }
+  // A plugin whose code is mounted cannot be removed on a desktop profile: the
+  // manager answers `bundle-in-use` before pnpm runs, so the pair below fails
+  // for exactly the plugins a user is most likely to update (#935). The host's
+  // own upgrade installs the target over the running copy and reports the
+  // restart, so take it whenever the host offers it and the target is exact.
+  const wanted = targetVersionOf(spec)
+  if (typeof manager.updateBundle === 'function' && wanted !== undefined && EXACT_VERSION.test(wanted)) {
+    progress.lastLine = 'Installing the new version over the running copy'
+    try {
+      const updated = await withDeadline(
+        manager.updateBundle(name, wanted, options),
+        INSTALL_DEADLINE_MS,
+        `update ${name}`,
+      )
+      const result = updated.result
+      if (result !== undefined) return result
+      return { application: 'failed', error: new Error('the desktop plugin manager reported no result for the update') }
+    } catch (error) {
+      if (error instanceof DeadlineExceeded) return interrupted()
+      throw error
+    }
   }
   const record = context === undefined
     ? undefined

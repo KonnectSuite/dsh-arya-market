@@ -489,6 +489,46 @@ describe('official Electron profile runtime', () => {
     }
   })
 
+  it('uses the host upgrade instead of removing a plugin that is in use (#935)', async () => {
+    // The desktop profile refuses `removeBundle` with `bundle-in-use` for any
+    // plugin whose code is mounted, which is every plugin a user can see. The
+    // host's own `updateBundle` installs over the running copy instead.
+    const service = manager()
+    const updateBundle = vi.fn(async () => ({
+      from: '1.0.0',
+      to: '2.0.0',
+      step: 'install',
+      result: { application: 'restart-required', packageResult: { exitCode: 0, output: 'installed over the running copy' } },
+    }))
+    service.installBundle.mockResolvedValueOnce({ application: 'failed', error: { code: 'already-installed' } })
+    const runtime = createOfficialDesktopRuntime(() => ({ ...service, updateBundle }), 'desktop', profile())
+    try {
+      const result = await runtime.runPlugin('desktop', ['add', 'example@2.0.0'])
+      expect(result.exitCode).toBe(0)
+      expect(updateBundle).toHaveBeenCalledWith('example', '2.0.0', expect.anything())
+      expect(service.removeBundle).not.toHaveBeenCalled()
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it('keeps the remove path when the target is a range, not a version', async () => {
+    // `updateBundle` takes an exact version; a range still needs the pair.
+    const service = manager()
+    const updateBundle = vi.fn(async () => ({ result: { application: 'applied' } }))
+    service.installBundle
+      .mockResolvedValueOnce({ application: 'failed', error: { code: 'already-installed' } })
+      .mockResolvedValueOnce({ application: 'applied', packageResult: { exitCode: 0, output: 'ok' } })
+    const runtime = createOfficialDesktopRuntime(() => ({ ...service, updateBundle }), 'desktop', profile())
+    try {
+      await runtime.runPlugin('desktop', ['add', 'example@^2.0.0'])
+      expect(updateBundle).not.toHaveBeenCalled()
+      expect(service.removeBundle).toHaveBeenCalledWith('example')
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   it('says so when a refusal happened before pnpm ran, and not when it did (#897)', async () => {
     const service = manager()
     // Before pnpm: no packageResult — the profile is untouched.
