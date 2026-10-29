@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-29T05:09:41.013Z",
+  "updated": "2026-10-29T05:14:18.828Z",
   "count": 3,
   "categories": {
     "arya": {
@@ -116,13 +116,18 @@
       "url": "https://github.com/KonnectSuite/dsh-engineering",
       "category": "arya",
       "description": {
-        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with the ladder and display previews.",
-        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含梯形图与画面预览。"
+        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with HMI-to-PLC cross-references, standards checks, and ladder and display previews drawn as diagrams.",
+        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含 HMI 与 PLC 交叉引用、规范检查以及梯形图与画面预览。"
       },
       "added": "2026-10-25",
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.28.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.28.0.tgz",
+          "sha256": "4587f15995ef988f743e06753f04a0801b138a70b8173bea6d07ead04f7ff0bb"
+        },
         {
           "version": "0.27.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.27.0.tgz",
@@ -142,15 +147,10 @@
           "version": "0.25.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.25.0.tgz",
           "sha256": "eea61e3c77628f5d24971200b704e2f32af39274c28fb0ccb6a2211f2724a03f"
-        },
-        {
-          "version": "0.24.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.24.0.tgz",
-          "sha256": "0d8ea041838b73cd1799649c419052cd353f97fd5628bfbe333013a88265f257"
         }
       ],
-      "version": "0.27.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.27.0.tgz"
+      "version": "0.28.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.28.0.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
