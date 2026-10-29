@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-28T23:39:17.698Z",
-  "count": 15,
+  "updated": "2026-10-29T01:41:36.949Z",
+  "count": 3,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -8,248 +8,6 @@
     }
   },
   "plugins": [
-    {
-      "name": "@aryacode/dsh-client-ui-images",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-images",
-      "category": "arya",
-      "description": {
-        "en": "ComfyUI image generation and the local gallery",
-        "zh": "ComfyUI 图像生成与本地画廊"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-images/-/dsh-client-ui-images-0.2.1-rc.3.tgz",
-          "sha256": "3ba3f3afbd35ad9ad86cca96c67e41772c342ea6e2d9e70eb5a0b04b04a3ce6d"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-images/-/dsh-client-ui-images-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-skills-mcp",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-skills-mcp",
-      "category": "arya",
-      "description": {
-        "en": "Manage skills and MCP servers, and add public MCP servers from a catalog",
-        "zh": "管理技能与 MCP 服务器，并从目录添加公共 MCP 服务器"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-skills-mcp/-/dsh-client-ui-skills-mcp-0.2.1-rc.3.tgz",
-          "sha256": "508f6bb149df29d97179f25de2534220dd6e851b076cc33247dbeff091a3fa8d"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-skills-mcp/-/dsh-client-ui-skills-mcp-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-no-repo",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-no-repo",
-      "category": "arya",
-      "description": {
-        "en": "Sidebar group for chats not attached to a workspace",
-        "zh": "未关联工作区的会话分组"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-no-repo/-/dsh-client-ui-no-repo-0.2.1-rc.3.tgz",
-          "sha256": "54a71e6cfbfbcab90a07c2a86b589764e10b3acc332aa1f6b503927729c79538"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-no-repo/-/dsh-client-ui-no-repo-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-github",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-github",
-      "category": "arya",
-      "description": {
-        "en": "Sign in to GitHub, list repositories, and clone one as a workspace",
-        "zh": "登录 GitHub、列出仓库并克隆为工作区"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-github/-/dsh-github-0.2.1-rc.3.tgz",
-          "sha256": "9b413771e48b14045c5acf95fe31245007b12aacd597db575f0040ae39a4b6ea"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-github/-/dsh-github-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-mobile",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-mobile",
-      "category": "arya",
-      "description": {
-        "en": "Phone shell and the Mobile & Remote pairing popover",
-        "zh": "手机外壳与移动端配对面板"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-mobile/-/dsh-client-ui-mobile-0.2.1-rc.3.tgz",
-          "sha256": "002c0f3ed1ff363c3ec4be75c942f704f761f8db33aef842a302281a43667f96"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-mobile/-/dsh-client-ui-mobile-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-release-notes",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-release-notes",
-      "category": "arya",
-      "description": {
-        "en": "Settings page listing AryaAI version history",
-        "zh": "列出 AryaAI 版本历史的设置页面"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-release-notes/-/dsh-client-ui-release-notes-0.2.1-rc.3.tgz",
-          "sha256": "fe93dd083d4b6585e23f7330e6bfcbd0dee1412b45af68e0649b21b917ea7520"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-release-notes/-/dsh-client-ui-release-notes-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-deepseek-chat",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-deepseek-chat",
-      "category": "arya",
-      "description": {
-        "en": "Optional DeepSeek Chat desktop page",
-        "zh": "可选的 DeepSeek 对话桌面页面"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-deepseek-chat/-/dsh-client-ui-deepseek-chat-0.2.1-rc.3.tgz",
-          "sha256": "257f7f6a7eecab468f7b09b2ee2fd6a9ca388aec719ee2175e2f7f4967719aa6"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-deepseek-chat/-/dsh-client-ui-deepseek-chat-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-client-ui-rockwell-resources",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-rockwell-resources",
-      "category": "arya",
-      "description": {
-        "en": "Optional Rockwell Resources desktop page with a retained sign-in",
-        "zh": "可选 Rockwell 资源桌面页面，保留登录状态"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.1-rc.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-rockwell-resources/-/dsh-client-ui-rockwell-resources-0.2.1-rc.3.tgz",
-          "sha256": "57e6acac11c149f8fcba668bc4e2f4306d6942e65c68c50e5217ee473f04104a"
-        }
-      ],
-      "version": "0.2.1-rc.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-rockwell-resources/-/dsh-client-ui-rockwell-resources-0.2.1-rc.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-projects",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-projects",
-      "category": "arya",
-      "description": {
-        "en": "Give one workspace several folders",
-        "zh": "为一个工作区提供多个文件夹"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-projects/-/dsh-projects-0.2.2.tgz",
-          "sha256": "0232879cc2dc69a3e6fd40e8966a90e87fb8379b9d3e0325f6ee357452004067"
-        }
-      ],
-      "version": "0.2.2",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-projects/-/dsh-projects-0.2.2.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-native-window",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-native-window",
-      "category": "arya",
-      "description": {
-        "en": "Dock native Windows applications inside Arya",
-        "zh": "在 Arya 中嵌入 Windows 本地应用"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.7",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.7.tgz",
-          "sha256": "42f3d4e22b71103af7cff88e27cd29e1a3159d687da89323a48a7e18cb9752ee"
-        }
-      ],
-      "version": "0.2.7",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.7.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-clear-light",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-clear-light",
-      "category": "arya",
-      "description": {
-        "en": "Clearer navigation, surfaces, selections and text",
-        "zh": "更清晰的导航、界面、选中状态与文字"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.1.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-clear-light/-/dsh-clear-light-0.1.1.tgz",
-          "sha256": "76ba9ad5a52ca0f1951668a92fe6b1a42c309e4a78aeca978e21467d0e04433a"
-        }
-      ],
-      "version": "0.1.1",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-clear-light/-/dsh-clear-light-0.1.1.tgz"
-    },
     {
       "name": "@aryacode/dsh-local-llm",
       "owner": "KonnectSuite",
@@ -353,28 +111,6 @@
       "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.3/aryacode-dsh-local-llm-0.10.3.tgz"
     },
     {
-      "name": "@aryacode/dsh-client-ui-googleremotedesktop",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-client-ui-googleremotedesktop",
-      "category": "arya",
-      "description": {
-        "en": "Google Remote Desktop sidebar page with a persistent sign-in",
-        "zh": "带持久登录的 Google 远程桌面侧边栏页面"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.1.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-googleremotedesktop/-/dsh-client-ui-googleremotedesktop-0.1.0.tgz",
-          "sha256": "bdec4d4b3bdb53568b1d462a30355777ec2858ac13a30be80ead84d00f6ac8de"
-        }
-      ],
-      "version": "0.1.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-client-ui-googleremotedesktop/-/dsh-client-ui-googleremotedesktop-0.1.0.tgz"
-    },
-    {
       "name": "@aryacode/dsh-engineering",
       "owner": "KonnectSuite",
       "url": "https://github.com/KonnectSuite/dsh-engineering",
@@ -387,6 +123,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.22.2",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.22.2.tgz",
+          "sha256": "53389641f702bb12f9eccbcd8ae85e240a8ec95071699461b64a42eebb05ccd7"
+        },
         {
           "version": "0.21.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.21.0.tgz",
@@ -418,8 +159,8 @@
           "sha256": "cd0946e40c5eeb56da174fb0824676499eaf5e5b94da14e49a388ffe4b80f616"
         }
       ],
-      "version": "0.21.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.21.0.tgz"
+      "version": "0.22.2",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.22.2.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
