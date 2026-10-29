@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-29T22:39:59.067Z",
-  "count": 4,
+  "updated": "2026-10-29T23:55:01.990Z",
+  "count": 5,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -673,6 +673,28 @@
       ],
       "version": "0.2.8",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz"
+    },
+    {
+      "name": "@aryacode/dsh-arya-maildesk",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-arya-maildesk",
+      "category": "arya",
+      "description": {
+        "en": "A real mail panel for the Outlook you are already signed into: folders, multi-select, a safe HTML reading pane, replies that stay drafts in the harness, a draft card in the chat and a draft tab beside it. No Azure app registration, no admin consent.",
+        "zh": "为已登录的 Outlook 装上真正的邮件面板：文件夹、多选列表、安全的 HTML 阅读、留在 harness 里的回复草稿、聊天中的草稿卡片，以及并排的草稿侧栏。无需 Azure 应用注册，无需管理员授权。"
+      },
+      "added": "2026-10-29",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "1.0.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.0.tgz",
+          "sha256": "656d66c80d9e403675179e03b9f53cdd47eb606c466b42d969f743e20909a014"
+        }
+      ],
+      "version": "1.0.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.0.tgz"
     }
   ]
 }
