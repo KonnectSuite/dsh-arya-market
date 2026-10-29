@@ -124,6 +124,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.48.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.48.0.tgz",
+          "sha256": "4fb220def62c38a32f569a6b8ebff4c5e72deefab8da7d7739be848133611946"
+        },
+        {
           "version": "0.46.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.46.0.tgz",
           "sha256": "2988eefefe955b6a309062bf00d448b3b1cf6d4326ab08b332343fb7c5ea7414"
@@ -142,30 +147,10 @@
           "version": "0.37.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.37.0.tgz",
           "sha256": "0856250b9a5f2dd2065eed68e24eeb62b08c188b1fdc255b951597a99ec54405"
-        },
-        {
-          "version": "0.36.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.36.0.tgz",
-          "sha256": "e63c07896f4a40951d22a205d87114032b87ccfbc4f855d6a7e79ee9b91681fd"
-        },
-        {
-          "version": "0.35.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.35.0.tgz",
-          "sha256": "89b1c06d9bf8132f924d5d85df4139d9fd417a4f1c62048b7b1ec29b05473f4b"
-        },
-        {
-          "version": "0.34.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.34.0.tgz",
-          "sha256": "f44f469d2b8cf967584b8147f5a70587e05a3de31e8dae13bea3671165e4dbd8"
-        },
-        {
-          "version": "0.33.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.33.0.tgz",
-          "sha256": "41772ca12d4ac7a21e8f269265469b308dc92f27ffc6e08a1da1128aae7b69b3"
         }
       ],
-      "version": "0.46.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.46.0.tgz"
+      "version": "0.48.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.48.0.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
