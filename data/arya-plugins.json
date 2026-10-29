@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-29T22:34:03.129Z",
+  "updated": "2026-10-29T22:39:59.067Z",
   "count": 4,
   "categories": {
     "arya": {
@@ -124,6 +124,12 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.67.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.67.0.tgz",
+          "sha256": "764d69b9dd75947a163c34e3037e3a8866f4abfb6e35849106823c4cdb95b1fa",
+          "releasedAt": "2026-10-29T22:39:59.066Z"
+        },
+        {
           "version": "0.66.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.66.0.tgz",
           "sha256": "c3c10ee637d40ae7dd24882579c1a6a6b2fe782e55237920fa9669d69bbbeccb",
@@ -144,15 +150,10 @@
           "version": "0.63.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.63.0.tgz",
           "sha256": "bbd9ce6bf3defd994ada369a479c8ded8e3a47049a38cf76ab2cab18814215b6"
-        },
-        {
-          "version": "0.62.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.62.0.tgz",
-          "sha256": "bb0a771691820d41078665c0a2a638eabbff6fe37d13033bdc1dd8df06833c32"
         }
       ],
-      "version": "0.66.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.66.0.tgz"
+      "version": "0.67.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.67.0.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
