@@ -4,6 +4,29 @@ Arya Plugin Market reuses dsh-market's profile management, installation, compati
 
 Arya 插件市场复用 dsh-market 的配置管理、安装、兼容性检查与恢复服务。Arya 目录提供 KonnectSuite 的打包发布版本。源代码仓库可以保持私有，供用户下载的插件包作为公开的 GitHub 发布资源提供。
 
+## Currently published
+
+Three plugins are in the catalog, all from `registry.npmjs.org`, and all verified on AryaCode
+`0.2.2-alpha.2` (build `0.2.2-alpha.2.AryaCode.0.1.0`) on 2026-10-28 — installed into a clean
+packaged profile, activation `live`, no import or activation error, `diagnostics.findings` empty:
+
+| Plugin | Version | What it is |
+| --- | --- | --- |
+| `@aryacode/dsh-engineering` | 0.22.2 | Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install |
+| `@aryacode/dsh-aryacode-polish` | 0.97.1 | One Plugins row, one switch per quality-of-life feature |
+| `@aryacode/dsh-local-llm` | 0.10.3 | AryaStrata and the local NInfer engine |
+
+Twelve `@aryacode/dsh-client-*`, `-github`, `-projects`, `-native-window`, `-clear-light` and
+`-googleremotedesktop` entries were published in one batch on 2026-10-24 and removed from the
+catalog on 2026-10-28: they were never tested against the 0.2.2 host, so they return only after
+each one passes the same check.
+
+The "Host requirement unknown" badge beside all three means the market had no manifest fact for the
+package when it checked (`deriveHostCompatibility` returns `basis: 'unavailable'` only when
+`facts === null`), so it neither confirms nor blocks the install. A published
+`dsh.engines.dsh` range turns that badge into a stated requirement — "DSH …" when readable,
+"Host requirement undeclared" when the manifest simply carries none.
+
 ## Using releases
 
 Selected installer plugins appear in Installed even without a profile dependency. Their shipped package metadata supplies the baseline version; an explicit profile installation takes precedence after the requested restart. Updating an installer-owned Arya plugin selects a verified catalog release without treating the shipped copy as a local development checkout.
