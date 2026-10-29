@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-29T20:36:09.496Z",
-  "count": 3,
+  "updated": "2026-10-29T20:40:35.316Z",
+  "count": 4,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -648,6 +648,28 @@
       ],
       "version": "0.99.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.99.0.tgz"
+    },
+    {
+      "name": "@aryacode/dsh-native-window",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-native-window",
+      "category": "arya",
+      "description": {
+        "en": "Dock Windows applications (Studio 5000, View Designer, MotionWorks IEC, RSLogix, FactoryTalk View Studio) in the right sidebar, beside the chat",
+        "zh": "把 Windows 应用（Studio 5000、View Designer、MotionWorks IEC、RSLogix、FactoryTalk View Studio）停靠在右侧边栏，与对话并排"
+      },
+      "added": "2026-10-29",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.2.8",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz",
+          "sha256": "c2821bbab8ba99781b06b92b2b5eb3c9d656db7b6eff83bbff1bf7a8a62597d2"
+        }
+      ],
+      "version": "0.2.8",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz"
     }
   ]
 }
