@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-30T03:38:50.251Z",
+  "updated": "2026-10-30T04:00:08.772Z",
   "count": 5,
   "categories": {
     "arya": {
@@ -690,6 +690,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "1.0.2",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.2.tgz",
+          "sha256": "9c18b78bbb358c57a98c794eb44dc68d7087deb3e794c93a4554c3d58e15fa0b"
+        },
+        {
           "version": "1.0.1",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.1.tgz",
           "sha256": "7186fe0abe81b8cf3254166663fafaff71dc2a8b3e8feaeefbd338119385d4da"
@@ -700,8 +705,8 @@
           "sha256": "656d66c80d9e403675179e03b9f53cdd47eb606c466b42d969f743e20909a014"
         }
       ],
-      "version": "1.0.1",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.1.tgz"
+      "version": "1.0.2",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.2.tgz"
     }
   ]
 }
