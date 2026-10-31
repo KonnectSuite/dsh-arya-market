@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-31T05:24:23.119Z",
+  "updated": "2026-10-31T06:30:00.000Z",
   "count": 5,
   "categories": {
     "arya": {
@@ -14,13 +14,19 @@
       "url": "https://github.com/KonnectSuite/dsh-local-llm",
       "category": "arya",
       "description": {
-        "en": "AryaStrata Control Center with a built-in benchmark lab for AryaAI.",
-        "zh": "AryaStrata 控制中心，内置 AryaAI 基准测试实验室。"
+        "en": "AryaStrata Control Center with a built-in benchmark lab.",
+        "zh": "AryaStrata 控制中心，内置基准测试实验室。"
       },
       "added": "2026-10-24",
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.13.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz",
+          "sha256": "cce3290e2d3995e68f8ea9b8c32c242c34118d7cb486f6a8ccd8d6d95cffb33c",
+          "releasedAt": "2026-10-31T06:10:26.996Z"
+        },
         {
           "version": "0.12.1",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.1.tgz",
@@ -125,8 +131,8 @@
           "sha256": "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
         }
       ],
-      "version": "0.12.1",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.1.tgz"
+      "version": "0.13.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz"
     },
     {
       "name": "@aryacode/dsh-engineering",
@@ -141,6 +147,12 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.72.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.72.0.tgz",
+          "sha256": "4416e0ecae66cc2285aca83ba0b86976e3f1eaec78efa7b8d38160e153996428",
+          "releasedAt": "2026-10-31T05:28:29.216Z"
+        },
         {
           "version": "0.70.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.70.0.tgz",
@@ -172,8 +184,8 @@
           "sha256": "3bd61d68f935583cbe42bd702459d9b7c86a0838ea01c46b9263d8f9170c00d9"
         }
       ],
-      "version": "0.67.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.67.0.tgz"
+      "version": "0.72.0",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.72.0.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
