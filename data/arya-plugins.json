@@ -1,769 +1,775 @@
 {
-  "updated": "2026-10-31T09:52:01.785Z",
-  "count": 5,
-  "categories": {
-    "arya": {
-      "en": "Arya",
-      "zh": "Arya"
-    }
-  },
-  "plugins": [
-    {
-      "name": "@aryacode/dsh-local-llm",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-local-llm",
-      "category": "arya",
-      "description": {
-        "en": "AryaStrata Control Center with a built-in benchmark lab.",
-        "zh": "AryaStrata 控制中心，内置基准测试实验室。"
-      },
-      "added": "2026-10-24",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.13.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz",
-          "sha256": "cce3290e2d3995e68f8ea9b8c32c242c34118d7cb486f6a8ccd8d6d95cffb33c",
-          "releasedAt": "2026-10-31T06:10:26.996Z"
-        },
-        {
-          "version": "0.12.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.1.tgz",
-          "sha256": "67ba8aef943470d4c580c7fa29658c418cfc7d41cc9b28f1cc9c5e7e95036236",
-          "releasedAt": "2026-10-31T03:26:06Z"
-        },
-        {
-          "version": "0.12.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.0.tgz",
-          "sha256": "d2e447f74a1768a76a7d0740328e0eea4e2a779eba046e9fff2dc3dac1df98bd",
-          "releasedAt": "2026-10-31T03:11:47.496Z"
-        },
-        {
-          "version": "0.11.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.11.0.tgz",
-          "sha256": "7e3d8d54c2af35ea4784d80bc2e4398f300c42536f681ccb630f209e9e1480d6",
-          "releasedAt": "2026-10-31T01:45:52.731Z"
-        },
-        {
-          "version": "0.10.3",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.3/aryacode-dsh-local-llm-0.10.3.tgz",
-          "sha256": "85f2050463511bc51fa77bb60452a6aa637001b0c0ef9f13d12c0d9be8701d73"
-        },
-        {
-          "version": "0.10.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.1/aryacode-dsh-local-llm-0.10.1.tgz",
-          "sha256": "9a602d1d25dc967d75cf66471e7d977f817eef5a1b7c328455a9f31d9c94f68a"
-        },
-        {
-          "version": "0.10.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.0/aryacode-dsh-local-llm-0.10.0.tgz",
-          "sha256": "fbd47f4c26ae93c0c3d682a2888142bc42f0f672b874e5958e11153f0c856401"
-        },
-        {
-          "version": "0.9.4",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.4/aryacode-dsh-local-llm-0.9.4.tgz",
-          "sha256": "82c1f340aa4630f95820ca4cc3b33d0fbd2b677638968a4f19f29fa040ff5710"
-        },
-        {
-          "version": "0.9.3",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.3/aryacode-dsh-local-llm-0.9.3.tgz",
-          "sha256": "c25f309d8755df1c07af30208205dfe9bce121f1d8b69017ecbf74e5ff145cc7"
-        },
-        {
-          "version": "0.9.2",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.2/aryacode-dsh-local-llm-0.9.2.tgz",
-          "sha256": "79e87b9049c6dcd32b191ae638f5f8c9f3d0de49d61bf170687c5e8b574949c3"
-        },
-        {
-          "version": "0.9.1",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.1/aryacode-dsh-local-llm-0.9.1.tgz",
-          "sha256": "d8c437602ed18ae23e47106d9ff2b440b95db251ef106546b61f0ef8ec2c144a"
-        },
-        {
-          "version": "0.9.0",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.0/aryacode-dsh-local-llm-0.9.0.tgz",
-          "sha256": "5bf9e6042a02760b74e0ecc1a10336e5bc1c3c59f679bd787f9cba8f2d3aa4cd"
-        },
-        {
-          "version": "0.8.10",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.10/aryacode-dsh-local-llm-0.8.10.tgz",
-          "sha256": "4fa41d14e0e41cedb5031d5a3c9bdd66fd92c90b367abc317502d18166aadbd8"
-        },
-        {
-          "version": "0.8.9",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.9/aryacode-dsh-local-llm-0.8.9.tgz",
-          "sha256": "0a7e71984ac50c470eae6a32d033bbe94c8567bf364a6e5cafb0958735c0a8f4"
-        },
-        {
-          "version": "0.8.8",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.8/aryacode-dsh-local-llm-0.8.8.tgz",
-          "sha256": "a4c061bf065bcac2135702f890e3f769fa3a8f2b541444dc61f1f2d2a6ae9aa7"
-        },
-        {
-          "version": "0.8.7",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.7/aryacode-dsh-local-llm-0.8.7.tgz",
-          "sha256": "2cae4a151242024cf9323b639d3bd4fe144b55194bf7cb98d981ab3f17ba8e6a"
-        },
-        {
-          "version": "0.8.6",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.6.tgz",
-          "sha256": "4d58072ebe28efc4c13f7cdfa59830d1dfd61b4ea20f86c464a2ffddb884e659"
-        },
-        {
-          "version": "0.8.5",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.5.tgz",
-          "sha256": "1cbe26a40628bfc1d72482257526325a00b2187ae893dd0262bb6ace52d91f84"
-        },
-        {
-          "version": "0.8.4",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.4.tgz",
-          "sha256": "04c6142606f43e20984ce7edbd5482acac38c414f98d561324bf17206170f286"
-        },
-        {
-          "version": "0.8.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.2.tgz",
-          "sha256": "860f868a1e75300cba4a78854868968aebe031c78eb43611659d9db020783dc4"
-        },
-        {
-          "version": "0.8.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.1.tgz",
-          "sha256": "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
-        }
-      ],
-      "version": "0.13.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-engineering",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-engineering",
-      "category": "arya",
-      "description": {
-        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with HMI-to-PLC cross-references, standards checks, and ladder and display previews drawn as diagrams.",
-        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含 HMI 与 PLC 交叉引用、规范检查以及梯形图与画面预览。"
-      },
-      "added": "2026-10-25",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.72.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.72.0.tgz",
-          "sha256": "4416e0ecae66cc2285aca83ba0b86976e3f1eaec78efa7b8d38160e153996428",
-          "releasedAt": "2026-10-31T05:28:29.216Z"
-        },
-        {
-          "version": "0.70.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.70.0.tgz",
-          "sha256": "b8f1a0267b11d45f1c6ef9a634e59273c172d145dd0513838b5ecc6e54487d46",
-          "releasedAt": "2026-10-30T01:52:09.688Z",
-          "published": "2026-10-30"
-        },
-        {
-          "version": "0.67.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.67.0.tgz",
-          "sha256": "764d69b9dd75947a163c34e3037e3a8866f4abfb6e35849106823c4cdb95b1fa",
-          "releasedAt": "2026-10-29T22:39:59.066Z"
-        },
-        {
-          "version": "0.66.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.66.0.tgz",
-          "sha256": "c3c10ee637d40ae7dd24882579c1a6a6b2fe782e55237920fa9669d69bbbeccb",
-          "releasedAt": "2026-10-29T22:34:03.127Z"
-        },
-        {
-          "version": "0.65.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.65.0.tgz",
-          "sha256": "73e65c8b4da4bb4ed03df83c445bc4302029ec6be5d8c25f9c8288cc0d11fdea",
-          "releasedAt": "2026-10-29T22:19:34.195Z"
-        },
-        {
-          "version": "0.64.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.64.0.tgz",
-          "sha256": "3bd61d68f935583cbe42bd702459d9b7c86a0838ea01c46b9263d8f9170c00d9"
-        }
-      ],
-      "version": "0.72.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.72.0.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-aryacode-polish",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-aryacode-polish",
-      "category": "arya",
-      "description": {
-        "en": "AryaCode Polish: one install for the small things that make AryaCode feel finished. One Plugins row, one switch per quality-of-life feature.",
-        "zh": "AryaCode 润色：一次安装，补齐让 AryaCode 更顺手的小细节。一个插件行，每个体验功能一个开关。"
-      },
-      "added": "2026-10-27",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.103.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.103.3.tgz",
-          "sha256": "27df6bd76427f30e42b1bcccd55fea4325a82f33fdc68caada0e5bf640bcb835"
-        },
-        {
-          "version": "0.100.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.100.1.tgz",
-          "sha256": "b90ce0a8e835fb3234a46ec7c74e8e736935c9e688ad9dc34574cedacc233631",
-          "releasedAt": "2026-10-31T05:24:23.119Z"
-        },
-        {
-          "version": "0.100.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.100.0.tgz",
-          "sha256": "61922f422b37e8affbc850e2fb0451a8d29ee02c5ca5ccc44cb52f17efcd79fb",
-          "releasedAt": "2026-10-31T05:05:00.457Z"
-        },
-        {
-          "version": "0.99.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.99.0.tgz",
-          "sha256": "329fb714f34e2565b124b9ea5af95859d85acf5f9e3e69e51a81dd9b55236534"
-        },
-        {
-          "version": "0.98.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.98.0.tgz",
-          "sha256": "39c7f9ea0c78b85097f81fb7014ae5cecbc839c1336e5e72870fa73c3a9ee277"
-        },
-        {
-          "version": "0.97.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.97.1.tgz",
-          "sha256": "f99f44c8270d4f7f50264daecd9598e11b754931b9529cc9b53e9db3c0e9e1e8"
-        },
-        {
-          "version": "0.96.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.96.0.tgz",
-          "sha256": "47ad9a331298a732e125f702643112871257e0d359587fdea4b994275bbad740"
-        },
-        {
-          "version": "0.95.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.95.2.tgz",
-          "sha256": "d0cd14ffa2961ec1fbdd71a2e42758432f0fd1eaef5f9f3c05017a65919f78c8"
-        },
-        {
-          "version": "0.94.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.94.0.tgz",
-          "sha256": "e26f20b599e72ccdf8d09147251cc05330619967409f75c6344e0fe6dde6be17"
-        },
-        {
-          "version": "0.93.4",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.93.4.tgz",
-          "sha256": "51f3813ec0f00c2988e32aba8c6ef19938f3ad89582b11626b3a8f198f8e6802"
-        },
-        {
-          "version": "0.92.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.92.1.tgz",
-          "sha256": "616dc3d910f28cc0366cc2742abb5b55f9291b05efef2aab8e92344ba6519724"
-        },
-        {
-          "version": "0.91.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.91.0.tgz",
-          "sha256": "40d0a62efc9055084e002e8dd43c3f07a54cd6920eda795c0c35f72341c1bd78"
-        },
-        {
-          "version": "0.90.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.90.2.tgz",
-          "sha256": "6c3ca1363545b111d8c3fbc7b74b1f0070e5dca7c7d2582cdbfae1f799d415f1"
-        },
-        {
-          "version": "0.88.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.88.0.tgz",
-          "sha256": "dbd671f0f5d51b0f7b0ce469c1500264fe8fb3746ec40e4caaab44dbebff18bc"
-        },
-        {
-          "version": "0.87.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.87.0.tgz",
-          "sha256": "7634a50d12029d113a25da859d963d1e580678d40aceae48fe94d762860a0a91"
-        },
-        {
-          "version": "0.86.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.86.0.tgz",
-          "sha256": "c5b7dbf2af55f7f757804be4377d168c5b5389e4c653f5977fd632e73dcde65e"
-        },
-        {
-          "version": "0.85.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.85.0.tgz",
-          "sha256": "17e2971532d63d11b236974241a7ff9ac325b99ec7a2994031893329f9cb9199"
-        },
-        {
-          "version": "0.84.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.84.0.tgz",
-          "sha256": "f33bff8722510108ca210d6b05cd20deb60eff1a2b62c64998b7adb9fa3ddf38"
-        },
-        {
-          "version": "0.83.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.83.0.tgz",
-          "sha256": "7561e1b8ad5a9c2d3073a7ef7150c6c4a060d05b434e7e5adedb0acfb6ad2452"
-        },
-        {
-          "version": "0.82.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.82.1.tgz",
-          "sha256": "20704f3d084f1d12a378bddf39c219b73a771ddfe96d464a3935b5ffc079a866"
-        },
-        {
-          "version": "0.81.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.81.0.tgz",
-          "sha256": "2402d484be2248016c77b85d15080bceca32284532fa4110f137be7bf4a9586b"
-        },
-        {
-          "version": "0.80.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.80.0.tgz",
-          "sha256": "52b9ddcafbb29e0e6b142bdad5d135b05bee3928c99f14c5d7e9f9b8245c9680"
-        },
-        {
-          "version": "0.79.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.79.0.tgz",
-          "sha256": "2d5707f823392fb604a5ae38ee6d01fd965f66355b8cae58500c50dabc949f44"
-        },
-        {
-          "version": "0.78.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.78.0.tgz",
-          "sha256": "27bb4ea93091d6962312f81d561c8f39b26ac5c6d855df2e458177ffa3ae17a2"
-        },
-        {
-          "version": "0.77.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.77.0.tgz",
-          "sha256": "344b9098e61a8f2d8710bd4b22ce44e11f2cd69ae3cbb4b3d72f1d3d18730693"
-        },
-        {
-          "version": "0.76.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.76.1.tgz",
-          "sha256": "850e18bbc783d1e6e02dcb0bee3edfa3bcb0ac81e0bfc00a0392d8a3510798b3"
-        },
-        {
-          "version": "0.75.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.75.0.tgz",
-          "sha256": "96eb2a2bde6f5b99c36c69bcb07b55bde706c1767dde2bd89877abd4f0dfb506"
-        },
-        {
-          "version": "0.74.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.74.0.tgz",
-          "sha256": "b6fb21d9e055db01ee369a0a2e347c3c0210d76e6983c1eee1248fbb4d77d73e"
-        },
-        {
-          "version": "0.71.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.71.0.tgz",
-          "sha256": "57b009d0c712f83a060a6c5df2176d97cad12b4f99524c6606f333995e36e27c"
-        },
-        {
-          "version": "0.68.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.68.1.tgz",
-          "sha256": "2c7cfaf1dc62284a34dd6d18756b26f69e2ae1364c07e8366c3556cab251143f"
-        },
-        {
-          "version": "0.67.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.67.0.tgz",
-          "sha256": "46f5dd5a9b2cd4f551f858d92da58360c5554a4a9a5b347e11c1d1f026ebb9ec"
-        },
-        {
-          "version": "0.66.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.66.0.tgz",
-          "sha256": "713b548b847e20e6db850c90b7604946516b4a6bbdcb0da967a293b07f86c38a"
-        },
-        {
-          "version": "0.65.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.65.0.tgz",
-          "sha256": "828a2af973c882eeadd6acddff39dfa230ca5bea6379869aa04cc7b6de6edc44"
-        },
-        {
-          "version": "0.64.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.64.1.tgz",
-          "sha256": "4583b838c6362e1c22b9b5a46bbde4b8f4b2713c29258ab8a96e5e7eb2d52cb3"
-        },
-        {
-          "version": "0.63.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.63.1.tgz",
-          "sha256": "d15f93108a623a650d70759fbac55ee782cbea4b39fb6d49df07d9bb077bee5e"
-        },
-        {
-          "version": "0.62.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.62.0.tgz",
-          "sha256": "61dcdfa238f6510a5c2932f080f424de9a7ba425d56b470d39985adb9da2f327"
-        },
-        {
-          "version": "0.61.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.61.0.tgz",
-          "sha256": "89095db50f8e1f42ae04a354847d7fc4c0b387deb70b41207cc6d1c0406ee1b1"
-        },
-        {
-          "version": "0.60.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.60.0.tgz",
-          "sha256": "87b6eb2d34d0ebc59da7c71b4ac8f0c5e7d52903f03855c3777c524d031499f1"
-        },
-        {
-          "version": "0.59.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.59.0.tgz",
-          "sha256": "cf83f90cfa3084209681494251f7c168cb217d931f6ecd3aa983da178978dc80"
-        },
-        {
-          "version": "0.58.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.58.0.tgz",
-          "sha256": "0d04a71fe913a66ae1d2d331ab8f22ec930366b0e9ea79efeb7c5f85c4afa2eb"
-        },
-        {
-          "version": "0.57.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.57.0.tgz",
-          "sha256": "b161c14739309febf0afce029e20ad172f8bd9fe49acb17261cd56ffa7fb5864"
-        },
-        {
-          "version": "0.56.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.56.0.tgz",
-          "sha256": "a1efb6739309a81ada7c6190b43fbcb22b84d4ac2584138dc1a341c42fe6bfc9"
-        },
-        {
-          "version": "0.55.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.55.0.tgz",
-          "sha256": "7cfdc940091326694f04ad626b4f46913d42bd521831e905a7357fe2122f828d"
-        },
-        {
-          "version": "0.54.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.54.0.tgz",
-          "sha256": "9b9530a7d6d64ba6bde0a0ca3f048b6e481a91b21f216dd60ea3059c6c586862"
-        },
-        {
-          "version": "0.53.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.53.0.tgz",
-          "sha256": "7dc05d9b900a85c7c0e1de78d565b0b93ca58480c37d5dd79b35ddce3a38cfcb"
-        },
-        {
-          "version": "0.52.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.52.0.tgz",
-          "sha256": "e47313b741132463c7e91758f4128f8cf3e7d53413c65dab85bebdd4987450ba"
-        },
-        {
-          "version": "0.51.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.51.0.tgz",
-          "sha256": "3a922ea09535a158e862c0d4fcd8e923c47ef1d0c99fe5b9a055d388f23e50e9"
-        },
-        {
-          "version": "0.50.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.50.0.tgz",
-          "sha256": "0d0ada6e60e628f792f1f38c6d640268ec0c976cb90e19bcf77c3c6d0a1093cb"
-        },
-        {
-          "version": "0.49.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.49.0.tgz",
-          "sha256": "42b3da941143dda1e2f3813918e99ea1371df02be131d0bbdadbcc8f8205e097"
-        },
-        {
-          "version": "0.48.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.48.0.tgz",
-          "sha256": "5cd203d17e184c00894532cd3e568477b0e5a9751e15349725e96931a47922c9"
-        },
-        {
-          "version": "0.47.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.47.0.tgz",
-          "sha256": "9b1a44ce1695a92eeadab84b8ec5e20ee857972b61a95814884a98817e7e985a"
-        },
-        {
-          "version": "0.46.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.46.0.tgz",
-          "sha256": "c779f24cba8e9860f924f63104c187e1a50830c68e0dda39b63749461ccd80e0"
-        },
-        {
-          "version": "0.45.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.45.0.tgz",
-          "sha256": "47cc094221077f17dfeb88839027666346e22ef1c51b011014bd2683f17a43e5"
-        },
-        {
-          "version": "0.44.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.44.0.tgz",
-          "sha256": "7b4bda42183de07e79fa24b5e432e3072c82d5f676bb987832136c37b4057ae2"
-        },
-        {
-          "version": "0.43.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.43.0.tgz",
-          "sha256": "a8fed71f91f2c9e389de8beb6ef007a09fd8baad967143637029d25a5b8999fb"
-        },
-        {
-          "version": "0.40.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.40.0.tgz",
-          "sha256": "4fc09d3697742ba438203bc0ea9683bfa5b408e36ae69863f10a4ae72acdafb5"
-        },
-        {
-          "version": "0.39.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.39.0.tgz",
-          "sha256": "809dd0f9d54e777c3492ac57ad127049cedef7fe4808281efbbb554e9520fe2d"
-        },
-        {
-          "version": "0.38.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.38.0.tgz",
-          "sha256": "0b1624c0ce466e0a8ec70d59595bf724bce58ad5af8640ea76718d70b8866dbb"
-        },
-        {
-          "version": "0.37.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.37.0.tgz",
-          "sha256": "7f8dd4a5b675ffea79169fdbfc7f56c72ff2df21c73730d86ec036117a010015"
-        },
-        {
-          "version": "0.36.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.36.0.tgz",
-          "sha256": "fdd4bae6020452b0afeaed02a401bea8faf26835212deee845c86c7dc68340ee"
-        },
-        {
-          "version": "0.35.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.35.0.tgz",
-          "sha256": "b2421c3b0eb99dbf528ffd8a0c9ccafce1114f3ab92928d10118b50d1c03403d"
-        },
-        {
-          "version": "0.34.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.34.0.tgz",
-          "sha256": "552beb6508f9480a339008cc70b560740662143563845a35f184a8aa68489455"
-        },
-        {
-          "version": "0.33.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.33.0.tgz",
-          "sha256": "50ea74486816915570541251919c167b96708bde0e62c04198974d8b3eee95ac"
-        },
-        {
-          "version": "0.32.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.32.0.tgz",
-          "sha256": "a1d050f3d751e6627612e81a2434159dea843db72f75960674491245e20805a1"
-        },
-        {
-          "version": "0.31.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.31.0.tgz",
-          "sha256": "f1041221855784e09c247a58c37ce00e4981cc6426339a69399a3d8794b6f3c1"
-        },
-        {
-          "version": "0.30.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.30.0.tgz",
-          "sha256": "43b8b34efd0c048d4d57473a0d449d33cfec2c99ce1e6c606c62ff0a17388e17"
-        },
-        {
-          "version": "0.29.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.29.0.tgz",
-          "sha256": "7d95297bfa30d92f612956854c02b7075d6aaa4de6c9fbc19ab5c8446fc1610d"
-        },
-        {
-          "version": "0.28.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.28.0.tgz",
-          "sha256": "1bd461f05373cd2d116fc95f1b1215f0a48b858e5e8b71caacde0b66827efae4"
-        },
-        {
-          "version": "0.27.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.27.1.tgz",
-          "sha256": "1ceda42e08bd10f0d20a7a5244c43485b2ae1ac804f9a90b8144b9513665b6a5"
-        },
-        {
-          "version": "0.26.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.26.0.tgz",
-          "sha256": "996347ce58a722dd9fd0c1bf8fcc1f5c5e5fecdaf6959a3779a9436359147a0e"
-        },
-        {
-          "version": "0.25.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.25.0.tgz",
-          "sha256": "c782437a09fba40edec766f9f93373febf9b7b22f6f692322f2a4a081ba64eb6"
-        },
-        {
-          "version": "0.24.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.24.0.tgz",
-          "sha256": "4ef27b44a43726262504447e37782f97d73e0bbc351677e39f7c1e20d6ef1859"
-        },
-        {
-          "version": "0.23.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.23.1.tgz",
-          "sha256": "2477e8462800cb8070ef25a8a3abe2b92e9a0beee339bf76fa1416f13d89501b"
-        },
-        {
-          "version": "0.22.4",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.22.4.tgz",
-          "sha256": "ee847cd97ea0910f1fdd0ab13fca788bb5c1f4365212f1fb5d0ae3ec8f5253e2"
-        },
-        {
-          "version": "0.21.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.21.2.tgz",
-          "sha256": "dfc3c5a328bd267847050cd7cbb886922fff0093a0ba975984c5272946219954"
-        },
-        {
-          "version": "0.20.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.20.0.tgz",
-          "sha256": "fee3c879af5f513990d31984f99157506954c9ef1b12d2d2144729b92edbfa4a"
-        },
-        {
-          "version": "0.19.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.19.0.tgz",
-          "sha256": "a025b12565835df0dd33aa8693378bd39a6a61058dc7d21923417e5148c05f0e"
-        },
-        {
-          "version": "0.18.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.18.0.tgz",
-          "sha256": "8e7a94ffb33a075aecd76a368bcecbab044ce9b836976ce4fdfee6a4f4a846a3"
-        },
-        {
-          "version": "0.17.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.17.0.tgz",
-          "sha256": "813d3fa0367bb59f682d1122aa17759ac1eb0245aca5f335886bd05dff0954f0"
-        },
-        {
-          "version": "0.16.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.16.0.tgz",
-          "sha256": "8b888b8d327eabf9df990232073618ed92a9d829ea362bce31ad2b049a7f9346"
-        },
-        {
-          "version": "0.15.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.15.2.tgz",
-          "sha256": "ccfea92dab2290ae98c4e568776c20117680b383c04732fb40a5a6a524410904"
-        },
-        {
-          "version": "0.14.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.14.0.tgz",
-          "sha256": "840e9464a817653bf9a22713a586a6b8e137fdfbaf25a3a98305b308b421f425"
-        },
-        {
-          "version": "0.13.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.13.1.tgz",
-          "sha256": "435e26431afc702f5bb73721f5819d752d877371adcff6ffcd4448579b52da92"
-        },
-        {
-          "version": "0.12.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.12.1.tgz",
-          "sha256": "5fff4c6b1396d72ad1820aea8b49af634567728f7227f2776fa23d60bf43259b"
-        },
-        {
-          "version": "0.11.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.11.2.tgz",
-          "sha256": "5033875fe8fce956b952710c202e85b6d9b1b329fe1c07f96c7a5e3d9aced8bb"
-        },
-        {
-          "version": "0.10.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.10.0.tgz",
-          "sha256": "6df22b4ee9433417cbf3223be339a3caad9d59e7feebdbffd75ea5f7dcb33d0c"
-        },
-        {
-          "version": "0.9.6",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.9.6.tgz",
-          "sha256": "83ab09b875c1d242a2cb7588acba495bc3c3cb655b6ca88ab72fd815886310b3"
-        },
-        {
-          "version": "0.8.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.8.2.tgz",
-          "sha256": "8f08adec12be620974dd6b47e2753994cd37281039849bffcb6395edf27d11ff"
-        },
-        {
-          "version": "0.7.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.7.3.tgz",
-          "sha256": "9b96fde9cd038f8cc6b23958e937550a34059acc2af6ff27141aadbf0a602551"
-        },
-        {
-          "version": "0.6.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.6.0.tgz",
-          "sha256": "c4086b45cdb5eee5dfe8c43704db47ecca83f93e6086aa1d4bf188e98a30179e"
-        },
-        {
-          "version": "0.5.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.5.0.tgz",
-          "sha256": "6c56e38083462c4ee216afebffff81092bed11be7c17d0aebdcca7545931c77d"
-        },
-        {
-          "version": "0.4.4",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.4.4.tgz",
-          "sha256": "c141d473c9be8e1569caa02e2cf52750c32fc94c8518496fc67fa79ba577edd1"
-        },
-        {
-          "version": "0.3.9",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.9.tgz",
-          "sha256": "87a41a4fa71eb14611c5a07e2b064acbf7668a5a7c35635fa163a1160fef8e6e"
-        },
-        {
-          "version": "0.3.7",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.7.tgz",
-          "sha256": "c3269e32d5f2057d6e1cb8b30d105d523f4f7dd6030853a7b7c34f5c4c3fbb37"
-        },
-        {
-          "version": "0.3.6",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.6.tgz",
-          "sha256": "7649e1b042a6709b5e6059fee78a286f9a6da8dfa09a3ccaf42f3d1391499dca"
-        },
-        {
-          "version": "0.3.5",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.5.tgz",
-          "sha256": "3772e5c7a5050ef82da466eacd0dedec6252510ee65275016cb31101faa1b917"
-        },
-        {
-          "version": "0.3.4",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.4.tgz",
-          "sha256": "3e3d56f0f25c5a092bdec5fd742a53a801f5e4583f2ba7e3df988eef2125e518"
-        },
-        {
-          "version": "0.3.3",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.3.3/aryacode-dsh-aryacode-polish-0.3.3.tgz",
-          "sha256": "2e176598e3ccdf50378e819ea27ccc74b22d6a8d9cb99740bb3f44d779535db1"
-        },
-        {
-          "version": "0.2.4",
-          "tarball": "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz",
-          "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
-        }
-      ],
-      "version": "0.103.3",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.103.3.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-native-window",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-native-window",
-      "category": "arya",
-      "description": {
-        "en": "Dock Windows applications (Studio 5000, View Designer, MotionWorks IEC, RSLogix, FactoryTalk View Studio) in the right sidebar, beside the chat",
-        "zh": "把 Windows 应用（Studio 5000、View Designer、MotionWorks IEC、RSLogix、FactoryTalk View Studio）停靠在右侧边栏，与对话并排"
-      },
-      "added": "2026-10-29",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "0.2.8",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz",
-          "sha256": "c2821bbab8ba99781b06b92b2b5eb3c9d656db7b6eff83bbff1bf7a8a62597d2"
-        }
-      ],
-      "version": "0.2.8",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz"
-    },
-    {
-      "name": "@aryacode/dsh-arya-maildesk",
-      "owner": "KonnectSuite",
-      "url": "https://github.com/KonnectSuite/dsh-arya-maildesk",
-      "category": "arya",
-      "description": {
-        "en": "A real mail panel for the Outlook you are already signed into: folders, multi-select, a safe HTML reading pane, replies that stay drafts in the harness, a draft card in the chat and a draft tab beside it. No Azure app registration, no admin consent.",
-        "zh": "为已登录的 Outlook 装上真正的邮件面板：文件夹、多选列表、安全的 HTML 阅读、留在 harness 里的回复草稿、聊天中的草稿卡片，以及并排的草稿侧栏。无需 Azure 应用注册，无需管理员授权。"
-      },
-      "added": "2026-10-29",
-      "install": "",
-      "arya": true,
-      "releases": [
-        {
-          "version": "1.1.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.1.0.tgz",
-          "sha256": "89c6215e4b7284d210836271a44e1d879aafc67d78e1f145c54d4279bda76cdb"
-        },
-        {
-          "version": "1.0.3",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.3.tgz",
-          "sha256": "1b1be6b2667410ce7bc3bf6440b50f9233dc18c87ff7b3562a466d01736b2f5d"
-        },
-        {
-          "version": "1.0.2",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.2.tgz",
-          "sha256": "9c18b78bbb358c57a98c794eb44dc68d7087deb3e794c93a4554c3d58e15fa0b"
-        },
-        {
-          "version": "1.0.1",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.1.tgz",
-          "sha256": "7186fe0abe81b8cf3254166663fafaff71dc2a8b3e8feaeefbd338119385d4da"
-        },
-        {
-          "version": "1.0.0",
-          "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.0.tgz",
-          "sha256": "656d66c80d9e403675179e03b9f53cdd47eb606c466b42d969f743e20909a014"
-        }
-      ],
-      "version": "1.1.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.1.0.tgz"
-    }
-  ]
+    "updated":  "2026-10-31T09:56:16.991Z",
+    "count":  5,
+    "categories":  {
+                       "arya":  {
+                                    "en":  "Arya",
+                                    "zh":  "Arya"
+                                }
+                   },
+    "plugins":  [
+                    {
+                        "name":  "@aryacode/dsh-local-llm",
+                        "owner":  "KonnectSuite",
+                        "url":  "https://github.com/KonnectSuite/dsh-local-llm",
+                        "category":  "arya",
+                        "description":  {
+                                            "en":  "AryaStrata Control Center with a built-in benchmark lab.",
+                                            "zh":  "AryaStrata 控制中心，内置基准测试实验室。"
+                                        },
+                        "added":  "2026-10-24",
+                        "install":  "",
+                        "arya":  true,
+                        "releases":  [
+                                         {
+                                             "version":  "0.13.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz",
+                                             "sha256":  "cce3290e2d3995e68f8ea9b8c32c242c34118d7cb486f6a8ccd8d6d95cffb33c",
+                                             "releasedAt":  "2026-10-31T06:10:26.996Z"
+                                         },
+                                         {
+                                             "version":  "0.12.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.1.tgz",
+                                             "sha256":  "67ba8aef943470d4c580c7fa29658c418cfc7d41cc9b28f1cc9c5e7e95036236",
+                                             "releasedAt":  "2026-10-31T03:26:06Z"
+                                         },
+                                         {
+                                             "version":  "0.12.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.12.0.tgz",
+                                             "sha256":  "d2e447f74a1768a76a7d0740328e0eea4e2a779eba046e9fff2dc3dac1df98bd",
+                                             "releasedAt":  "2026-10-31T03:11:47.496Z"
+                                         },
+                                         {
+                                             "version":  "0.11.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.11.0.tgz",
+                                             "sha256":  "7e3d8d54c2af35ea4784d80bc2e4398f300c42536f681ccb630f209e9e1480d6",
+                                             "releasedAt":  "2026-10-31T01:45:52.731Z"
+                                         },
+                                         {
+                                             "version":  "0.10.3",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.3/aryacode-dsh-local-llm-0.10.3.tgz",
+                                             "sha256":  "85f2050463511bc51fa77bb60452a6aa637001b0c0ef9f13d12c0d9be8701d73"
+                                         },
+                                         {
+                                             "version":  "0.10.1",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.1/aryacode-dsh-local-llm-0.10.1.tgz",
+                                             "sha256":  "9a602d1d25dc967d75cf66471e7d977f817eef5a1b7c328455a9f31d9c94f68a"
+                                         },
+                                         {
+                                             "version":  "0.10.0",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.10.0/aryacode-dsh-local-llm-0.10.0.tgz",
+                                             "sha256":  "fbd47f4c26ae93c0c3d682a2888142bc42f0f672b874e5958e11153f0c856401"
+                                         },
+                                         {
+                                             "version":  "0.9.4",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.4/aryacode-dsh-local-llm-0.9.4.tgz",
+                                             "sha256":  "82c1f340aa4630f95820ca4cc3b33d0fbd2b677638968a4f19f29fa040ff5710"
+                                         },
+                                         {
+                                             "version":  "0.9.3",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.3/aryacode-dsh-local-llm-0.9.3.tgz",
+                                             "sha256":  "c25f309d8755df1c07af30208205dfe9bce121f1d8b69017ecbf74e5ff145cc7"
+                                         },
+                                         {
+                                             "version":  "0.9.2",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.2/aryacode-dsh-local-llm-0.9.2.tgz",
+                                             "sha256":  "79e87b9049c6dcd32b191ae638f5f8c9f3d0de49d61bf170687c5e8b574949c3"
+                                         },
+                                         {
+                                             "version":  "0.9.1",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.1/aryacode-dsh-local-llm-0.9.1.tgz",
+                                             "sha256":  "d8c437602ed18ae23e47106d9ff2b440b95db251ef106546b61f0ef8ec2c144a"
+                                         },
+                                         {
+                                             "version":  "0.9.0",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.9.0/aryacode-dsh-local-llm-0.9.0.tgz",
+                                             "sha256":  "5bf9e6042a02760b74e0ecc1a10336e5bc1c3c59f679bd787f9cba8f2d3aa4cd"
+                                         },
+                                         {
+                                             "version":  "0.8.10",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.10/aryacode-dsh-local-llm-0.8.10.tgz",
+                                             "sha256":  "4fa41d14e0e41cedb5031d5a3c9bdd66fd92c90b367abc317502d18166aadbd8"
+                                         },
+                                         {
+                                             "version":  "0.8.9",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.9/aryacode-dsh-local-llm-0.8.9.tgz",
+                                             "sha256":  "0a7e71984ac50c470eae6a32d033bbe94c8567bf364a6e5cafb0958735c0a8f4"
+                                         },
+                                         {
+                                             "version":  "0.8.8",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.8/aryacode-dsh-local-llm-0.8.8.tgz",
+                                             "sha256":  "a4c061bf065bcac2135702f890e3f769fa3a8f2b541444dc61f1f2d2a6ae9aa7"
+                                         },
+                                         {
+                                             "version":  "0.8.7",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-local-llm-v0.8.7/aryacode-dsh-local-llm-0.8.7.tgz",
+                                             "sha256":  "2cae4a151242024cf9323b639d3bd4fe144b55194bf7cb98d981ab3f17ba8e6a"
+                                         },
+                                         {
+                                             "version":  "0.8.6",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.6.tgz",
+                                             "sha256":  "4d58072ebe28efc4c13f7cdfa59830d1dfd61b4ea20f86c464a2ffddb884e659"
+                                         },
+                                         {
+                                             "version":  "0.8.5",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.5.tgz",
+                                             "sha256":  "1cbe26a40628bfc1d72482257526325a00b2187ae893dd0262bb6ace52d91f84"
+                                         },
+                                         {
+                                             "version":  "0.8.4",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.4.tgz",
+                                             "sha256":  "04c6142606f43e20984ce7edbd5482acac38c414f98d561324bf17206170f286"
+                                         },
+                                         {
+                                             "version":  "0.8.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.2.tgz",
+                                             "sha256":  "860f868a1e75300cba4a78854868968aebe031c78eb43611659d9db020783dc4"
+                                         },
+                                         {
+                                             "version":  "0.8.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.8.1.tgz",
+                                             "sha256":  "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
+                                         }
+                                     ],
+                        "version":  "0.13.0",
+                        "tarball":  "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.13.0.tgz"
+                    },
+                    {
+                        "name":  "@aryacode/dsh-engineering",
+                        "owner":  "KonnectSuite",
+                        "url":  "https://github.com/KonnectSuite/dsh-engineering",
+                        "category":  "arya",
+                        "description":  {
+                                            "en":  "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with HMI-to-PLC cross-references, standards checks, and ladder and display previews drawn as diagrams.",
+                                            "zh":  "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含 HMI 与 PLC 交叉引用、规范检查以及梯形图与画面预览。"
+                                        },
+                        "added":  "2026-10-25",
+                        "install":  "",
+                        "arya":  true,
+                        "releases":  [
+                                         {
+                                             "version":  "0.73.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.73.0.tgz",
+                                             "sha256":  "12ab7e63600c189acbff81502093a863a0239eb3b565ca2cd97f0db4b123debc",
+                                             "releasedAt":  "2026-10-31T09:36:27.662Z"
+                                         },
+                                         {
+                                             "version":  "0.72.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.72.0.tgz",
+                                             "sha256":  "4416e0ecae66cc2285aca83ba0b86976e3f1eaec78efa7b8d38160e153996428",
+                                             "releasedAt":  "2026-10-31T05:28:29.216Z"
+                                         },
+                                         {
+                                             "version":  "0.70.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.70.0.tgz",
+                                             "sha256":  "b8f1a0267b11d45f1c6ef9a634e59273c172d145dd0513838b5ecc6e54487d46",
+                                             "releasedAt":  "2026-10-30T01:52:09.688Z",
+                                             "published":  "2026-10-30"
+                                         },
+                                         {
+                                             "version":  "0.67.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.67.0.tgz",
+                                             "sha256":  "764d69b9dd75947a163c34e3037e3a8866f4abfb6e35849106823c4cdb95b1fa",
+                                             "releasedAt":  "2026-10-29T22:39:59.066Z"
+                                         },
+                                         {
+                                             "version":  "0.66.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.66.0.tgz",
+                                             "sha256":  "c3c10ee637d40ae7dd24882579c1a6a6b2fe782e55237920fa9669d69bbbeccb",
+                                             "releasedAt":  "2026-10-29T22:34:03.127Z"
+                                         },
+                                         {
+                                             "version":  "0.65.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.65.0.tgz",
+                                             "sha256":  "73e65c8b4da4bb4ed03df83c445bc4302029ec6be5d8c25f9c8288cc0d11fdea",
+                                             "releasedAt":  "2026-10-29T22:19:34.195Z"
+                                         },
+                                         {
+                                             "version":  "0.64.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.64.0.tgz",
+                                             "sha256":  "3bd61d68f935583cbe42bd702459d9b7c86a0838ea01c46b9263d8f9170c00d9"
+                                         }
+                                     ],
+                        "version":  "0.73.0",
+                        "tarball":  "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.73.0.tgz"
+                    },
+                    {
+                        "name":  "@aryacode/dsh-aryacode-polish",
+                        "owner":  "KonnectSuite",
+                        "url":  "https://github.com/KonnectSuite/dsh-aryacode-polish",
+                        "category":  "arya",
+                        "description":  {
+                                            "en":  "AryaCode Polish: one install for the small things that make AryaCode feel finished. One Plugins row, one switch per quality-of-life feature.",
+                                            "zh":  "AryaCode 润色：一次安装，补齐让 AryaCode 更顺手的小细节。一个插件行，每个体验功能一个开关。"
+                                        },
+                        "added":  "2026-10-27",
+                        "install":  "",
+                        "arya":  true,
+                        "releases":  [
+                                         {
+                                             "version":  "0.103.3",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.103.3.tgz",
+                                             "sha256":  "27df6bd76427f30e42b1bcccd55fea4325a82f33fdc68caada0e5bf640bcb835"
+                                         },
+                                         {
+                                             "version":  "0.100.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.100.1.tgz",
+                                             "sha256":  "b90ce0a8e835fb3234a46ec7c74e8e736935c9e688ad9dc34574cedacc233631",
+                                             "releasedAt":  "2026-10-31T05:24:23.119Z"
+                                         },
+                                         {
+                                             "version":  "0.100.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.100.0.tgz",
+                                             "sha256":  "61922f422b37e8affbc850e2fb0451a8d29ee02c5ca5ccc44cb52f17efcd79fb",
+                                             "releasedAt":  "2026-10-31T05:05:00.457Z"
+                                         },
+                                         {
+                                             "version":  "0.99.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.99.0.tgz",
+                                             "sha256":  "329fb714f34e2565b124b9ea5af95859d85acf5f9e3e69e51a81dd9b55236534"
+                                         },
+                                         {
+                                             "version":  "0.98.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.98.0.tgz",
+                                             "sha256":  "39c7f9ea0c78b85097f81fb7014ae5cecbc839c1336e5e72870fa73c3a9ee277"
+                                         },
+                                         {
+                                             "version":  "0.97.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.97.1.tgz",
+                                             "sha256":  "f99f44c8270d4f7f50264daecd9598e11b754931b9529cc9b53e9db3c0e9e1e8"
+                                         },
+                                         {
+                                             "version":  "0.96.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.96.0.tgz",
+                                             "sha256":  "47ad9a331298a732e125f702643112871257e0d359587fdea4b994275bbad740"
+                                         },
+                                         {
+                                             "version":  "0.95.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.95.2.tgz",
+                                             "sha256":  "d0cd14ffa2961ec1fbdd71a2e42758432f0fd1eaef5f9f3c05017a65919f78c8"
+                                         },
+                                         {
+                                             "version":  "0.94.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.94.0.tgz",
+                                             "sha256":  "e26f20b599e72ccdf8d09147251cc05330619967409f75c6344e0fe6dde6be17"
+                                         },
+                                         {
+                                             "version":  "0.93.4",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.93.4.tgz",
+                                             "sha256":  "51f3813ec0f00c2988e32aba8c6ef19938f3ad89582b11626b3a8f198f8e6802"
+                                         },
+                                         {
+                                             "version":  "0.92.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.92.1.tgz",
+                                             "sha256":  "616dc3d910f28cc0366cc2742abb5b55f9291b05efef2aab8e92344ba6519724"
+                                         },
+                                         {
+                                             "version":  "0.91.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.91.0.tgz",
+                                             "sha256":  "40d0a62efc9055084e002e8dd43c3f07a54cd6920eda795c0c35f72341c1bd78"
+                                         },
+                                         {
+                                             "version":  "0.90.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.90.2.tgz",
+                                             "sha256":  "6c3ca1363545b111d8c3fbc7b74b1f0070e5dca7c7d2582cdbfae1f799d415f1"
+                                         },
+                                         {
+                                             "version":  "0.88.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.88.0.tgz",
+                                             "sha256":  "dbd671f0f5d51b0f7b0ce469c1500264fe8fb3746ec40e4caaab44dbebff18bc"
+                                         },
+                                         {
+                                             "version":  "0.87.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.87.0.tgz",
+                                             "sha256":  "7634a50d12029d113a25da859d963d1e580678d40aceae48fe94d762860a0a91"
+                                         },
+                                         {
+                                             "version":  "0.86.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.86.0.tgz",
+                                             "sha256":  "c5b7dbf2af55f7f757804be4377d168c5b5389e4c653f5977fd632e73dcde65e"
+                                         },
+                                         {
+                                             "version":  "0.85.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.85.0.tgz",
+                                             "sha256":  "17e2971532d63d11b236974241a7ff9ac325b99ec7a2994031893329f9cb9199"
+                                         },
+                                         {
+                                             "version":  "0.84.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.84.0.tgz",
+                                             "sha256":  "f33bff8722510108ca210d6b05cd20deb60eff1a2b62c64998b7adb9fa3ddf38"
+                                         },
+                                         {
+                                             "version":  "0.83.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.83.0.tgz",
+                                             "sha256":  "7561e1b8ad5a9c2d3073a7ef7150c6c4a060d05b434e7e5adedb0acfb6ad2452"
+                                         },
+                                         {
+                                             "version":  "0.82.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.82.1.tgz",
+                                             "sha256":  "20704f3d084f1d12a378bddf39c219b73a771ddfe96d464a3935b5ffc079a866"
+                                         },
+                                         {
+                                             "version":  "0.81.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.81.0.tgz",
+                                             "sha256":  "2402d484be2248016c77b85d15080bceca32284532fa4110f137be7bf4a9586b"
+                                         },
+                                         {
+                                             "version":  "0.80.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.80.0.tgz",
+                                             "sha256":  "52b9ddcafbb29e0e6b142bdad5d135b05bee3928c99f14c5d7e9f9b8245c9680"
+                                         },
+                                         {
+                                             "version":  "0.79.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.79.0.tgz",
+                                             "sha256":  "2d5707f823392fb604a5ae38ee6d01fd965f66355b8cae58500c50dabc949f44"
+                                         },
+                                         {
+                                             "version":  "0.78.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.78.0.tgz",
+                                             "sha256":  "27bb4ea93091d6962312f81d561c8f39b26ac5c6d855df2e458177ffa3ae17a2"
+                                         },
+                                         {
+                                             "version":  "0.77.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.77.0.tgz",
+                                             "sha256":  "344b9098e61a8f2d8710bd4b22ce44e11f2cd69ae3cbb4b3d72f1d3d18730693"
+                                         },
+                                         {
+                                             "version":  "0.76.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.76.1.tgz",
+                                             "sha256":  "850e18bbc783d1e6e02dcb0bee3edfa3bcb0ac81e0bfc00a0392d8a3510798b3"
+                                         },
+                                         {
+                                             "version":  "0.75.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.75.0.tgz",
+                                             "sha256":  "96eb2a2bde6f5b99c36c69bcb07b55bde706c1767dde2bd89877abd4f0dfb506"
+                                         },
+                                         {
+                                             "version":  "0.74.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.74.0.tgz",
+                                             "sha256":  "b6fb21d9e055db01ee369a0a2e347c3c0210d76e6983c1eee1248fbb4d77d73e"
+                                         },
+                                         {
+                                             "version":  "0.71.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.71.0.tgz",
+                                             "sha256":  "57b009d0c712f83a060a6c5df2176d97cad12b4f99524c6606f333995e36e27c"
+                                         },
+                                         {
+                                             "version":  "0.68.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.68.1.tgz",
+                                             "sha256":  "2c7cfaf1dc62284a34dd6d18756b26f69e2ae1364c07e8366c3556cab251143f"
+                                         },
+                                         {
+                                             "version":  "0.67.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.67.0.tgz",
+                                             "sha256":  "46f5dd5a9b2cd4f551f858d92da58360c5554a4a9a5b347e11c1d1f026ebb9ec"
+                                         },
+                                         {
+                                             "version":  "0.66.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.66.0.tgz",
+                                             "sha256":  "713b548b847e20e6db850c90b7604946516b4a6bbdcb0da967a293b07f86c38a"
+                                         },
+                                         {
+                                             "version":  "0.65.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.65.0.tgz",
+                                             "sha256":  "828a2af973c882eeadd6acddff39dfa230ca5bea6379869aa04cc7b6de6edc44"
+                                         },
+                                         {
+                                             "version":  "0.64.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.64.1.tgz",
+                                             "sha256":  "4583b838c6362e1c22b9b5a46bbde4b8f4b2713c29258ab8a96e5e7eb2d52cb3"
+                                         },
+                                         {
+                                             "version":  "0.63.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.63.1.tgz",
+                                             "sha256":  "d15f93108a623a650d70759fbac55ee782cbea4b39fb6d49df07d9bb077bee5e"
+                                         },
+                                         {
+                                             "version":  "0.62.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.62.0.tgz",
+                                             "sha256":  "61dcdfa238f6510a5c2932f080f424de9a7ba425d56b470d39985adb9da2f327"
+                                         },
+                                         {
+                                             "version":  "0.61.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.61.0.tgz",
+                                             "sha256":  "89095db50f8e1f42ae04a354847d7fc4c0b387deb70b41207cc6d1c0406ee1b1"
+                                         },
+                                         {
+                                             "version":  "0.60.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.60.0.tgz",
+                                             "sha256":  "87b6eb2d34d0ebc59da7c71b4ac8f0c5e7d52903f03855c3777c524d031499f1"
+                                         },
+                                         {
+                                             "version":  "0.59.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.59.0.tgz",
+                                             "sha256":  "cf83f90cfa3084209681494251f7c168cb217d931f6ecd3aa983da178978dc80"
+                                         },
+                                         {
+                                             "version":  "0.58.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.58.0.tgz",
+                                             "sha256":  "0d04a71fe913a66ae1d2d331ab8f22ec930366b0e9ea79efeb7c5f85c4afa2eb"
+                                         },
+                                         {
+                                             "version":  "0.57.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.57.0.tgz",
+                                             "sha256":  "b161c14739309febf0afce029e20ad172f8bd9fe49acb17261cd56ffa7fb5864"
+                                         },
+                                         {
+                                             "version":  "0.56.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.56.0.tgz",
+                                             "sha256":  "a1efb6739309a81ada7c6190b43fbcb22b84d4ac2584138dc1a341c42fe6bfc9"
+                                         },
+                                         {
+                                             "version":  "0.55.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.55.0.tgz",
+                                             "sha256":  "7cfdc940091326694f04ad626b4f46913d42bd521831e905a7357fe2122f828d"
+                                         },
+                                         {
+                                             "version":  "0.54.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.54.0.tgz",
+                                             "sha256":  "9b9530a7d6d64ba6bde0a0ca3f048b6e481a91b21f216dd60ea3059c6c586862"
+                                         },
+                                         {
+                                             "version":  "0.53.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.53.0.tgz",
+                                             "sha256":  "7dc05d9b900a85c7c0e1de78d565b0b93ca58480c37d5dd79b35ddce3a38cfcb"
+                                         },
+                                         {
+                                             "version":  "0.52.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.52.0.tgz",
+                                             "sha256":  "e47313b741132463c7e91758f4128f8cf3e7d53413c65dab85bebdd4987450ba"
+                                         },
+                                         {
+                                             "version":  "0.51.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.51.0.tgz",
+                                             "sha256":  "3a922ea09535a158e862c0d4fcd8e923c47ef1d0c99fe5b9a055d388f23e50e9"
+                                         },
+                                         {
+                                             "version":  "0.50.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.50.0.tgz",
+                                             "sha256":  "0d0ada6e60e628f792f1f38c6d640268ec0c976cb90e19bcf77c3c6d0a1093cb"
+                                         },
+                                         {
+                                             "version":  "0.49.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.49.0.tgz",
+                                             "sha256":  "42b3da941143dda1e2f3813918e99ea1371df02be131d0bbdadbcc8f8205e097"
+                                         },
+                                         {
+                                             "version":  "0.48.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.48.0.tgz",
+                                             "sha256":  "5cd203d17e184c00894532cd3e568477b0e5a9751e15349725e96931a47922c9"
+                                         },
+                                         {
+                                             "version":  "0.47.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.47.0.tgz",
+                                             "sha256":  "9b1a44ce1695a92eeadab84b8ec5e20ee857972b61a95814884a98817e7e985a"
+                                         },
+                                         {
+                                             "version":  "0.46.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.46.0.tgz",
+                                             "sha256":  "c779f24cba8e9860f924f63104c187e1a50830c68e0dda39b63749461ccd80e0"
+                                         },
+                                         {
+                                             "version":  "0.45.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.45.0.tgz",
+                                             "sha256":  "47cc094221077f17dfeb88839027666346e22ef1c51b011014bd2683f17a43e5"
+                                         },
+                                         {
+                                             "version":  "0.44.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.44.0.tgz",
+                                             "sha256":  "7b4bda42183de07e79fa24b5e432e3072c82d5f676bb987832136c37b4057ae2"
+                                         },
+                                         {
+                                             "version":  "0.43.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.43.0.tgz",
+                                             "sha256":  "a8fed71f91f2c9e389de8beb6ef007a09fd8baad967143637029d25a5b8999fb"
+                                         },
+                                         {
+                                             "version":  "0.40.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.40.0.tgz",
+                                             "sha256":  "4fc09d3697742ba438203bc0ea9683bfa5b408e36ae69863f10a4ae72acdafb5"
+                                         },
+                                         {
+                                             "version":  "0.39.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.39.0.tgz",
+                                             "sha256":  "809dd0f9d54e777c3492ac57ad127049cedef7fe4808281efbbb554e9520fe2d"
+                                         },
+                                         {
+                                             "version":  "0.38.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.38.0.tgz",
+                                             "sha256":  "0b1624c0ce466e0a8ec70d59595bf724bce58ad5af8640ea76718d70b8866dbb"
+                                         },
+                                         {
+                                             "version":  "0.37.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.37.0.tgz",
+                                             "sha256":  "7f8dd4a5b675ffea79169fdbfc7f56c72ff2df21c73730d86ec036117a010015"
+                                         },
+                                         {
+                                             "version":  "0.36.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.36.0.tgz",
+                                             "sha256":  "fdd4bae6020452b0afeaed02a401bea8faf26835212deee845c86c7dc68340ee"
+                                         },
+                                         {
+                                             "version":  "0.35.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.35.0.tgz",
+                                             "sha256":  "b2421c3b0eb99dbf528ffd8a0c9ccafce1114f3ab92928d10118b50d1c03403d"
+                                         },
+                                         {
+                                             "version":  "0.34.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.34.0.tgz",
+                                             "sha256":  "552beb6508f9480a339008cc70b560740662143563845a35f184a8aa68489455"
+                                         },
+                                         {
+                                             "version":  "0.33.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.33.0.tgz",
+                                             "sha256":  "50ea74486816915570541251919c167b96708bde0e62c04198974d8b3eee95ac"
+                                         },
+                                         {
+                                             "version":  "0.32.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.32.0.tgz",
+                                             "sha256":  "a1d050f3d751e6627612e81a2434159dea843db72f75960674491245e20805a1"
+                                         },
+                                         {
+                                             "version":  "0.31.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.31.0.tgz",
+                                             "sha256":  "f1041221855784e09c247a58c37ce00e4981cc6426339a69399a3d8794b6f3c1"
+                                         },
+                                         {
+                                             "version":  "0.30.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.30.0.tgz",
+                                             "sha256":  "43b8b34efd0c048d4d57473a0d449d33cfec2c99ce1e6c606c62ff0a17388e17"
+                                         },
+                                         {
+                                             "version":  "0.29.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.29.0.tgz",
+                                             "sha256":  "7d95297bfa30d92f612956854c02b7075d6aaa4de6c9fbc19ab5c8446fc1610d"
+                                         },
+                                         {
+                                             "version":  "0.28.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.28.0.tgz",
+                                             "sha256":  "1bd461f05373cd2d116fc95f1b1215f0a48b858e5e8b71caacde0b66827efae4"
+                                         },
+                                         {
+                                             "version":  "0.27.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.27.1.tgz",
+                                             "sha256":  "1ceda42e08bd10f0d20a7a5244c43485b2ae1ac804f9a90b8144b9513665b6a5"
+                                         },
+                                         {
+                                             "version":  "0.26.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.26.0.tgz",
+                                             "sha256":  "996347ce58a722dd9fd0c1bf8fcc1f5c5e5fecdaf6959a3779a9436359147a0e"
+                                         },
+                                         {
+                                             "version":  "0.25.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.25.0.tgz",
+                                             "sha256":  "c782437a09fba40edec766f9f93373febf9b7b22f6f692322f2a4a081ba64eb6"
+                                         },
+                                         {
+                                             "version":  "0.24.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.24.0.tgz",
+                                             "sha256":  "4ef27b44a43726262504447e37782f97d73e0bbc351677e39f7c1e20d6ef1859"
+                                         },
+                                         {
+                                             "version":  "0.23.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.23.1.tgz",
+                                             "sha256":  "2477e8462800cb8070ef25a8a3abe2b92e9a0beee339bf76fa1416f13d89501b"
+                                         },
+                                         {
+                                             "version":  "0.22.4",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.22.4.tgz",
+                                             "sha256":  "ee847cd97ea0910f1fdd0ab13fca788bb5c1f4365212f1fb5d0ae3ec8f5253e2"
+                                         },
+                                         {
+                                             "version":  "0.21.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.21.2.tgz",
+                                             "sha256":  "dfc3c5a328bd267847050cd7cbb886922fff0093a0ba975984c5272946219954"
+                                         },
+                                         {
+                                             "version":  "0.20.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.20.0.tgz",
+                                             "sha256":  "fee3c879af5f513990d31984f99157506954c9ef1b12d2d2144729b92edbfa4a"
+                                         },
+                                         {
+                                             "version":  "0.19.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.19.0.tgz",
+                                             "sha256":  "a025b12565835df0dd33aa8693378bd39a6a61058dc7d21923417e5148c05f0e"
+                                         },
+                                         {
+                                             "version":  "0.18.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.18.0.tgz",
+                                             "sha256":  "8e7a94ffb33a075aecd76a368bcecbab044ce9b836976ce4fdfee6a4f4a846a3"
+                                         },
+                                         {
+                                             "version":  "0.17.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.17.0.tgz",
+                                             "sha256":  "813d3fa0367bb59f682d1122aa17759ac1eb0245aca5f335886bd05dff0954f0"
+                                         },
+                                         {
+                                             "version":  "0.16.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.16.0.tgz",
+                                             "sha256":  "8b888b8d327eabf9df990232073618ed92a9d829ea362bce31ad2b049a7f9346"
+                                         },
+                                         {
+                                             "version":  "0.15.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.15.2.tgz",
+                                             "sha256":  "ccfea92dab2290ae98c4e568776c20117680b383c04732fb40a5a6a524410904"
+                                         },
+                                         {
+                                             "version":  "0.14.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.14.0.tgz",
+                                             "sha256":  "840e9464a817653bf9a22713a586a6b8e137fdfbaf25a3a98305b308b421f425"
+                                         },
+                                         {
+                                             "version":  "0.13.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.13.1.tgz",
+                                             "sha256":  "435e26431afc702f5bb73721f5819d752d877371adcff6ffcd4448579b52da92"
+                                         },
+                                         {
+                                             "version":  "0.12.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.12.1.tgz",
+                                             "sha256":  "5fff4c6b1396d72ad1820aea8b49af634567728f7227f2776fa23d60bf43259b"
+                                         },
+                                         {
+                                             "version":  "0.11.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.11.2.tgz",
+                                             "sha256":  "5033875fe8fce956b952710c202e85b6d9b1b329fe1c07f96c7a5e3d9aced8bb"
+                                         },
+                                         {
+                                             "version":  "0.10.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.10.0.tgz",
+                                             "sha256":  "6df22b4ee9433417cbf3223be339a3caad9d59e7feebdbffd75ea5f7dcb33d0c"
+                                         },
+                                         {
+                                             "version":  "0.9.6",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.9.6.tgz",
+                                             "sha256":  "83ab09b875c1d242a2cb7588acba495bc3c3cb655b6ca88ab72fd815886310b3"
+                                         },
+                                         {
+                                             "version":  "0.8.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.8.2.tgz",
+                                             "sha256":  "8f08adec12be620974dd6b47e2753994cd37281039849bffcb6395edf27d11ff"
+                                         },
+                                         {
+                                             "version":  "0.7.3",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.7.3.tgz",
+                                             "sha256":  "9b96fde9cd038f8cc6b23958e937550a34059acc2af6ff27141aadbf0a602551"
+                                         },
+                                         {
+                                             "version":  "0.6.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.6.0.tgz",
+                                             "sha256":  "c4086b45cdb5eee5dfe8c43704db47ecca83f93e6086aa1d4bf188e98a30179e"
+                                         },
+                                         {
+                                             "version":  "0.5.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.5.0.tgz",
+                                             "sha256":  "6c56e38083462c4ee216afebffff81092bed11be7c17d0aebdcca7545931c77d"
+                                         },
+                                         {
+                                             "version":  "0.4.4",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.4.4.tgz",
+                                             "sha256":  "c141d473c9be8e1569caa02e2cf52750c32fc94c8518496fc67fa79ba577edd1"
+                                         },
+                                         {
+                                             "version":  "0.3.9",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.9.tgz",
+                                             "sha256":  "87a41a4fa71eb14611c5a07e2b064acbf7668a5a7c35635fa163a1160fef8e6e"
+                                         },
+                                         {
+                                             "version":  "0.3.7",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.7.tgz",
+                                             "sha256":  "c3269e32d5f2057d6e1cb8b30d105d523f4f7dd6030853a7b7c34f5c4c3fbb37"
+                                         },
+                                         {
+                                             "version":  "0.3.6",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.6.tgz",
+                                             "sha256":  "7649e1b042a6709b5e6059fee78a286f9a6da8dfa09a3ccaf42f3d1391499dca"
+                                         },
+                                         {
+                                             "version":  "0.3.5",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.5.tgz",
+                                             "sha256":  "3772e5c7a5050ef82da466eacd0dedec6252510ee65275016cb31101faa1b917"
+                                         },
+                                         {
+                                             "version":  "0.3.4",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.3.4.tgz",
+                                             "sha256":  "3e3d56f0f25c5a092bdec5fd742a53a801f5e4583f2ba7e3df988eef2125e518"
+                                         },
+                                         {
+                                             "version":  "0.3.3",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.3.3/aryacode-dsh-aryacode-polish-0.3.3.tgz",
+                                             "sha256":  "2e176598e3ccdf50378e819ea27ccc74b22d6a8d9cb99740bb3f44d779535db1"
+                                         },
+                                         {
+                                             "version":  "0.2.4",
+                                             "tarball":  "https://github.com/KonnectSuite/dsh-arya-market/releases/download/plugin-aryacode-dsh-aryacode-polish-v0.2.4/aryacode-dsh-aryacode-polish-0.2.4.tgz",
+                                             "sha256":  "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
+                                         }
+                                     ],
+                        "version":  "0.103.3",
+                        "tarball":  "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.103.3.tgz"
+                    },
+                    {
+                        "name":  "@aryacode/dsh-native-window",
+                        "owner":  "KonnectSuite",
+                        "url":  "https://github.com/KonnectSuite/dsh-native-window",
+                        "category":  "arya",
+                        "description":  {
+                                            "en":  "Dock Windows applications (Studio 5000, View Designer, MotionWorks IEC, RSLogix, FactoryTalk View Studio) in the right sidebar, beside the chat",
+                                            "zh":  "把 Windows 应用（Studio 5000、View Designer、MotionWorks IEC、RSLogix、FactoryTalk View Studio）停靠在右侧边栏，与对话并排"
+                                        },
+                        "added":  "2026-10-29",
+                        "install":  "",
+                        "arya":  true,
+                        "releases":  [
+                                         {
+                                             "version":  "0.2.8",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz",
+                                             "sha256":  "c2821bbab8ba99781b06b92b2b5eb3c9d656db7b6eff83bbff1bf7a8a62597d2"
+                                         }
+                                     ],
+                        "version":  "0.2.8",
+                        "tarball":  "https://registry.npmjs.org/@aryacode/dsh-native-window/-/dsh-native-window-0.2.8.tgz"
+                    },
+                    {
+                        "name":  "@aryacode/dsh-arya-maildesk",
+                        "owner":  "KonnectSuite",
+                        "url":  "https://github.com/KonnectSuite/dsh-arya-maildesk",
+                        "category":  "arya",
+                        "description":  {
+                                            "en":  "A real mail panel for the Outlook you are already signed into: folders, multi-select, a safe HTML reading pane, replies that stay drafts in the harness, a draft card in the chat and a draft tab beside it. No Azure app registration, no admin consent.",
+                                            "zh":  "为已登录的 Outlook 装上真正的邮件面板：文件夹、多选列表、安全的 HTML 阅读、留在 harness 里的回复草稿、聊天中的草稿卡片，以及并排的草稿侧栏。无需 Azure 应用注册，无需管理员授权。"
+                                        },
+                        "added":  "2026-10-29",
+                        "install":  "",
+                        "arya":  true,
+                        "releases":  [
+                                         {
+                                             "version":  "1.1.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.1.0.tgz",
+                                             "sha256":  "89c6215e4b7284d210836271a44e1d879aafc67d78e1f145c54d4279bda76cdb"
+                                         },
+                                         {
+                                             "version":  "1.0.3",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.3.tgz",
+                                             "sha256":  "1b1be6b2667410ce7bc3bf6440b50f9233dc18c87ff7b3562a466d01736b2f5d"
+                                         },
+                                         {
+                                             "version":  "1.0.2",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.2.tgz",
+                                             "sha256":  "9c18b78bbb358c57a98c794eb44dc68d7087deb3e794c93a4554c3d58e15fa0b"
+                                         },
+                                         {
+                                             "version":  "1.0.1",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.1.tgz",
+                                             "sha256":  "7186fe0abe81b8cf3254166663fafaff71dc2a8b3e8feaeefbd338119385d4da"
+                                         },
+                                         {
+                                             "version":  "1.0.0",
+                                             "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.0.0.tgz",
+                                             "sha256":  "656d66c80d9e403675179e03b9f53cdd47eb606c466b42d969f743e20909a014"
+                                         }
+                                     ],
+                        "version":  "1.1.0",
+                        "tarball":  "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.1.0.tgz"
+                    }
+                ]
 }
