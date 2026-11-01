@@ -1,6 +1,6 @@
 {
-  "updated": "2026-11-01T02:48:09.322Z",
-  "count": 5,
+  "updated": "2026-11-01T06:15:53.757Z",
+  "count": 6,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -830,6 +830,29 @@
       ],
       "version": "1.1.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-arya-maildesk/-/dsh-arya-maildesk-1.1.0.tgz"
+    },
+    {
+      "name": "dsh-arya-image-gen",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-arya-image-gen",
+      "category": "arya",
+      "description": {
+        "en": "ComfyUI-native image generation for DeepSeek Harness: chat tools, infinite canvas, Studio workbench, workflow comparison, and built-in ComfyUI server control.",
+        "zh": "面向 DeepSeek Harness 的 ComfyUI 原生图像生成插件：对话生图、无限画布、Studio 工作台、工作流对比与内置 ComfyUI 服务控制。"
+      },
+      "added": "2026-11-01",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "0.11.1",
+          "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.11.1.tgz",
+          "sha256": "d8781387792502a4d2aeb76666a1aa630c9bd267d2191705cf8d0ec96d23f482",
+          "releasedAt": "2026-11-01T06:09:52.070Z"
+        }
+      ],
+      "version": "0.11.1",
+      "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.11.1.tgz"
     }
   ]
 }
