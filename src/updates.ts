@@ -586,8 +586,33 @@ async function gitVersionUpdate(
  */
 type ReleaseAgeHold = { until: string; estimated: boolean } | 'past' | null
 
+/**
+ * Whether a package is published by this deployment rather than by a stranger.
+ *
+ * The release-age hold exists to buy review time before a third party's new code
+ * is installed. It has nothing to add for our own packages: the Arya catalog pins
+ * a sha256 per release and the market verifies it before installing, which is a
+ * stronger guarantee than "the version is a day old".
+ *
+ * Without this exemption a release published minutes ago is *withheld* for 24
+ * hours on every profile that does not explicitly set `minimumReleaseAge: 0` —
+ * the card reports no update, and the author of the release concludes the publish
+ * failed. That is a recurrence, not a one-off: it happens to every release for a
+ * day after it is published.
+ */
+const FIRST_PARTY = /^@aryacode\//u
+/** Unscoped first-party names this deployment also publishes. */
+const FIRST_PARTY_UNSCOPED = /^dsh-arya-/u
+
+/** True when this package is one of ours. */
+export function isFirstPartyRelease(name: string): boolean {
+  return FIRST_PARTY.test(name) || FIRST_PARTY_UNSCOPED.test(name)
+}
+
 async function releaseAgeHold(name: string, latest: string | null, profile: string, activeProfileDir: string): Promise<ReleaseAgeHold> {
   if (latest === null) return null
+  // Our own releases are catalog-verified; a hold would only hide them.
+  if (isFirstPartyRelease(name)) return 'past'
   const windowMs = readMinimumReleaseAgeMs(profile, activeProfileDir)
   if (windowMs === null) return null
   const age = await npmPublishAge(name, latest)
