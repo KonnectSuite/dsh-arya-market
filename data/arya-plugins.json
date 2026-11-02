@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02T01:43:17.941Z",
+  "updated": "2026-11-02T02:25:56.330Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -896,6 +896,18 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.18.10",
+          "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.10.tgz",
+          "sha256": "274dee39cd80962b4eec231d30bdb12f0d6446eb7e43be0c44e3f481e4facd07",
+          "releasedAt": "2026-11-02T02:25:17.164Z"
+        },
+        {
+          "version": "0.18.9",
+          "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.9.tgz",
+          "sha256": "3272dc942cb70c953a8b8e93955f975593807de752ace231881eb59359715363",
+          "releasedAt": "2026-11-02T02:13:53.399Z"
+        },
+        {
           "version": "0.18.8",
           "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.8.tgz",
           "sha256": "504030e4ec192264a6056b02e484de25ecb47f0258203da75dc70cf4906c90c9",
@@ -1010,8 +1022,8 @@
           "releasedAt": "2026-11-01T06:09:52.070Z"
         }
       ],
-      "version": "0.18.8",
-      "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.8.tgz"
+      "version": "0.18.10",
+      "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.10.tgz"
     }
   ]
 }
