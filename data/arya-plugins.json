@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02T00:53:51.779Z",
+  "updated": "2026-11-02T01:11:05.774Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -196,7 +196,7 @@
           "sha256": "3bd61d68f935583cbe42bd702459d9b7c86a0838ea01c46b9263d8f9170c00d9"
         }
       ],
-      "version": "0.74.0",
+      "version": "0.76.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.74.0.tgz"
     },
     {
@@ -805,7 +805,7 @@
           "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
         }
       ],
-      "version": "0.113.0",
+      "version": "0.114.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.113.0.tgz"
     },
     {
