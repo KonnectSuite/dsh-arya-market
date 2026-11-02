@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02T01:19:04.187Z",
+  "updated": "2026-11-02T01:39:07.405Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -886,6 +886,12 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.18.8",
+          "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.8.tgz",
+          "sha256": "504030e4ec192264a6056b02e484de25ecb47f0258203da75dc70cf4906c90c9",
+          "releasedAt": "2026-11-02T01:38:36.708Z"
+        },
+        {
           "version": "0.18.7",
           "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.7.tgz",
           "sha256": "031c8172c14c6f7dcd03e02e673aa32e781cfabe7f3a67001885b9ca39efb120",
@@ -994,8 +1000,8 @@
           "releasedAt": "2026-11-01T06:09:52.070Z"
         }
       ],
-      "version": "0.18.7",
-      "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.7.tgz"
+      "version": "0.18.8",
+      "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.18.8.tgz"
     }
   ]
 }
