@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02T01:39:07.405Z",
+  "updated": "2026-11-02T01:43:17.941Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -148,6 +148,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "0.77.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.77.0.tgz",
+          "sha256": "4aca4e41ad3eb64972d43295e2956c9b3988244db4a3d0f40d1db7c67a1c3017"
+        },
+        {
           "version": "0.74.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.74.0.tgz",
           "sha256": "e79afe570d7ab908114eb15dd4ce8fe029df06bde1066c031992f11bc6ead50e",
@@ -197,7 +202,7 @@
         }
       ],
       "version": "0.77.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.74.0.tgz"
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.77.0.tgz"
     },
     {
       "name": "@aryacode/dsh-aryacode-polish",
@@ -212,6 +217,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.114.0",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.114.0.tgz",
+          "sha256": "bee63be01453fd12e2a72b11ddfcc301f6d84f3fa5648a29884069ccc4313cd1"
+        },
         {
           "version": "0.113.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.113.0.tgz",
@@ -806,7 +816,7 @@
         }
       ],
       "version": "0.114.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.113.0.tgz"
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.114.0.tgz"
     },
     {
       "name": "@aryacode/dsh-native-window",
