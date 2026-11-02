@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-02T01:11:05.774Z",
+  "updated": "2026-11-02T01:12:57.930Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -196,7 +196,7 @@
           "sha256": "3bd61d68f935583cbe42bd702459d9b7c86a0838ea01c46b9263d8f9170c00d9"
         }
       ],
-      "version": "0.76.0",
+      "version": "0.77.0",
       "tarball": "https://registry.npmjs.org/@aryacode/dsh-engineering/-/dsh-engineering-0.74.0.tgz"
     },
     {
