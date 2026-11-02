@@ -90,3 +90,38 @@ plugins the catalog cannot offer. Re-running is safe: a version already present
 with the same bytes is reused, and a different tarball for an existing version
 is rejected rather than overwritten. Publish the updated catalog with
 `npm run publish:arya:catalog` after a successful batch.
+
+## A first-party release is offered the moment it is published
+
+The update check can withhold a young release (`holdYoungReleases`, which a
+desktop host turns on). It mirrors pnpm's `minimumReleaseAge`: a version younger
+than the window is parked as `heldUpdate`, so the card shows no update at all
+until the window passes — 24 hours by default.
+
+That window exists to buy review time before a **stranger's** new code is
+installed. It must not apply to packages this deployment publishes, so
+`releaseAgeHold` returns `past` for `@aryacode/*` and `dsh-arya-*`:
+
+- the Arya catalog pins a **sha256 per release**, and the market verifies it
+  before staging the tarball, which is a stronger guarantee than "the version is
+  a day old";
+- withholding our own release from our own machines is the bug, not the
+  protection. Before 1.70.1-arya.0.5 a plugin published minutes earlier showed
+  no update anywhere, and the only way through was a hand-run `pnpm add` on each
+  machine.
+
+Third-party packages keep the hold unchanged, and a profile that sets
+`minimumReleaseAge: 0` still has no hold for anything.
+
+**If a machine still withholds a first-party release**, its market predates this
+fix. One command installs the fixed market and the current plugins, bypassing
+the install-time half of the same policy:
+
+```powershell
+cd $env:USERPROFILE\.aryacode\profiles\desktop
+node "$env:LOCALAPPDATA\Programs\AryaCode\resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs" add @aryacode/dsh-arya-market@1.70.1-arya.0.5 @aryacode/dsh-engineering@0.85.3 @aryacode/dsh-aryacode-polish@0.115.0 --save-exact --config.minimum-release-age=0
+```
+
+Then restart AryaCode (host code) and reload the window (client bundle). After
+that the card advertises each new first-party release immediately, and the
+installer seeds the same market version so a fresh install needs neither step.
