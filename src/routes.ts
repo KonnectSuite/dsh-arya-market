@@ -14,7 +14,7 @@ import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { load as loadYaml } from 'js-yaml'
 import { AryaReleaseCancelled, aryaReleaseTarget, bundledAryaVersion, stageAryaRelease, resolveAryaDownloadLimits, mergeMarketRegistries, validateCatalogUrl } from './arya.ts'
-import { isAryaReleaseSpec } from './arya-release-spec.ts'
+import { isAryaReleaseSpec, isPublishedReleaseSpec } from './arya-release-spec.ts'
 import type { RegistryPlugin } from './registry.ts'
 import { forgetCatalog, loadRegistry as loadCommunityRegistry, pluginCategories } from './registry.ts'
 import { settingsNamespaceState } from './settings.ts'
@@ -4324,7 +4324,14 @@ sendJson(response, 200, { updates })
                   sendJson(response, 400, { error: 'Choose a released version explicitly to replace this local plugin' })
                   return
                 }
-                const samePublishedSource = entry.releases?.some(release => release.tarball === spec) === true
+                // A version written as a plain (or caret/tilde) semver spec is the
+                // registry release the catalog itself advertises. The market writes
+                // exactly that spec when it pins a release, and a failed attempt
+                // leaves it behind, so refusing it was permanent: every later update
+                // asked for "a released version explicitly" that the dialog never
+                // sends. The refusal is for switching to a repository or an
+                // unrelated source, not for the release this catalog published.
+                const samePublishedSource = isPublishedReleaseSpec(entry, spec)
                 const repo = repoOfTarget(spec)?.split('#')[0]?.toLowerCase()
                 const sameRepository = repo !== undefined && entry.url.toLowerCase() === `https://github.com/${repo}`
                 if (!isLocalSpec(spec) && !managedRelease && !samePublishedSource && !sameRepository && !isInstallerBundle(config.profile, name, activeProfileDir) && body.releaseVersion === undefined && body.bundled !== true && !restore) {

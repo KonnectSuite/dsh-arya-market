@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { aryaReleaseTarget, bundledAryaVersion, validateAryaRegistry, validateCatalogUrl, mergeMarketRegistries } from '../src/arya.ts'
 import type { Registry } from '../src/registry.ts'
+import { isPublishedReleaseSpec } from '../src/arya-release-spec.ts'
 
 function catalog(): Registry {
   return { updated: '', count: 1, categories: {}, plugins: [{
@@ -91,4 +92,29 @@ it('preserves community entries from different publishers that share a display n
     { ...community.plugins[0], name: 'shared-name', owner: 'second' },
   ]
   expect(mergeMarketRegistries(community, catalog()).plugins.filter(p => p.name === 'shared-name')).toHaveLength(2)
+})
+
+describe('isPublishedReleaseSpec', () => {
+  const entry = { releases: [
+    { version: '0.114.0', tarball: 'https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.114.0.tgz' },
+    { version: '0.113.0', tarball: 'https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.113.0.tgz' },
+  ] }
+
+  it('recognizes the tarball the catalog published', () => {
+    expect(isPublishedReleaseSpec(entry, entry.releases[0].tarball)).toBe(true)
+  })
+
+  it('recognizes the version pnpm writes back in place of that tarball', () => {
+    // The update dialog sends no releaseVersion, so a spec rewritten to a bare
+    // version used to be refused as a source switch forever (#496/#531).
+    expect(isPublishedReleaseSpec(entry, '0.114.0')).toBe(true)
+    expect(isPublishedReleaseSpec(entry, '^0.114.0')).toBe(true)
+    expect(isPublishedReleaseSpec(entry, '~0.113.0')).toBe(true)
+  })
+
+  it('still refuses a version this catalog never published', () => {
+    expect(isPublishedReleaseSpec(entry, '0.200.0')).toBe(false)
+    expect(isPublishedReleaseSpec(entry, 'github:somebody/polish')).toBe(false)
+    expect(isPublishedReleaseSpec(entry, 'file:C:/tmp/polish.tgz')).toBe(false)
+  })
 })
