@@ -1605,8 +1605,12 @@ export function createDesktopPluginRuntime(
       closed = true
       const active = activeDesktopOperation
       if (active?.owner !== owner) return
-      cancelOwned(false)
-      await active.done.catch(() => {})
+      // Do NOT cancel here. This dispose runs when DSH unloads the plugin tree, and applying a
+      // plugin update is exactly what triggers that unload - so cancelling killed the install
+      // mid-write and the panel reported "the operation has no result" (better-sidebar, every
+      // machine). The child is journaled in .dsh-market/pending-updates.json; leaving it running
+      // lets the install finish and the next load reconcile the outcome via repairInterruptedUpdates.
+      // An explicit user cancel still goes through /dsh-market/cancel, which is a different path.
     },
   }
 }
