@@ -93,12 +93,34 @@ function compareVersions(a, b) {
   return 0
 }
 
+/**
+ * Headers for api.github.com, authenticated when a token is in the
+ * environment.
+ *
+ * Without one, a CI runner shares an egress IP with everything else GitHub
+ * hosts, and the first request from it regularly answers 403 on the anonymous
+ * budget — which pushed this check onto the CDN copy, the one source that can
+ * report the catalog from BEFORE a push. A token makes the branch read
+ * authoritative, which is the only reason this script asks the API at all.
+ *
+ * Scoped to GitHub calls on purpose: the same header must never be sent to
+ * registry.npmjs.org.
+ */
+const GITHUB_TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? ''
+function githubHeaders() {
+  return {
+    'user-agent': 'dsh-arya-market/parity-check',
+    accept: 'application/vnd.github+json',
+    ...(GITHUB_TOKEN === '' ? {} : { authorization: `Bearer ${GITHUB_TOKEN}` }),
+  }
+}
+
 /** Fetch JSON, reporting the HTTP status rather than a parse error. */
-async function fetchJson(url, retries = 2) {
+async function fetchJson(url, headers = {}, retries = 2) {
   let last
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetch(url, { headers: { 'user-agent': 'dsh-arya-market/parity-check' } })
+      const response = await fetch(url, { headers: { 'user-agent': 'dsh-arya-market/parity-check', ...headers } })
       if (!response.ok) throw new Error(`HTTP ${String(response.status)}`)
       return await response.json()
     } catch (error) {
@@ -130,7 +152,7 @@ if (values.catalog !== undefined) {
   }
 } else {
   try {
-    const body = await fetchJson(API)
+    const body = await fetchJson(API, githubHeaders())
     catalog = JSON.parse(Buffer.from(body.content, 'base64').toString('utf8'))
     catalogSource = `${API} (the branch)`
   } catch (apiError) {
@@ -259,7 +281,7 @@ async function npmProbe(name) {
 async function repoExists(repo) {
   if (typeof repo !== 'string' || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) return false
   try {
-    await fetchJson(`https://api.github.com/repos/${repo}`)
+    await fetchJson(`https://api.github.com/repos/${repo}`, githubHeaders())
     return true
   } catch (error) {
     return /HTTP 404/.test(error instanceof Error ? error.message : String(error)) ? false : null

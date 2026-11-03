@@ -35,5 +35,13 @@ jobs:
 
       # Downloads each entry's newest archive to check the pinned sha256, which
       # is the half of the check that catches a replaced or re-cut tarball.
+      #
+      # The token is what keeps the catalog read on the branch: without it the
+      # runner shares GitHub's anonymous API budget with everything else on the
+      # same egress IP, answers 403, and the check falls back to the CDN copy —
+      # which can be minutes behind a push and would report the previous
+      # catalog as this one.
       - name: every catalog entry matches npm, and its pinned archive
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/check-catalogue-parity.mjs
