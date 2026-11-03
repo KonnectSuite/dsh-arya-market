@@ -55,7 +55,7 @@ import {
 import { resolveRegion } from './region-probe.ts'
 import { acceleratedTarget, resolveHeadCommit } from './accelerate.ts'
 import { updateNotesFor } from './changelog.ts'
-import { checkUpdates, isUpdatablePlugin, compareVersions, fetchNpmLatest, invalidateUpdates, resolveGitRemoteHead, isUpgrade, latestPublishedRecently, setUpdateRegistry, versionOnChannel } from './updates.ts'
+import { catalogueBehindNpm, checkUpdates, isFirstPartyRelease, isUpdatablePlugin, compareVersions, fetchNpmLatest, invalidateUpdates, resolveGitRemoteHead, isUpgrade, latestPublishedRecently, setUpdateRegistry, versionOnChannel } from './updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, refuseUnadmitted, sameOrigin, sendJson } from './http.ts'
 import { resolveDshHome } from './home-paths.ts'
@@ -78,6 +78,7 @@ import { findGitToNpmMigration } from './source-migration.ts'
 
 export type { LoaderEntry } from './themes.ts'
 export type { UpdateStatus } from './updates.ts'
+import type { UpdateStatus } from './updates.ts'
 
 /**
  * Recognize the documented GitHub Release-download target shape. This does
@@ -2072,6 +2073,76 @@ export function mountMarketRoutes(
   }
 
   /**
+   * The catalog's answer, which is authoritative for every package it lists —
+   * both as the offer and as the bytes.
+   *
+   * It used to be authoritative even when it was WRONG in the direction that
+   * hides things: `latest` was `releases[0].version`, compared forward-only, so
+   * a release that reached npm and was never recorded in the catalog read as
+   * "up to date" on every machine. Publishing touches npm and the catalog in
+   * two steps, so that state is not hypothetical — it is a skipped step.
+   *
+   * `catalogueBehindNpm` answers whether npm already serves something newer.
+   * For a REGISTRY install that becomes the offer, because the ordinary update
+   * path can install it. For a market-staged archive it is only named: turning
+   * a `file:` install into a registry one is a different operation with its own
+   * rollback, and an offer this route refuses is worse than a named fact.
+   *
+   * Applied in one place rather than at each call site so the market page, the
+   * v1 summary and the v1 single-package answer cannot disagree about the same
+   * package (#602's rule, extended to the catalog override).
+   */
+  const driftLogged = new Set<string>()
+  async function applyCatalogueAnswers(updates: Record<string, UpdateStatus>): Promise<Record<string, UpdateStatus>> {
+    if (config.catalogUrl === undefined) return updates
+    const registry = await loadRegistry()
+    const installed = readInstalled(config.profile, activeProfileDir)
+    const entries = registry.plugins.filter(plugin => plugin.arya === true && installed[plugin.name] !== undefined)
+    // npm is only asked where the answer could differ from the catalog's, and
+    // only for our own packages: a third-party entry is curated, so its
+    // catalog version IS the selection (see catalogueBehindNpm).
+    const npmLatestFor = new Map<string, string | null>()
+    await Promise.all(entries.map(async plugin => {
+      if (!isFirstPartyRelease(plugin.name)) return
+      npmLatestFor.set(plugin.name, await fetchNpmLatest(plugin.name).catch(() => null))
+    }))
+    for (const plugin of entries) {
+      const spec = installed[plugin.name]!
+      const version = readInstalledVersion(config.profile, plugin.name, activeProfileDir)
+      const catalogLatest = plugin.releases?.[0]?.version ?? null
+      const managedRelease = isAryaReleaseSpec(plugin, spec)
+      const local = isLocalSpec(spec) && !managedRelease
+      const drift = catalogueBehindNpm(plugin.name, catalogLatest, npmLatestFor.get(plugin.name) ?? null)
+      // A `file:` install cannot be replaced by a registry update through this
+      // route, so the catalog's own answer stands and the drift is only named.
+      const installable = drift !== null && !isLocalSpec(spec)
+      const latest = installable ? drift.npm : catalogLatest
+      if (drift !== null) {
+        const key = `${plugin.name}\u0000${drift.catalog}\u0000${drift.npm}`
+        // Once per unchanged pair: a warning repeated on every page load is the
+        // "same label everywhere" failure, and it trains the reader to skip the
+        // next one.
+        if (!driftLogged.has(key)) {
+          driftLogged.add(key)
+          logEvent('warn', 'catalogue-drift', `${plugin.name}: npm ${drift.npm} is ahead of the catalog's ${drift.catalog}${installable ? ' — offering the registry release' : ' — this install came from a catalog archive, so the catalog answer stands; record the release to publish it'}`)
+        }
+      }
+      updates[plugin.name] = {
+        kind: local ? 'linked' : 'npm',
+        version,
+        current: version,
+        latest,
+        updateAvailable: version !== null && latest !== null && isUpgrade(version, latest),
+        ...(local ? { restoreRequired: true } : {}),
+        ...(managedRelease ? { aryaRelease: true } : {}),
+        ...(drift === null ? {} : { catalogueDrift: drift }),
+      }
+    }
+    for (const name of SELF_NAMES) if (updates[name] !== undefined) updates[name] = { ...updates[name], updateAvailable: false }
+    return updates
+  }
+
+  /**
    * Pre-install host compatibility refusal, shared by the update route and
    * the fresh-install route (#404/#473 convention, extended to installs).
    *
@@ -2233,7 +2304,7 @@ export function mountMarketRoutes(
         }
         try {
           const { channelFor, onlineSourceFor, catalogNpmByRepo } = await updateCheckInputs()
-          const updates = await checkUpdates(config.profile, forceCheckFrom(request), activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true })
+          const updates = await applyCatalogueAnswers(await checkUpdates(config.profile, forceCheckFrom(request), activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true }))
           // `packages` carries the same objects the single-package endpoint
           // returns, so one parser serves both. Only updatable ones: a badge
           // wants the count, a panel wants the rows, and neither wants to
@@ -2280,7 +2351,7 @@ export function mountMarketRoutes(
             // or a catalog-matched local package answers here with the
             // release it can be compared against rather than with nothing.
             const { channelFor, onlineSourceFor, catalogNpmByRepo } = await updateCheckInputs()
-            const update = (await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true }))[name]
+            const update = (await applyCatalogueAnswers(await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true })))[name]
             if (update === undefined) {
               sendJson(response, 404, { schema: UPDATE_API_V1_SCHEMA, error: 'plugin is not installed' })
               return
@@ -3989,22 +4060,7 @@ export function mountMarketRoutes(
           } catch (error) {
             logEvent('warn', 'updates', `package source lookup failed — ${error instanceof Error ? error.message : String(error)}`)
           }
-          const updates = await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true })
-          if (config.catalogUrl !== undefined) {
-            const registry = await loadRegistry()
-            const installed = readInstalled(config.profile, activeProfileDir)
-            for (const plugin of registry.plugins) {
-              if (plugin.arya !== true) continue
-              const spec = installed[plugin.name]
-              if (spec === undefined) continue
-              const version = readInstalledVersion(config.profile, plugin.name, activeProfileDir)
-              const latest = plugin.releases?.[0]?.version ?? null
-              const managedRelease = isAryaReleaseSpec(plugin, spec)
-              const local = isLocalSpec(spec) && !managedRelease
-              updates[plugin.name] = { kind: local ? 'linked' : 'npm', version, current: version, latest, updateAvailable: version !== null && latest !== null && isUpgrade(version, latest), ...(local ? { restoreRequired: true } : {}), ...(managedRelease ? { aryaRelease: true } : {}) }
-            }
-            for (const name of SELF_NAMES) if (updates[name] !== undefined) updates[name] = { ...updates[name], updateAvailable: false }
-          }
+          const updates = await applyCatalogueAnswers(await checkUpdates(config.profile, force, activeProfileDir, channelFor, onlineSourceFor, catalogNpmByRepo, { holdYoungReleases: config.desktopHost === true }))
           for (const [name, migration] of sourceMigrationFor) {
             const status = updates[name]
             if (status !== undefined) updates[name] = { ...status, sourceMigration: migration }
@@ -4339,20 +4395,41 @@ sendJson(response, 200, { updates })
                   return
                 }
                 const selectedVersion = body.bundled === true ? bundledAryaVersion(config.dshInstallDir, name) : body.releaseVersion
-                try {
-                  selectedRelease = aryaReleaseTarget(entry, selectedVersion)
-                  selectedReleaseVersion = entry.releases!.find(release => release.tarball === selectedRelease)!.version
-                } catch (error) {
-                  sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+                // The catalog is behind npm for this package, so the offer the
+                // client saw came from `latest` and not from this entry.
+                // Installing `releases[0]` here would be the version already on
+                // disk, which the direction guard below then refuses as a
+                // downgrade — the dead end that made a release which skipped
+                // the catalog invisible. Leave the release target null and let
+                // the ordinary registry path take the npm release.
+                const catalogDrift = selectedVersion === undefined && !restore
+                  ? catalogueBehindNpm(name, entry.releases?.[0]?.version ?? null, await fetchNpmLatest(name).catch(() => null))
+                  : null
+                if (catalogDrift !== null && isLocalSpec(spec)) {
+                  // Turning a staged archive into a registry install has no
+                  // rollback to the archive, so this is refused with the reason
+                  // rather than attempted as half a swap.
+                  sendJson(response, 400, {
+                    error: `目录还没记录 ${catalogDrift.npm}（目录里最新是 ${catalogDrift.catalog}），而 ${name} 是从目录里的压缩包装的。现在更新会把它换成 registry 安装，失败时退不回压缩包，所以什么都没改。把这个版本记录进目录后再更新即可。 / The catalog has not recorded ${catalogDrift.npm} yet (its newest is ${catalogDrift.catalog}), and ${name} was installed from a catalog archive. Updating now would turn it into a registry install with no way back to the archive if it failed, so nothing was changed. Record the release, then update again.`,
+                  })
                   return
                 }
-                const currentVersion = readInstalledVersion(config.profile, name, activeProfileDir)
-                if (body.releaseVersion === undefined && body.bundled !== true && !restore && currentVersion !== null
-                  && selectedReleaseVersion !== currentVersion && !isUpgrade(currentVersion, selectedReleaseVersion)) {
-                  sendJson(response, 400, { error: 'Choose an earlier version explicitly to downgrade this plugin' })
-                  return
+                if (catalogDrift === null) {
+                  try {
+                    selectedRelease = aryaReleaseTarget(entry, selectedVersion)
+                    selectedReleaseVersion = entry.releases!.find(release => release.tarball === selectedRelease)!.version
+                  } catch (error) {
+                    sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
+                    return
+                  }
+                  const currentVersion = readInstalledVersion(config.profile, name, activeProfileDir)
+                  if (body.releaseVersion === undefined && body.bundled !== true && !restore && currentVersion !== null
+                    && selectedReleaseVersion !== currentVersion && !isUpgrade(currentVersion, selectedReleaseVersion)) {
+                    sendJson(response, 400, { error: 'Choose an earlier version explicitly to downgrade this plugin' })
+                    return
+                  }
+                  restore = true
                 }
-                restore = true
               } else if (body.releaseVersion !== undefined || body.bundled === true) {
                 sendJson(response, 400, { error: 'Plugin is not in the Arya release catalog' })
                 return

@@ -68,6 +68,25 @@ export interface UpdateStatus {
    * market decided to offer.
    */
   newerPrerelease?: string
+  /**
+   * The catalog has fallen behind npm for a package it lists. Both versions,
+   * named, because "npm 0.115.1 is newer than the catalog's 0.114.0" is the
+   * whole diagnosis and neither number alone says it.
+   *
+   * The catalog is both the OFFER and the BYTES for every package it lists, so
+   * a release recorded on npm but not in the catalog used to be hidden rather
+   * than merely unannounced: `latest` came from `releases[0]`, the comparison
+   * was against that older version, and every user read "up to date" — on
+   * every machine, with nothing in any log. This field is the fact that was
+   * missing. For a registry install it is also the offer: `latest` is the npm
+   * version and `updateAvailable` is about that version.
+   *
+   * For an install that came from a catalog archive the field is only a
+   * warning. Replacing a staged archive with a registry install is a different
+   * operation, and offering it as one click here would be an update the route
+   * refuses — so `latest` stays the catalog's answer.
+   */
+  catalogueDrift?: { npm: string; catalog: string }
   /** Taking this update replaces a local package source with its matched online release. */
   restoreRequired?: boolean
   /** Independent, explicit source switch offered for verified legacy Git installs. */
@@ -607,6 +626,39 @@ const FIRST_PARTY_UNSCOPED = /^dsh-arya-/u
 /** True when this package is one of ours. */
 export function isFirstPartyRelease(name: string): boolean {
   return FIRST_PARTY.test(name) || FIRST_PARTY_UNSCOPED.test(name)
+}
+
+/**
+ * A release npm already serves that the Arya catalog has not recorded, or null.
+ *
+ * The catalog is the update offer AND the update bytes for every package it
+ * lists, so publishing touches two places in two steps. When only npm was
+ * written, the catalog's older `releases[0]` answered for the package and a
+ * newer release was reported as nothing at all: not "unannounced", hidden.
+ * That is a recurrence, not a one-off — it is every release whose recording
+ * step was skipped or failed.
+ *
+ * First-party only. An `@aryacode/*` release carries the same trust boundary
+ * either way (the scope, and the digest the entry pins for the versions it does
+ * list), so falling forward to npm installs the author's own build. A
+ * third-party entry is CURATED: its catalog version is the publisher's
+ * selection, and a newer package under the same name on npm is not this
+ * market's decision to make. Those are reported, never offered.
+ *
+ * @param name - package name as the catalog lists it.
+ * @param catalogLatest - the entry's `releases[0].version`.
+ * @param npmLatest - npm's `latest` dist-tag, or null when it could not be read.
+ * @returns the two versions, or null when the catalog is not behind.
+ */
+export function catalogueBehindNpm(
+  name: string,
+  catalogLatest: string | null,
+  npmLatest: string | null,
+): { npm: string; catalog: string } | null {
+  if (catalogLatest === null || npmLatest === null) return null
+  if (!isFirstPartyRelease(name)) return null
+  const compared = compareVersions(npmLatest, catalogLatest)
+  return compared !== null && compared > 0 ? { npm: npmLatest, catalog: catalogLatest } : null
 }
 
 async function releaseAgeHold(name: string, latest: string | null, profile: string, activeProfileDir: string): Promise<ReleaseAgeHold> {
