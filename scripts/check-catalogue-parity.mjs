@@ -247,16 +247,39 @@ async function npmProbe(name) {
   }
 }
 
+/**
+ * Whether the repository a manifest entry names still exists.
+ *
+ * The recording command needs somewhere to point, and a manifest can outlive
+ * the repository it names — a renamed or deleted repo leaves an entry that
+ * looks like a gap and is actually a dead end. `false` is a 404, `null` is a
+ * probe that could not answer, so "absent" is never inferred from a network
+ * failure.
+ */
+async function repoExists(repo) {
+  if (typeof repo !== 'string' || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) return false
+  try {
+    await fetchJson(`https://api.github.com/repos/${repo}`)
+    return true
+  } catch (error) {
+    return /HTTP 404/.test(error instanceof Error ? error.message : String(error)) ? false : null
+  }
+}
+
 const planned = []
 if (values.json || manifestOnly.length > 0) {
   for (const name of manifestOnly) {
     const probe = await npmProbe(name)
     if (probe.state === 'published') {
-      warnings.push({
-        kind: 'published-not-listed',
-        package: name,
-        detail: `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, so it cannot be installed or updated from the market, only by name. Record it: node scripts/publish-arya-release.mjs --npm ${probe.version ?? '<version>'} --source <repo> --push`,
-      })
+      const declared = sources.find(plugin => plugin.name === name)?.source
+      const declaredState = declared === undefined ? null : await repoExists(declared)
+      // A gap nobody here can close is still worth stating, but stating it as
+      // "record it" when the source is gone sends the reader at a command that
+      // is guaranteed to refuse (unresolvable workspace peers, or a 404).
+      const detail = declaredState === false
+        ? `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, and the repository data/arya-sources.json names for it (${String(declared)}) does not exist. Nothing here can record it: it needs a real repository and a republished archive before the market can offer it.`
+        : `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, so it cannot be installed or updated from the market, only by name. Record it: node scripts/publish-arya-release.mjs --npm ${probe.version ?? '<version>'} --source ${String(declared ?? '<repo>')} --push`
+      warnings.push({ kind: 'published-not-listed', package: name, detail })
     } else if (probe.state === 'unpublished') {
       planned.push(name)
     } else {
