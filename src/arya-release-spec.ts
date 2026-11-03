@@ -26,7 +26,7 @@ export interface PublishedRelease {
 }
 
 /**
- * Whether a manifest spec already names one of this entry's released builds.
+ * Whether a manifest spec already names the registry source this entry publishes.
  *
  * A release installs from its tarball URL or from the cache file the market
  * staged, but pnpm rewrites the manifest to the version it resolved — so a
@@ -34,13 +34,24 @@ export interface PublishedRelease {
  * Treating only the tarball URL as "the same published source" made that
  * rewrite permanent: the next update asked for "a released version explicitly",
  * which the update dialog never sends, so the plugin could never move again.
+ *
+ * The version does NOT have to be one this catalog still lists. A bare (or
+ * caret/tilde) version is the REGISTRY — the same source every release here is
+ * published from, whichever version it names — and a version the catalog
+ * skipped is a state this repository produces routinely, by publishing to npm
+ * without recording the release. Requiring membership turned that into a
+ * permanent refusal: installed `0.115.0` against a catalog holding `0.116.0`
+ * answered "Choose a released version explicitly to switch this plugin source",
+ * a source switch that never happened.
+ *
+ * A repository or archive spec is a different question and still answers no:
+ * replacing one of those with a registry install IS a source switch.
  * @param plugin - Catalog entry whose releases were published.
  * @param spec - Dependency spec as the profile records it.
- * @returns true when the spec resolves to a version this entry published.
+ * @returns true when the spec resolves through the registry this entry publishes to.
  */
 export function isPublishedReleaseSpec(plugin: { releases?: PublishedRelease[] }, spec: string): boolean {
   if (plugin.releases?.some(release => release.tarball === spec) === true) return true
-  const version = BARE_VERSION_RE.exec(spec)?.[1]
-  return version !== undefined && plugin.releases?.some(release => release.version === version) === true
+  return BARE_VERSION_RE.test(spec)
 }
 

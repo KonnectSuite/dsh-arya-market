@@ -71,6 +71,16 @@ vi.mock('../src/updates.ts', async importOriginal => {
   }
 })
 
+// The real one downloads and verifies the archive; which archive the route
+// decides to install is what these specs assert, so identify it by name.
+vi.mock('../src/arya.ts', async importOriginal => {
+  const original = await importOriginal<typeof import('../src/arya.ts')>()
+  return {
+    ...original,
+    stageAryaRelease: async (plugin: { name: string }, version: string) => tarballOf(plugin.name, version),
+  }
+})
+
 let directory: string
 let server: Server
 let base: string
@@ -161,6 +171,21 @@ it('names the drift without offering a swap when the install is a catalog archiv
   // The catalog's own answer stands (0.2.0 IS newer than the installed 0.1.0),
   // and the newer npm release is named rather than silently dropped.
   expect(updates[FIRST]).toMatchObject({ latest: '0.2.0', updateAvailable: true, catalogueDrift: { npm: '0.3.0', catalog: '0.2.0' } })
+})
+
+it('updates an install whose version the catalog never recorded, instead of calling it a source switch', async () => {
+  // The shape that made every later update fail with "Choose a released
+  // version explicitly to switch this plugin source": a registry pin at a
+  // version the catalog never listed, because that release skipped the
+  // recording step. The bare version is the registry — the same source every
+  // catalog release is published from — so the update must proceed.
+  catalogVersions = ['0.3.0', '0.2.0']
+  await fetch(`${base}/dsh-market/update`, {
+    method: 'POST',
+    headers: { origin: base, 'content-type': 'application/json' },
+    body: JSON.stringify({ name: FIRST }),
+  })
+  expect(runPlugin).toHaveBeenCalledWith('web', ['add', tarballOf(FIRST, '0.3.0')])
 })
 
 it('keeps a catalog install from being turned into a registry one it cannot roll back', async () => {

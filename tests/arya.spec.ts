@@ -112,8 +112,17 @@ describe('isPublishedReleaseSpec', () => {
     expect(isPublishedReleaseSpec(entry, '~0.113.0')).toBe(true)
   })
 
-  it('still refuses a version this catalog never published', () => {
-    expect(isPublishedReleaseSpec(entry, '0.200.0')).toBe(false)
+  it('treats any registry pin as this entry\'s own source, recorded or not', () => {
+    // A version the catalog never listed is the routine result of publishing to
+    // npm without recording the release. It is still the registry, so it must
+    // not be read as a source switch — that refusal is permanent, and it is
+    // what made an installed 0.115.0 refuse every update against a catalog
+    // holding 0.116.0.
+    expect(isPublishedReleaseSpec(entry, '0.200.0')).toBe(true)
+    expect(isPublishedReleaseSpec(entry, '^0.200.0')).toBe(true)
+  })
+
+  it('still refuses a repository or an archive as a same-source install', () => {
     expect(isPublishedReleaseSpec(entry, 'github:somebody/polish')).toBe(false)
     expect(isPublishedReleaseSpec(entry, 'file:C:/tmp/polish.tgz')).toBe(false)
   })
