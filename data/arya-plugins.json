@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-03T19:49:55.961Z",
+  "updated": "2026-11-03T20:22:21.253Z",
   "count": 6,
   "categories": {
     "arya": {
@@ -307,6 +307,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.115.1",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.115.1.tgz",
+          "sha256": "47abd647969ca17ea5ed33f55638a394c04e310985a934bc10135884384fb84a"
+        },
         {
           "version": "0.114.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.114.0.tgz",
@@ -905,8 +910,8 @@
           "sha256": "5900bd5df144f570b62b40fc0a8eda8e1033a67bf2bb1dc729422fe692c6cb37"
         }
       ],
-      "version": "0.114.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.114.0.tgz"
+      "version": "0.115.1",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-aryacode-polish/-/dsh-aryacode-polish-0.115.1.tgz"
     },
     {
       "name": "@aryacode/dsh-native-window",
