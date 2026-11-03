@@ -1,0 +1,39 @@
+name: Catalogue parity
+
+# The market answers "is there an update?" from the catalog for every package
+# it lists — so a release that reaches npm and is never recorded does not read
+# as "unannounced", it reads as "up to date", on every machine, silently.
+#
+# Publishing touches npm and the catalog in two steps and the second one is the
+# one people forget. This is the alarm that does not forget: once a day it
+# compares every entry with npm and with the archive it pins.
+#
+# It is expected to be RED when a release skipped the catalog step. That is the
+# signal. Fixing it is one command:
+#   node scripts/publish-arya-release.mjs --npm <version> --source <repo> --push
+
+on:
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalogue-parity
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Downloads each entry's newest archive to check the pinned sha256, which
+      # is the half of the check that catches a replaced or re-cut tarball.
+      - name: every catalog entry matches npm, and its pinned archive
+        run: node scripts/check-catalogue-parity.mjs

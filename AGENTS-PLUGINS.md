@@ -153,31 +153,63 @@ not. Do not publish a second version on the strength of an earlier approval, and
 
 ## 6. Gate 4 — publication
 
-Run from `C:\Users\KNPhu\.arya\github\KonnectSuite\dsh-market`. Order matters.
+Run from `C:\Users\KNPhu\.arya\github\KonnectSuite\dsh-arya-market`. One command does the whole gate:
 
 ```powershell
-# 1. npm — bump the version in the plugin repository first, then publish from there
-npm publish
+# 0. in the PLUGIN repository: bump the version, commit, push, npm publish
+#    (or push the v* tag and let that repository's release workflow do it)
 
-# 2. confirm the registry actually has it (the web index lags minutes)
-#    https://registry.npmjs.org/@aryacode%2F<package> -> dist-tags.latest
+# 1. record it, publish it, and prove it landed
+node scripts/publish-arya-release.mjs --npm 0.2.8 --source KonnectSuite/dsh-native-window --push
+```
 
-# 3. pull the current catalogue — the release script starts from an EMPTY catalogue when the file
-#    is absent, and pushing that would delete every other plugin
-node scripts/publish-arya-catalog.mjs --pull
+`--push` exits 0 only when the `catalog` branch serves that version with that digest. Anything else
+is a release users cannot see, and the command says so instead of returning quietly.
 
-# 4. record the release (existing entry: the name comes from the entry)
-node scripts/publish-arya-release.mjs --npm 0.2.8 --source KonnectSuite/dsh-native-window
+First-time entry — `--name` and both descriptions are required:
 
-#    first-time entry: --name and both descriptions are required
+```powershell
 node scripts/publish-arya-release.mjs --npm 0.2.8 --source KonnectSuite/dsh-native-window `
   --name '@aryacode/dsh-native-window' `
   --description 'English sentence for the card' `
-  --description-zh '卡片上的中文说明'
-
-# 5. push (rewrites data/arya-plugins.json on the `catalog` branch through the API)
-node scripts/publish-arya-catalog.mjs --push
+  --description-zh '卡片上的中文说明' `
+  --push
 ```
+
+### What that command does, in order
+
+Each step is a way a release has gone missing, which is why they are one command and not five:
+
+1. **`publish-arya-catalog.mjs --pull`** — the catalog lives on its own branch and the local file is
+   only a cache. Recording onto a stale copy pushes an entry missing everything that landed since;
+   recording onto an absent one pushes only this plugin and deletes the rest. That is why `--push`
+   pulls first, and why recording with no local copy at all is now refused instead of writing a
+   one-plugin catalog.
+2. **Record** — download the published tarball, refuse it unless it carries `dsh.bundle.patch` and no
+   `workspace:` / `link:` / `file:` dependency and no credentials, and pin its `sha256`. A published
+   version whose bytes differ is refused: bump the version, never rewrite the entry.
+3. **`--push`** — rewrite the branch through the API, then poll it until the entry, its version and
+   its `sha256` are all present.
+4. **Report** — `the branch serves <name>@<version>`, and separately whether the CDN in front of the
+   raw URL is already serving it. The branch is the authority; the CDN is minutes.
+
+Without `--push` nothing is published. The script prepares the local file and says so — "the JSON
+looks right" is not a released plugin, and that gap is what made publishing feel random.
+
+`--verify` asks the same question after the fact, for a release that was pushed earlier: it writes
+nothing, pushes nothing, and exits 0 only when the branch serves that version with that digest.
+
+### The check that catches a skip
+
+```powershell
+node scripts/check-catalogue-parity.mjs
+```
+
+Read-only, no build needed. It compares every catalogue entry against npm's `latest` and against the
+digest its own tarball serves, and says which entries are on npm but not in the catalogue. That is the
+state where users are shown "up to date" for a release that exists — the failure this is here to make
+impossible to miss. Run it before a release and after one; `--strict` also fails on the
+manifest-vs-catalogue list disagreements.
 
 Then verify the live document — this, not the local file, is what users' apps read:
 
@@ -192,6 +224,22 @@ to prove the push landed. Confirm `count`, the entry's `version`, its `releases[
 
 The release script refuses to overwrite a published version with different bytes. If that happens,
 the version was reused: bump it, do not rewrite the entry by hand.
+
+### Why the catalogue entry is also the 24-hour answer
+
+`minimumReleaseAge` refuses a version younger than its window (1440 minutes — 24 hours — whenever the
+profile does not set it explicitly). A **catalogue** install sidesteps it completely: the market
+downloads the tarball itself, verifies the `sha256` and installs a `file:` spec, so pnpm never
+resolves it from the registry and there is no fresh-release window to wait out.
+
+An install that came from **npm** (a bare `"0.115.0"` in the profile's `package.json`) has no such
+shortcut, and on a Desktop host the market takes no one-shot bypass either — that click can only fail
+until the window passes.
+
+So the entry is not documentation of a release. It is the delivery path that works on publication
+day, on every machine, whatever that machine's `minimumReleaseAge` says. When an agent reports "npm
+only allows an update every 24 hours", it is describing the npm path; recording the release in the
+catalogue is the way around it, and `--push` is what makes that real.
 
 ### What the catalogue enforces
 
@@ -282,7 +330,10 @@ engineering bundle and Better Sidebar). The seed and the catalogue are different
 
 - [ ] Approval exists for this exact version.
 - [ ] `npm publish` succeeded and `latest` on the registry shows it.
-- [ ] `--pull` run (catalogue not empty), entry recorded, `--push` reported the expected count.
+- [ ] `node scripts/check-catalogue-parity.mjs` exits 0 — no entry is on npm but missing from the
+      catalogue, and every pinned `sha256` matches the archive it points at.
+- [ ] `--push` reported `the branch serves <name>@<version>` (it pulls, records, pushes and verifies
+      in one command; without it nothing is published).
 - [ ] Live catalogue shows the version, its `sha256` matches the published tarball, tarball answers
       200.
 - [ ] The plugin repository is committed and pushed, with the version and digest recorded in
@@ -299,5 +350,6 @@ engineering bundle and Better Sidebar). The seed and the catalogue are different
 | Live catalogue URL | `https://raw.githubusercontent.com/KonnectSuite/dsh-arya-market/catalog/data/arya-plugins.json` |
 | Validation rules | `lib/arya.js` (`validateAryaRegistry`, `stageAryaRelease`) |
 | Publish scripts | `scripts/publish-arya-catalog.mjs`, `scripts/publish-arya-release.mjs` |
+| Drift check | `scripts/check-catalogue-parity.mjs` (read-only, no build needed) |
 | Dev build and seed | `C:\Users\KNPhu\.arya\github\KonnectSuite\AryaCode` (`apps/desktop/seed`) |
 | npm packages | `https://registry.npmjs.org/@aryacode%2F<package>` |
