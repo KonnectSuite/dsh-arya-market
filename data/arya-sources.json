@@ -109,6 +109,38 @@
         "en": "Google Remote Desktop sidebar page with a persistent sign-in",
         "zh": "带持久登录的 Google 远程桌面侧边栏页面"
       }
+    },
+    {
+      "name": "@aryacode/dsh-engineering",
+      "source": "KonnectSuite/dsh-engineering",
+      "description": {
+        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with HMI-to-PLC cross-references, standards checks, and ladder and display previews drawn as diagrams.",
+        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含 HMI 与 PLC 交叉引用、规范检查以及梯形图与画面预览。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-aryacode-polish",
+      "source": "KonnectSuite/dsh-aryacode-polish",
+      "description": {
+        "en": "AryaCode Polish: one install for the small things that make AryaCode feel finished. One Plugins row, one switch per quality-of-life feature.",
+        "zh": "AryaCode 润色：一次安装，补齐让 AryaCode 更顺手的小细节。一个插件行，每个体验功能一个开关。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-arya-maildesk",
+      "source": "KonnectSuite/dsh-arya-maildesk",
+      "description": {
+        "en": "A real mail panel for the Outlook you are already signed into: folders, multi-select, a safe HTML reading pane, replies that stay drafts in the harness, a draft card in the chat and a draft tab beside it. No Azure app registration, no admin consent.",
+        "zh": "为已登录的 Outlook 装上真正的邮件面板：文件夹、多选列表、安全的 HTML 阅读、留在 harness 里的回复草稿、聊天中的草稿卡片，以及并排的草稿侧栏。无需 Azure 应用注册，无需管理员授权。"
+      }
+    },
+    {
+      "name": "dsh-arya-image-gen",
+      "source": "KonnectSuite/dsh-arya-image-gen",
+      "description": {
+        "en": "ComfyUI-native image generation for DeepSeek Harness: chat tools, infinite canvas, Studio workbench, workflow comparison, and built-in ComfyUI server control.",
+        "zh": "面向 DeepSeek Harness 的 ComfyUI 原生图像生成插件：对话生图、无限画布、Studio 工作台、工作流对比与内置 ComfyUI 服务控制。"
+      }
     }
   ]
 }

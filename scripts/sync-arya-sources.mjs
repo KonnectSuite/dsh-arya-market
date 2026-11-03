@@ -93,8 +93,18 @@ const next = {
 }
 const text = `${JSON.stringify(next, null, 2)}\n`
 
-// The published catalog must list exactly these packages; drift means an entry
-// was retired, renamed, or published without being registered.
+// Drift, in the two directions, which are not the same fact:
+//
+//   catalog but not manifest  — the manifest does not name a package the
+//                               catalog publishes, so nothing here records its
+//                               repository. That is an omission in the
+//                               manifest, and it fails this run.
+//   manifest but not catalog  — a package planned for the market channel that
+//                               has no release yet. The catalog cannot list it
+//                               before npm has it, so it is a normal state and
+//                               only reported. `check-catalogue-parity.mjs` is
+//                               the check that can tell "planned" from
+//                               "published and forgotten", because it asks npm.
 let catalogNames = new Set()
 try {
   catalogNames = new Set(readJson(CATALOG).plugins.map(plugin => plugin.name))
@@ -106,8 +116,8 @@ const manifestNames = new Set(market.map(plugin => plugin.name))
 const catalogOnly = [...catalogNames].filter(name => !manifestNames.has(name))
 const manifestOnly = [...manifestNames].filter(name => !catalogNames.has(name))
 if (catalogOnly.length > 0) console.error(`sync-arya-sources: in the catalog but not the manifest: ${catalogOnly.join(', ')}`)
-if (manifestOnly.length > 0) console.error(`sync-arya-sources: in the manifest but not the catalog: ${manifestOnly.join(', ')}`)
-if (catalogOnly.length > 0 || manifestOnly.length > 0) process.exitCode = 1
+if (manifestOnly.length > 0) console.log(`sync-arya-sources: ${String(manifestOnly.length)} planned entries with no catalog release yet: ${manifestOnly.join(', ')}`)
+if (catalogOnly.length > 0) process.exitCode = 1
 
 let current = ''
 try { current = readFileSync(SOURCES, 'utf8') } catch { /* first run */ }

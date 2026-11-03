@@ -222,16 +222,52 @@ try {
 }
 const sourceNames = new Set(sources.map(plugin => plugin.name))
 const catalogNames = new Set(catalog.plugins.map(plugin => plugin.name))
-// Both directions are reported but not fatal: an unpublished plugin is a
-// normal state, and a catalog entry outside the manifest may predate it. What
-// matters is that the two lists are KNOWN to disagree instead of silently
-// diverging — a package that lives only in the manifest can never update
-// through the catalog, only through npm and its release-age wait.
+// The two lists, compared in both directions and reported differently, because
+// they mean different things: see npmProbe below for the manifest side, and
+// `unregistered` for a catalog entry nothing here names a repository for.
 const manifestOnly = [...sourceNames].filter(name => !catalogNames.has(name)).sort()
 const catalogOnly = sourceNames.size === 0 ? [] : [...catalogNames].filter(name => !sourceNames.has(name)).sort()
 
+/**
+ * A manifest entry npm has never served is a PLAN, not a defect: the catalog
+ * cannot list an entry before a release exists. One npm DOES serve and the
+ * catalog does not list is a real gap — the package is installable by name,
+ * and every update to it takes the npm path and its fresh-release wait, with
+ * no catalog answer to fall forward to. Reported separately, because a list
+ * of eleven planned packages beside one real gap is how the real gap stops
+ * being read.
+ */
+async function npmProbe(name) {
+  try {
+    const document = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)
+    return { state: 'published', version: typeof document.version === 'string' ? document.version : null }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return /HTTP 404/.test(detail) ? { state: 'unpublished' } : { state: 'unknown', detail }
+  }
+}
+
+const planned = []
+if (values.json || manifestOnly.length > 0) {
+  for (const name of manifestOnly) {
+    const probe = await npmProbe(name)
+    if (probe.state === 'published') {
+      warnings.push({
+        kind: 'published-not-listed',
+        package: name,
+        detail: `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, so it cannot be installed or updated from the market, only by name. Record it: node scripts/publish-arya-release.mjs --npm ${probe.version ?? '<version>'} --source <repo> --push`,
+      })
+    } else if (probe.state === 'unpublished') {
+      planned.push(name)
+    } else {
+      warnings.push({ kind: 'npm-probe-failed', package: name, detail: `${name}: could not tell whether npm serves it (${probe.detail})` })
+    }
+  }
+}
+
 const strict = process.argv.includes('--strict')
-const blocking = errors.length + (strict ? warnings.length + manifestOnly.length + catalogOnly.length : 0)
+const warningCount = warnings.length + catalogOnly.length
+const blocking = errors.length + (strict ? warningCount : 0)
 
 if (values.json) {
   console.log(JSON.stringify({
@@ -241,7 +277,7 @@ if (values.json) {
     rows,
     errors,
     warnings,
-    manifestOnly,
+    planned,
     catalogOnly,
   }, null, 2))
 } else {
@@ -256,14 +292,14 @@ if (values.json) {
   console.log('')
   for (const item of errors) console.log(`  ERROR ${item.kind}: ${item.detail}`)
   for (const item of warnings) console.log(`  warning ${item.kind}: ${item.detail}`)
-  if (manifestOnly.length > 0) {
-    console.log(`  warning manifest-vs-catalog: in data/arya-sources.json but never published, so no catalog update can ever reach them: ${manifestOnly.join(', ')}`)
-  }
   if (catalogOnly.length > 0) {
-    console.log(`  warning manifest-vs-catalog: published but absent from data/arya-sources.json: ${catalogOnly.join(', ')}`)
+    console.log(`  warning unregistered: published but absent from data/arya-sources.json, so nothing here names their repository: ${catalogOnly.join(', ')}`)
   }
-  const summary = `${String(errors.length)} error(s), ${String(warnings.length + manifestOnly.length + catalogOnly.length)} warning(s)`
-  console.log(errors.length === 0 && blocking === 0
+  if (planned.length > 0) {
+    console.log(`  planned: ${String(planned.length)} manifest entries with no npm release yet (nothing to list): ${planned.join(', ')}`)
+  }
+  const summary = `${String(errors.length)} error(s), ${String(warningCount)} warning(s), ${String(planned.length)} planned`
+  console.log(errors.length === 0 && warningCount === 0
     ? `\nparity: in parity for every installable entry — ${summary}`
     : `\nparity: ${summary}`)
 }
