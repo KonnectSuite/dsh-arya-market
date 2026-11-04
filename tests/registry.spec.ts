@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { describeFetchFailure, forgetCatalog, loadRegistry } from '../src/registry.ts'
+import { describeFetchFailure, forgetCatalog, loadRegistry, pluginPreviousNpm } from '../src/registry.ts'
 import { configuredProxy, marketFetch } from '../src/net.ts'
 
 /**
@@ -240,17 +240,20 @@ describe('loadRegistry download regions', () => {
     // must mean a slow market, not an empty one.
     const stub = byUrl([
       [/mirrors\.cloud\.tencent\.com/, new Error('fetch failed')],
+      // The second mirror is dead too — the state #1051 reported: one refused
+      // mirror left the origin as the only other host.
+      [/registry\.npmmirror\.com/, new Error('fetch failed')],
       [/awesome-dsh-plugin\.com/, ok(CATALOG)],
     ])
     const registry = await loadRegistry('china')
     expect(registry.plugins).toHaveLength(1)
-    // Two attempts at the package, then the origin.
-    expect(stub).toHaveBeenCalledTimes(3)
+    // Two attempts at each mirror, then the origin.
+    expect(stub).toHaveBeenCalledTimes(5)
   })
 
   it('reports every attempt it made when the whole list fails', async () => {
     byUrl([[/./, new Error('fetch failed')]])
-    await expect(loadRegistry('china')).rejects.toThrow(/4 attempts/)
+    await expect(loadRegistry('china')).rejects.toThrow(/6 attempts/)
   })
 
   it('stops at its own region when that region answers (#891)', async () => {
@@ -559,6 +562,36 @@ describe('marketFetch', () => {
     )
   })
 
+  it('tries straight through when a LOOPBACK proxy refuses the host (#1042)', async () => {
+    // The report: the Desktop host runs a proxy on 127.0.0.1 whose port
+    // changes every session, allows only its own list of hosts, and answers
+    // 403 to any CONNECT for the catalog's domain — while `curl` straight to
+    // the same URL worked. A proxy on loopback is on this machine, so the
+    // same request may simply be repeated without it.
+    process.env.https_proxy = 'http://127.0.0.1:50007'
+    undici.fetch
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    const res = await marketFetch('https://awesome-dsh-plugin.com/plugins.json')
+
+    expect(await res.text()).toBe('ok')
+    expect(undici.fetch).toHaveBeenCalledTimes(2)
+    expect((undici.fetch.mock.calls[1]?.[1] as { dispatcher?: unknown }).dispatcher).toEqual({ direct: true })
+  })
+
+  it('never goes around a proxy that is not on this machine', async () => {
+    // A proxy elsewhere was configured on purpose; repeating the request
+    // directly could put it outside the network that person is meant to be
+    // on. The failure has to be reported as it always was.
+    process.env.https_proxy = 'http://proxy.corp.example:8080'
+    undici.fetch.mockRejectedValueOnce(new TypeError('fetch failed'))
+
+    await expect(marketFetch('https://catalog.example/plugins.json')).rejects.toThrow('fetch failed')
+
+    expect(undici.fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('uses its own dispatcher when no proxy is configured (#742)', async () => {
     // Node 22's global fetch shares a dispatcher symbol with undici 8. After
     // the host's first web_fetch import, that symbol points at a wrapper the
@@ -706,3 +739,25 @@ describe('loadRegistry body deadlines (the catalog outgrew a total one)', () => 
     await expect(loadRegistry()).rejects.toThrow(/the catalog response carried no body/)
   })
 })
+
+describe('pluginPreviousNpm (#1012 P1)', () => {
+  it('keeps valid former names and drops anything the runtime cannot trust', async () => {
+    expect(pluginPreviousNpm({ name: 'evo', npm: 'dsh-evo-subagent', previousNpm: ['evo-subagent-old', '@scope/legacy'] }))
+      .toEqual(['evo-subagent-old', '@scope/legacy'])
+  })
+
+  it('drops the entry itself, invalid names and duplicates', async () => {
+    expect(pluginPreviousNpm({
+      name: 'evo',
+      npm: 'dsh-evo-subagent',
+      previousNpm: ['EVO', 'dsh-evo-subagent', 'not a name', '', 'old', 'OLD'],
+    })).toEqual(['old'])
+  })
+
+  it('treats an absent or malformed declaration exactly like no declaration', async () => {
+    expect(pluginPreviousNpm({ name: 'evo', npm: 'evo' })).toEqual([])
+    expect(pluginPreviousNpm({ name: 'evo', npm: 'evo', previousNpm: 'old' })).toEqual(['old'])
+    expect(pluginPreviousNpm({ name: 'evo', npm: 'evo', previousNpm: [] })).toEqual([])
+  })
+})
+

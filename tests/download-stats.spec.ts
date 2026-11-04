@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { downloadStatsText } from '../src/client/download-stats.ts'
+import { downloadStatistic, downloadStatsText, starStatsText } from '../src/client/download-stats.ts'
 import { en, zh } from '../src/client/locales.ts'
 import type { Translate } from '../src/client/market-data.ts'
 
@@ -7,35 +7,53 @@ const english: Translate = key => en[key]
 const chinese: Translate = key => zh[key]
 
 describe('download statistic disclosure', () => {
-  it('uses exact source values and explains rolling counts in both languages', () => {
+  it('keeps npm and lifetime totals distinct, preserves real zero and rejects invalid totals', () => {
+    expect(downloadStatistic({ downloads: 0, githubReleaseDownloads: 7000 })).toEqual({ source: 'npm', count: 0 })
+    expect(downloadStatistic({ downloads: null, githubReleaseDownloads: 0 })).toEqual({ source: 'github', count: 0 })
+    for (const count of [-1, NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1])
+      expect(downloadStatistic({ downloads: null, githubReleaseDownloads: count })).toBeNull()
+    expect(starStatsText({ stars: 45, starsCheckedAt: '2026-10-31T08:35:00.000Z' }, english)).toContain('2026-10-31 08:35 UTC')
+    expect(starStatsText({ stars: 45, starsCheckedAt: '2026-02-30' }, english)).not.toContain('2026')
+    expect(starStatsText({ stars: 0 }, english)).toContain('0')
+  })
+
+  it('shows GitHub release downloads without calling them an npm 30-day window', () => {
+    const stats = { downloads: null, githubReleaseDownloads: 4754, githubReleaseDownloadsCheckedAt: '2026-10-31T08:35:00.000Z' }
+    for (const t of [english, chinese]) {
+      const text = downloadStatsText(stats, t)
+      expect(text).toContain('4754')
+      expect(text).toContain('GitHub')
+      expect(text).not.toContain('npm')
+      expect(text).toContain('2026-10-31')
+    }
+  })
+
+  it('names the exact count and the window in both languages', () => {
     const stats = { downloads: 12345, downloadsStart: '2026-08-25', downloadsEnd: '2026-09-23', downloadsCheckedAt: '2026-09-24' }
     for (const t of [english, chinese]) {
       const text = downloadStatsText(stats, t)!
       expect(text).toContain('12345')
       expect(text).toContain(stats.downloadsStart)
       expect(text).toContain(stats.downloadsEnd)
-      expect(text).toContain(stats.downloadsCheckedAt)
+      expect(text).not.toContain(stats.downloadsCheckedAt)
       expect(text).not.toContain('12.3k')
     }
     // Compared against the copy's own template, not a phrase copied out of it:
     // a wording change must not be able to fail this test, only a wiring change.
     expect(downloadStatsText(stats, english)).toBe(
       en.downloadsMeaning.replace('{0}', '12345')
-      + ' ' + en.downloadsWindow.replace('{0}', stats.downloadsStart).replace('{1}', stats.downloadsEnd)
-      + ' ' + en.downloadsChecked.replace('{0}', stats.downloadsCheckedAt),
+      + en.downloadsWindow.replace('{0}', stats.downloadsStart).replace('{1}', stats.downloadsEnd),
     )
     expect(downloadStatsText(stats, chinese)).toBe(
       zh.downloadsMeaning.replace('{0}', '12345')
-      + ' ' + zh.downloadsWindow.replace('{0}', stats.downloadsStart).replace('{1}', stats.downloadsEnd)
-      + ' ' + zh.downloadsChecked.replace('{0}', stats.downloadsCheckedAt),
+      + zh.downloadsWindow.replace('{0}', stats.downloadsStart).replace('{1}', stats.downloadsEnd),
     )
   })
 
   it('retains zero and does not fabricate dates for legacy counts', () => {
     const text = downloadStatsText({ downloads: 0 }, english)
-    expect(text).toContain('downloads: 0')
-    expect(text).toContain(en.downloadsWindowUnknown)
-    expect(text).toContain(en.downloadsCheckedUnknown)
+    expect(text).toBe(en.downloadsMeaning.replace('{0}', '0'))
+    expect(text).not.toContain('2026')
   })
 
   it.each([undefined, null, -1, NaN, Infinity, 1.5])('omits an unknown or invalid count (%s)', downloads => {
@@ -48,15 +66,18 @@ describe('download statistic disclosure', () => {
     { downloadsStart: '2026-02-30', downloadsEnd: '2026-03-01' },
     { downloadsStart: '2026-09-23', downloadsEnd: '2026-08-25' },
     { downloadsStart: '<script>', downloadsEnd: '2026-09-23' },
-  ])('reports incomplete/invalid/reversed windows as unknown: %j', fields => {
-    expect(downloadStatsText({ downloads: 7, ...fields }, english)).toContain(en.downloadsWindowUnknown)
+  ])('omits an incomplete/invalid/reversed window: %j', fields => {
+    expect(downloadStatsText({ downloads: 7, ...fields }, english)).toBe(
+      en.downloadsMeaning.replace('{0}', '7'),
+    )
   })
 
-  it('preserves a supplied UTC check timestamp without substituting fetch time', () => {
+  it('does not put the source-check timestamp on the hover tip', () => {
     expect(downloadStatsText({ downloads: 7, downloadsCheckedAt: '2026-09-24T10:20:30.000Z' }, english))
-      .toContain('2026-09-24T10:20:30.000Z')
+      .toBe(en.downloadsMeaning.replace('{0}', '7'))
     for (const downloadsCheckedAt of ['yesterday', '2026-02-30', '2026-09-24T99:00:00Z']) {
-      expect(downloadStatsText({ downloads: 7, downloadsCheckedAt }, english)).toContain(en.downloadsCheckedUnknown)
+      expect(downloadStatsText({ downloads: 7, downloadsCheckedAt }, english))
+        .toBe(en.downloadsMeaning.replace('{0}', '7'))
     }
   })
 })

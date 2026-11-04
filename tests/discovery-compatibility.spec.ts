@@ -28,6 +28,13 @@ function facts(over: Partial<NpmManifestFacts> = {}): NpmManifestFacts {
 }
 
 describe('deriveHostCompatibility', () => {
+  it('recognizes explicit equality peers and refuses hosts outside the exact pin', () => {
+    const declared = facts({ peerDependencies: { '@deepseek-ai/dsh-tools': '=0.2.0-rc.2' } })
+    expect(deriveHostCompatibility(declared, '0.2.0-rc.2', HOST_PACKAGES).status).toBe('compatible')
+    expect(deriveHostCompatibility(declared, '0.2.0-rc.1', HOST_PACKAGES).status).toBe('incompatible')
+    expect(deriveHostCompatibility(declared, '0.2.0-rc.3', HOST_PACKAGES).status).toBe('incompatible')
+  })
+
   it('uses engines.dsh and lockstep DSH peers while excluding Cordis and schemastery', () => {
     const result = deriveHostCompatibility(facts({
       enginesDsh: '>=0.1.1-rc.2',
@@ -349,6 +356,21 @@ describe('findCompatibleVersion (#581)', () => {
   const HOST = '0.1.5-rc.3'
   const packument = (versions: Record<string, Record<string, unknown>>): typeof fetch =>
     (async () => new Response(JSON.stringify({ versions }), { status: 200 })) as unknown as typeof fetch
+
+  it('finds the compatible dsh-sidenote release declared with an explicit equality union', () => {
+    const legacyRange = '=0.2.0-rc.2 || =0.2.1-rc.2 || =0.2.1-rc.3'
+    return expect(findCompatibleVersion(
+      'dsh-sidenote', '0.2.0-rc.2', new Set([...HOST_PACKAGES, '@deepseek-ai/dsh-client-ui-primitives']), 'https://registry.example',
+      packument({
+        '0.7.6': {
+          version: '0.7.6',
+          engines: { dsh: legacyRange },
+          peerDependencies: { '@deepseek-ai/dsh-client-ui-primitives': legacyRange },
+        },
+        '0.8.0': { version: '0.8.0', engines: { dsh: '>=0.2.1-rc.2 <0.2.2-0' } },
+      }),
+    )).resolves.toBe('0.7.6')
+  })
 
   it('returns the newest release whose own declaration this host satisfies', () => {
     return expect(findCompatibleVersion(

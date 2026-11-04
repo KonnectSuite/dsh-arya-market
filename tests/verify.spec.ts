@@ -284,6 +284,29 @@ describe('verifyActivation (P0-2)', () => {
       .toMatchObject({ state: 'restart', bundle: true })
   })
 
+  /**
+   * #1023: a row the host created and never started is not a pending change.
+   * "Restart to apply" promised a banner the next start could not clear —
+   * restarting re-runs the same import.
+   */
+  it('reads a bundle row the loader never started as failed, not as a pending restart', () => {
+    profile(['dsh-at-file'])
+    pkg('dsh-at-file', { dsh: { bundle: { patch: './cordis.patch.yml' } }, main: 'index.js' }, {
+      'index.js': '',
+      'cordis.patch.yml': "- insert:\n  - id: 'dsh-at-file'\n    name: 'dsh-at-file'\n",
+    })
+    // No row at all: the ordinary "applies on the next start" answer.
+    expect(verifyActivation('web', 'dsh-at-file', new Set())).toMatchObject({ state: 'restart' })
+    // The loader made a row and it has no fiber: the start tried and failed.
+    const stalled = verifyActivation('web', 'dsh-at-file', new Set(), undefined, false, undefined, true, true)
+    expect(stalled).toMatchObject({ state: 'failed', bundle: true, hot: false })
+    expect(String(stalled.reasons[0])).toMatch(/没能加载/)
+    expect(String(stalled.reasons[0])).toMatch(/could not load/)
+    // A live row wins over the flag: the composition is the ground truth (#135).
+    expect(verifyActivation('web', 'dsh-at-file', new Set(['dsh-at-file']), undefined, false, undefined, true, true))
+      .toMatchObject({ state: 'live' })
+  })
+
   it('does not let an unrelated or unreadable patch soften a real defect', () => {
     const dir = profile(['dsh-broken'])
     pkg('dsh-broken', { main: 'index.js' }, { 'index.js': '' })

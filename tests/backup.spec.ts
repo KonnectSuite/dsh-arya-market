@@ -146,7 +146,26 @@ describe('profile backup and restore', () => {
     writeFileSync(join(dir, 'package.json'), '{}')
     writeFileSync(join(dir, 'huge.yml'), 'x'.repeat(3 * 1024 * 1024))
     expect(() => createProfileBackup('web')).toThrow(/整份备份放不下/)
-    expect(() => createProfileBackup('web')).toThrow(/Export selected plugins/)
+    // The way out has to be one that works: ticking "include config files"
+    // after choosing plugins walks the same profile and fails the same way
+    // (#1064), so the sentence says not to.
+    expect(() => createProfileBackup('web')).toThrow(/export selected plugins instead/i)
+    expect(() => createProfileBackup('web')).toThrow(/Include config files/)
+  })
+
+  it('skips a non-hidden cache directory instead of calling it configuration (#1064)', () => {
+    // `<profile>/cache` is written by another component, not by the market
+    // (its own cache is `.dsh-market`). It is not hidden, so the #972 rule
+    // missed it: a few multi-megabyte json files in there made the whole
+    // profile unbackupable and the error blamed the profile.
+    const dir = profileDir('web')
+    mkdirSync(join(dir, 'cache', 'json'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), '{"dependencies":{}}')
+    writeFileSync(join(dir, 'cordis.patch.yml'), '- config: true')
+    writeFileSync(join(dir, 'cache', 'json', 'big.json'), JSON.stringify('x'.repeat(2 * 1024 * 1024)))
+
+    const backup = createProfileBackup('web')
+    expect(backup.files.map(file => file.path)).toEqual(['cordis.patch.yml', 'package.json'])
   })
 
   it('rejects traversal paths without touching the profile', () => {
@@ -202,6 +221,30 @@ describe('profile backup and restore', () => {
     ])
     await expect(uploadWebdav('https://rebinding.example/backup.json', '', '', backup)).rejects.toThrow(/127\.0\.0\.1/)
     expect(network.request).not.toHaveBeenCalled()
+  })
+
+  it('explains a 401 instead of reporting the bare status (#1058)', async () => {
+    // The most common upload failure is also the most fixable one: the
+    // password is never stored, so a reload leaves the field empty and the
+    // server answers 401. The message has to name the cause and the way out.
+    const dir = profileDir('web')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), '{}')
+    const backup = createProfileBackup('web')
+    network.request.mockImplementation((_options, callback) => {
+      const response = Readable.from([])
+      Object.assign(response, { statusCode: 401, headers: {} })
+      const request = Object.assign(new EventEmitter(), { end: vi.fn() })
+      queueMicrotask(() => callback(response))
+      return request
+    })
+
+    const failure = await uploadWebdav('https://dav.example/dsh/backup.json', 'u', '', backup)
+      .catch((error: unknown) => String((error as Error).message))
+
+    expect(failure).toMatch(/401/u)
+    expect(failure).toMatch(/重新输入/u)
+    expect(failure).toMatch(/rejected these credentials/u)
   })
 
   it('uploads and downloads the same backup through WebDAV', async () => {

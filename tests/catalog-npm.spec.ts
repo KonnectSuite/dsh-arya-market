@@ -142,6 +142,73 @@ describe('catalogFromPackage', () => {
     expect(requested).toHaveLength(2)
   })
 
+  /**
+   * A tarball that keeps arriving, just slowly (#1049).
+   *
+   * The npm source used to hold the whole download to a fixed 20s ceiling. At
+   * 3.2 MB that needs 158 KB/s, and a China mirror measured jittering to
+   * 17–40 KB/s could not make it: both attempts died at the ceiling while
+   * bytes were still moving, and the catalog fell through to a source that
+   * took longer still. Slow-but-moving has to finish; only a silent link is
+   * a failure.
+   */
+  it('finishes a tarball that keeps arriving past the old 20s ceiling (#1049)', async () => {
+    vi.useFakeTimers()
+    try {
+      const version = '2026.10.28'
+      const tar = tarball([['package/plugins.json', JSON.stringify(CATALOG)]])
+      const step = Math.ceil(tar.length / 7)
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          // Seven slices, one every 5s: 35s end to end — longer than the old
+          // total budget, with every gap well inside the stall watchdog.
+          for (let index = 0; index < 8; index++) {
+            setTimeout(() => {
+              const slice = tar.subarray(index * step, (index + 1) * step)
+              if (slice.length > 0) controller.enqueue(new Uint8Array(slice))
+              if (index === 7) controller.close()
+            }, index * 5_000)
+          }
+        },
+      })
+      vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+        const url = String(input)
+        if (url.endsWith('/latest')) {
+          return new Response(JSON.stringify({ version, dist: { tarball: `${REGISTRY}/x/-/x-${version}.tgz` } }))
+        }
+        return new Response(body)
+      }))
+      const result = catalogFromPackage(REGISTRY, 'awesome-dsh-plugin')
+      await vi.advanceTimersByTimeAsync(36_000)
+      await expect(result).resolves.toEqual({ version, data: CATALOG })
+    } finally { vi.useRealTimers() }
+  })
+
+  it('gives up on a tarball that goes silent, and says how much arrived (#1049)', async () => {
+    vi.useFakeTimers()
+    try {
+      const version = '2026.10.28'
+      const tar = tarball([['package/plugins.json', JSON.stringify(CATALOG)]])
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          // Half the bytes, then nothing: the shape of the measured RST.
+          controller.enqueue(new Uint8Array(tar.subarray(0, Math.floor(tar.length / 2))))
+        },
+      })
+      vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+        const url = String(input)
+        if (url.endsWith('/latest')) {
+          return new Response(JSON.stringify({ version, dist: { tarball: `${REGISTRY}/x/-/x-${version}.tgz` } }))
+        }
+        return new Response(body)
+      }))
+      const result = catalogFromPackage(REGISTRY, 'awesome-dsh-plugin')
+      const settled = expect(result).rejects.toThrow(/no new data for 15s while downloading awesome-dsh-plugin tarball \(received \d+ bytes\)/u)
+      await vi.advanceTimersByTimeAsync(16_000)
+      await settled
+    } finally { vi.useRealTimers() }
+  })
+
   for (const [label, options] of [
     ['the metadata is unreadable', { metaStatus: 503 }],
     ['the tarball is unreadable', { tarStatus: 404 }],

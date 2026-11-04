@@ -629,6 +629,30 @@ The lockfile contains entries that the active policies reject.`)
     expect(failed?.message).toContain('不要删掉整个 pnpm-lock.yaml')
   })
 
+  it('lets a broken lockfile speak over the policy code it provokes (#1075)', () => {
+    // The reporter's log, verbatim in shape: the lockfile is missing an entry,
+    // pnpm re-resolves, and the resolver's fresh-release check throws as a
+    // side effect. Seconds earlier the same run had PASSED the supply-chain
+    // check, so the wait-period story the policy code tells is not what
+    // happened — and the retry it promises (a minimum-release-age override)
+    // cannot repair a missing entry.
+    const failed = classifyPnpmFailure([
+      '✓ Lockfile passes supply-chain policies (verified 1m ago)',
+      'Lockfile is up to date, resolution step is skipped',
+      "[WARN] Broken lockfile: no entry for 'billion-context@0.1.210' in pnpm-lock.yaml",
+      '[ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY] The lockfile is broken! Resolution step will be performed to fix it.',
+      '[WARN] Could not find preferred package billion-context@0.1.210 in lockfile',
+      'Progress: resolved 1, reused 0, downloaded 0, added 0',
+      '[ERR_PNPM_RESOLUTION_POLICY_VIOLATIONS_UNHANDLED] 1 resolution-policy violation was produced but no handleResolutionPolicyViolations callback was wired to react to them.',
+    ].join('\n'))
+
+    expect(failed?.code).toBe('lockfile-broken')
+    expect(failed?.recoverable).toBe(false)
+    expect(failed?.message).toContain('billion-context@0.1.210')
+    // The wait-period sentence must not be what the user is shown.
+    expect(failed?.message).not.toContain('安全等待期')
+  })
+
   it('reads the same failure out of pnpm 11\u2019s ndjson record, which arrives on stdout (#808)', () => {
     // 11.24.0 inverts the streams: stdout carries the record as one JSON line
     // (stderr is 0 bytes). The decoder lifts err.message out of it, so the

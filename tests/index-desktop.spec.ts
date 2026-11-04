@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { dshHostInfo, setLauncherInstallAnchorSource } from '../src/dsh-install.ts'
 
 const state = vi.hoisted(() => ({
   mounts: [] as { host: unknown; config: Record<string, unknown>; runtime?: unknown; activation?: unknown }[],
@@ -76,6 +80,13 @@ beforeEach(() => {
   state.factoryArgs = []
   state.officialFactoryArgs = []
   state.packageManagers = []
+})
+
+afterEach(() => {
+  // Every `apply()` installs a live anchor source (that is the wiring under
+  // test); leaving it pointing at this test's FakeContext would answer host
+  // detection for the next test instead.
+  setLauncherInstallAnchorSource(() => null)
 })
 
 describe('the exported log says where the profile came from (#744)', () => {
@@ -379,8 +390,14 @@ describe('host adaptation', () => {
       runtime: state.runtime,
     })
 
-    expect(ctx.effects).toHaveLength(1)
-    await ctx.effects[0].dispose()
+    // Two effects: the launcher's install anchor (wired before anything
+    // mounts, #473/#404/#426) and the mount itself. Select the mount by its
+    // label rather than by position — the anchor is registered first, so
+    // index 0 stops meaning "the routes" the moment it exists.
+    expect(ctx.effects).toHaveLength(2)
+    const routes = ctx.effects.find(entry => entry.label.includes('Desktop http routes'))
+    expect(routes).toBeDefined()
+    await routes!.dispose()
     expect(state.routeDisposals).toBe(1)
     expect(state.runtimeDisposals).toBe(1)
   })
@@ -645,5 +662,62 @@ describe('the launcher\'s own package manager (#653)', () => {
     apply(ctx as never)
 
     expect(state.packageManagers).toEqual([{ command: 'node', args: [], env: { KEEP: 'yes' } }])
+  })
+})
+
+describe('the launcher install anchor reaches host detection', () => {
+  // An embedded host — a packaged app booting the dsh core tree in-process —
+  // has neither a CLI entry nor Electron's resources directory, which is why
+  // every host-version surface read "unknown" there (#473, #404, #426). Its
+  // launcher still publishes the install anchor; this is the wiring that hands
+  // it to detection before any route mounts.
+  let tmp: string
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'dsh-market-anchor-'))
+  })
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true })
+  })
+
+  /** The core tree's own dsh package — where an embedded host actually lives. */
+  function writeDshInstall(): string {
+    const install = join(tmp, 'dsh', 'cores', '0.2.1-rc.3', 'node_modules', '@deepseek-ai', 'dsh')
+    mkdirSync(install, { recursive: true })
+    writeFileSync(join(install, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.1-rc.3' }))
+    return install
+  }
+
+  /** The launcher's own entry point: no dsh package anywhere above it. */
+  function embeddedEntry(): string {
+    return join(tmp, 'app', 'resources', 'main.js')
+  }
+
+  it('locates an embedded host from profileContext.installAnchor', () => {
+    const install = writeDshInstall()
+    const ctx = new FakeContext({
+      webServer: {},
+      loader: {},
+      profileContext: { name: 'ondevice', dir: join(tmp, 'profiles', 'ondevice'), installAnchor: join(install, 'package.json') },
+    })
+
+    apply(ctx as never)
+
+    expect(dshHostInfo(embeddedEntry())).toEqual({ version: '0.2.1-rc.3', directory: install })
+  })
+
+  it('reads a profileContext that arrives after the market mounted', () => {
+    // Some launchers provide the service asynchronously; the origins above
+    // handle that timing explicitly, and host detection must not freeze the
+    // mount-time "absent" answer.
+    const install = writeDshInstall()
+    const services: Record<string, unknown> = { webServer: {}, loader: {} }
+    const ctx = new FakeContext(services)
+
+    apply(ctx as never)
+    expect(dshHostInfo(embeddedEntry())).toBeNull()
+
+    services.profileContext = { name: 'ondevice', dir: join(tmp, 'profiles', 'ondevice'), installAnchor: join(install, 'package.json') }
+
+    expect(dshHostInfo(embeddedEntry())).toEqual({ version: '0.2.1-rc.3', directory: install })
   })
 })

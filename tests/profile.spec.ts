@@ -10,7 +10,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { resolveDshHome } from '../src/home-paths.ts'
 import {
-  useInstallerDirectory, isInstallerBundle, addProfileBundle, bundleOptOutRowIds, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, entryArtifactExists, generationManagedNames, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, parsePatchRows, pluginSubdirs, profileDir,
+  useInstallerDirectory, isInstallerBundle, addProfileBundle, bundleExpressionRowIds, bundleOptOutRowIds, bundlePatchInsertedIds, bundlesDroppedFromProfile, readProfileManifestSnapshot, bundlePatchTargets, conflictingEntryIds, declaredBundlePatchFiles, dropFromManifest, dropReleaseAgeExcludes, entryArtifactExists, generationManagedNames, hasDshManifest, hasLoadableEntry, holdsNativeAddon, isDshProfileName, mergeDuplicateReleaseAgeExcludes, parsePatchRows, pluginSubdirs, profileDir, shippedInsertedRowIds,
   readDependencyOwners, readGitResolutionCommit, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledRepoIdentities, readInstalledVersion, readLockCommits,
   removeProfileBundle,
 } from '../src/profile.ts'
@@ -707,6 +707,46 @@ describe('hasLoadableEntry — carrier bundles (#203)', () => {
     expect(hasLoadableEntry(profile, 'dsh-ouroboros')).toBe(true)
   })
 
+  it('accepts a carrier whose patch mounts its own subpaths (#1091)', () => {
+    // Reported shape: a pure patch carrier (no main/exports/root index.js)
+    // whose three insert targets are its own files. Every target was read as
+    // a package directory, so nine probes came up empty and the market
+    // uninstalled a package pnpm had just installed correctly.
+    const profile = writeProfile({})
+    const carrier = join(profile, 'node_modules', '@wufeng0105', 'dsh-enhance')
+    mkdirSync(join(carrier, 'enhance-scope'), { recursive: true })
+    mkdirSync(join(carrier, 'auto-approve'), { recursive: true })
+    mkdirSync(join(carrier, 'ui'), { recursive: true })
+    writeFileSync(join(carrier, 'package.json'), '{"name":"@wufeng0105/dsh-enhance","dsh":{"bundle":{"patch":"cordis.patch.yml"}}}')
+    writeFileSync(join(carrier, 'cordis.patch.yml'), [
+      '- insert:',
+      "    - id: enhance-scope",
+      "      name: '@wufeng0105/dsh-enhance/enhance-scope/index.js'",
+      "    - id: auto-approve",
+      "      name: '@wufeng0105/dsh-enhance/auto-approve/index.js'",
+      "    - id: enhance-ui",
+      "      name: './ui/index.js'",
+      '',
+    ].join('\n'))
+    writeFileSync(join(carrier, 'enhance-scope', 'index.js'), '')
+    writeFileSync(join(carrier, 'auto-approve', 'index.js'), '')
+    writeFileSync(join(carrier, 'ui', 'index.js'), '')
+
+    expect(hasLoadableEntry(profile, '@wufeng0105/dsh-enhance')).toBe(true)
+  })
+
+  it('does not read a relative target that climbs out of the package as its own (#1091)', () => {
+    const profile = writeProfile({})
+    const carrier = join(profile, 'node_modules', 'carrier')
+    mkdirSync(carrier, { recursive: true })
+    writeFileSync(join(carrier, 'package.json'), '{"dsh":{"bundle":{"patch":"cordis.patch.yml"}}}')
+    writeFileSync(join(carrier, 'cordis.patch.yml'), "- name: '../escape/index.js'\n  config: {}\n")
+    mkdirSync(join(profile, 'node_modules', 'escape'), { recursive: true })
+    writeFileSync(join(profile, 'node_modules', 'escape', 'index.js'), '')
+
+    expect(hasLoadableEntry(profile, 'carrier')).toBe(false)
+  })
+
   it('still finds a target the profile itself installed, unaffected by the fix', () => {
     const profile = writeProfile({})
     const carrier = join(profile, 'node_modules', 'carrier')
@@ -984,6 +1024,33 @@ describe('setAllowBuilds (#6)', () => {
     expect(workspace.allowBuilds).toEqual({ other: false, ...Object.fromEntries(keys.map(key => [key, true])) })
     // Approval remains stable across a second click.
     expect(setAllowBuilds('web', keys)).toEqual(approved)
+  })
+
+  it('accepts the key pnpm writes for a dependency resolved from a BRANCH (#1034)', async () => {
+    // A floating branch dependency is not keyed by a commit: pnpm writes
+    // `…tar.gz/refs/heads/main`, so every SHA-only shape refused the one key
+    // that would have authorized it, and "approve build scripts and retry"
+    // wrote a bare name pnpm does not match.
+    const { setAllowBuilds } = await import('../src/profile.ts')
+    writeProfile({})
+    const keys = [
+      'dsh-purge@https://codeload.github.com/YuJunZhiXue/dsh-purge/tar.gz/refs/heads/master',
+      'p@https://codeload.github.com/o/mono/tar.gz/refs/heads/feature/nested-branch#path:/packages/p',
+      'p@https://codeload.github.com/o/r/tar.gz/refs/tags/v1.2.3',
+      'p@https://bitbucket.org/o/r/get/refs/heads/main.tar.gz',
+    ]
+    expect(setAllowBuilds('web', keys)).toEqual(keys)
+    // The ref is path segments only: no traversal, no empty piece, no
+    // whitespace or separators that would end the value it is written into.
+    const unsafe = [
+      'p@https://codeload.github.com/o/r/tar.gz/refs/heads/../evil',
+      'p@https://codeload.github.com/o/r/tar.gz/refs/heads//x',
+      'p@https://codeload.github.com/o/r/tar.gz/refs/heads',
+      'p@https://codeload.github.com/o/r/tar.gz/refs/heads/main\n  evil: true',
+      'p@https://codeload.github.com/o/r/tar.gz/refs/pulls/1',
+    ]
+    const written = setAllowBuilds('web', unsafe)
+    for (const key of unsafe) expect(written).not.toContain(key)
   })
 
   it('still rejects unsafe or malformed monorepo build keys', async () => {
@@ -1603,6 +1670,98 @@ describe('removeProfileBundle / addProfileBundle', () => {
   })
 })
 
+describe('dropReleaseAgeExcludes (#1093)', () => {
+  function workspace(contents: string): string {
+    const dir = writeProfile({ name: 'dsh-profile-web', dependencies: {} })
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), contents)
+    return dir
+  }
+
+  it('drops the removed package rows and leaves every other row and comment intact', () => {
+    // pnpm writes one row per package it installs inside the wait window.
+    // Uninstalling removed the dependency but not these, so the profile kept
+    // pinning versions of a package it no longer had.
+    const dir = workspace([
+      'packages:',
+      '  - .',
+      'minimumReleaseAgeExclude:',
+      '  # pinned while testing the beta',
+      "  - 'typescript@7.1.0-dev.20261103.1'",
+      "  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20261103.1'",
+      '  - dshmarket@1.73.8',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+
+    expect(dropReleaseAgeExcludes('web', 'typescript')).toEqual(['typescript@7.1.0-dev.20261103.1'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'packages:',
+      '  - .',
+      'minimumReleaseAgeExclude:',
+      '  # pinned while testing the beta',
+      // A platform subpackage is a DIFFERENT package name; nothing in the file
+      // says it belongs to `typescript`, so guessing would drop live policy.
+      "  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20261103.1'",
+      '  - dshmarket@1.73.8',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+  })
+
+  it('removes the key itself when the removed package was its only entry', () => {
+    // `minimumReleaseAgeExclude:` with no rows is a null value, and pnpm
+    // rejects the file rather than reading it as an empty list.
+    const dir = workspace([
+      'packages:',
+      '  - .',
+      'minimumReleaseAgeExclude:',
+      '  - typescript@7.1.0',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+
+    expect(dropReleaseAgeExcludes('web', 'typescript')).toEqual(['typescript@7.1.0'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe([
+      'packages:',
+      '  - .',
+      'allowBuilds:',
+      '  esbuild: true',
+      '',
+    ].join('\n'))
+  })
+
+  it('leaves the file byte-for-byte alone when the package has no row', () => {
+    const original = ['packages:', '  - .', 'minimumReleaseAgeExclude:', '  - dshmarket@1.73.8', ''].join('\n')
+    const dir = workspace(original)
+
+    expect(dropReleaseAgeExcludes('web', 'typescript')).toEqual([])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(original)
+  })
+
+  it('drops a pnpm folded union as one row, not two half-rows (#820)', () => {
+    // pnpm wraps a long `||` union across lines. Reading only the first line
+    // would leave the continuation behind as an unparseable orphan.
+    const dir = workspace(['minimumReleaseAgeExclude:', "  - 'typescript@1.0.0 ||", "    1.0.1'", ''].join('\n'))
+
+    expect(dropReleaseAgeExcludes('web', 'typescript')).toEqual(['typescript@1.0.0 || 1.0.1'])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe('')
+  })
+
+  it('leaves a block it cannot read exactly alone', () => {
+    // A `#` with no whitespace before it is part of the scalar, not a
+    // comment: the entry does not parse, so the whole block is skipped rather
+    // than rewritten from a guess.
+    const original = ['minimumReleaseAgeExclude:', '  - typescript@1.0.0#oops', ''].join('\n')
+    const dir = workspace(original)
+
+    expect(dropReleaseAgeExcludes('web', 'typescript')).toEqual([])
+    expect(readFileSync(join(dir, 'pnpm-workspace.yaml'), 'utf8')).toBe(original)
+  })
+})
+
 describe('mergeDuplicateReleaseAgeExcludes (#732)', () => {
   function workspace(contents: string): string {
     const dir = writeProfile({ name: 'dsh-profile-web', dependencies: {} })
@@ -2167,6 +2326,180 @@ describe('bundleOptOutRowIds (#876)', () => {
     try {
       writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'plain' }))
       expect(bundleOptOutRowIds(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('parsePatchRows — the rows a patch decides with an expression (#1043)', () => {
+  it('reads a !!js condition as expression-decided, never as opt-in or plain', () => {
+    // The report's shape (#1043): ds-harness-remote ships BOTH of its rows
+    // with `disabled: !!js …` conditions, deciding per environment at
+    // compose time. Neither row is literal, so neither is an opt-in row.
+    const rows = [
+      '- insert:',
+      '    - id: remote',
+      '      name: dsh-remote',
+      '      disabled: !!js >-',
+      "        [...ctx.loader.entries()].some(entry => entry.options.id === 'dsh-tui')",
+      '    - id: remote-tui',
+      '      name: dsh-remote-tui',
+      '      disabled: !!js >-',
+      "        ![...ctx.loader.entries()].some(entry => entry.options.id === 'dsh-tui')",
+      '',
+    ].join('\n')
+    const parsed = parsePatchRows(rows)
+    expect(parsed.disabledIds).toEqual([])
+    expect(parsed.expressionIds).toEqual(['remote', 'remote-tui'])
+  })
+
+  it('keeps literal true and false rows out of expressionIds; a valueless disabled is not readable either', () => {
+    const rows = [
+      '- insert:',
+      '    - id: lit-on',
+      '      disabled: false',
+      '    - id: lit-off',
+      '      disabled: true',
+      '    - id: null-flag',
+      '      disabled:',
+      '',
+    ].join('\n')
+    const parsed = parsePatchRows(rows)
+    expect(parsed.disabledIds).toEqual(['lit-off'])
+    expect(parsed.expressionIds).toEqual(['null-flag'])
+  })
+
+  it('never counts a payload id as an expression row (#841)', () => {
+    const rows = [
+      '- insert:',
+      '    - id: real-row',
+      '      config:',
+      '        plugins:',
+      '          - id: payload-entry',
+      '            disabled: !!js ctx.isTui',
+      '',
+    ].join('\n')
+    expect(parsePatchRows(rows).expressionIds).toEqual([])
+  })
+})
+
+describe('bundleExpressionRowIds (#1043)', () => {
+  it('reads both patch sources a package may ship', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-exprrows-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'ds-harness-remote',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }))
+      writeFileSync(join(dir, 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: remote',
+        '      name: dsh-remote',
+        '    - id: remote-tui',
+        '      name: dsh-remote-tui',
+        '      disabled: !!js >-',
+        "        ![...ctx.loader.entries()].some(entry => entry.options.id === 'dsh-tui')",
+        '',
+      ].join('\n'))
+      // #792: a declared LIST contributes every file it names.
+      writeFileSync(join(dir, 'extra.patch.yml'), '- id: extra-expression\n  disabled: !!js 1 === 1\n')
+      const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      manifest.dsh.bundle.patch = ['./cordis.patch.yml', './extra.patch.yml']
+      writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+      expect([...bundleExpressionRowIds(dir)].sort()).toEqual(['extra-expression', 'remote-tui'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers with nothing for a package whose rows are all literal', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-exprrows-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'dsh-mnemon',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }))
+      writeFileSync(join(dir, 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: mnemon',
+        '      name: dsh-mnemon',
+        '    - id: mnemon-strategy-general',
+        '      name: dsh-mnemon-strategy-general',
+        '      disabled: true',
+        '',
+      ].join('\n'))
+      expect(bundleExpressionRowIds(dir)).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('shippedInsertedRowIds (#1012)', () => {
+  it('unions every declared patch file with the conventional root file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-shipped-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'dsh-renamed',
+        dsh: { bundle: { patch: ['./a.patch.yml', './b.patch.yml'] } },
+      }))
+      // A declared LIST is composed in order (#792) and the root file is read
+      // even though the package declared patches of its own: the identity
+      // question is "what does this package register", and a package that
+      // ships both registers both. The install-path gate reads the declaration
+      // only, which is why this reader cannot be that one.
+      writeFileSync(join(dir, 'a.patch.yml'), '- insert:\n    - id: row-one\n      name: dsh-renamed\n')
+      writeFileSync(join(dir, 'b.patch.yml'), [
+        '- insert:',
+        '    - id: row-two',
+        '      name: dsh-renamed',
+        '    - id: row-one',
+        '      name: dsh-renamed',
+        '',
+      ].join('\n'))
+      writeFileSync(join(dir, 'cordis.patch.yml'), '- insert:\n    - id: row-three\n      name: dsh-renamed\n')
+      expect([...shippedInsertedRowIds(dir)].sort()).toEqual(['row-one', 'row-three', 'row-two'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('leaves out rows the package only reconfigures (#147)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-shipped-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'dsh-vision-router',
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      }))
+      // `attachment-local` belongs to another package: counting it as this
+      // one's evidence would let a neighbour's row decide what "one plugin"
+      // means, the split #147 exists to keep.
+      writeFileSync(join(dir, 'cordis.patch.yml'), [
+        '- insert:',
+        '    - id: vision-router',
+        '      name: dsh-vision-router',
+        '- id: attachment-local',
+        '  config: { maxImageBytes: 1048576 }',
+        '',
+      ].join('\n'))
+      expect(shippedInsertedRowIds(dir)).toEqual(['vision-router'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers with nothing for a package that ships no patch, or one that cannot be read', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dshm-shipped-'))
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'plain' }))
+      expect(shippedInsertedRowIds(dir)).toEqual([])
+      // Declared but absent: the package says nothing through a file that is
+      // not there, and silence must not become a contradiction downstream.
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({
+        name: 'plain', dsh: { bundle: { patch: './missing.patch.yml' } },
+      }))
+      expect(shippedInsertedRowIds(dir)).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

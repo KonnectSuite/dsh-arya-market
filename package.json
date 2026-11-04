@@ -1,7 +1,7 @@
 {
   "name": "@aryacode/dsh-arya-market",
   "description": "Arya Plugin Market: packaged releases, updates, and version restoration.",
-  "version": "1.70.1-arya.0.6",
+  "version": "1.73.10-arya.0.1",
   "icon": "assets/logo.svg",
   "type": "module",
   "main": "lib/index.js",
@@ -80,7 +80,6 @@
     "assets/logo.svg",
     "locale",
     "lib",
-    "src",
     "client",
     "UPDATE-API-V1.md",
     "cordis.patch.yml",

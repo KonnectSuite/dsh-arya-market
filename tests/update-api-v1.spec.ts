@@ -42,6 +42,29 @@ describe('public update API v1 operation model', () => {
     expect(store.hasActive()).toBe(true)
   })
 
+  it('explains a deferred operation without repurposing the queued state', () => {
+    const store = new UpdateOperationStoreV1('boot-wait')
+    const operation = store.create('dsh-mcp-connector', '0.2.24')
+    expect(operation.wait).toBeNull()
+
+    store.setWait(operation.operationId, {
+      reason: 'agents',
+      activeCount: 2,
+      activeAgentIds: ['main', 'helper'],
+      since: 123,
+    })
+    expect(store.get(operation.operationId)).toMatchObject({
+      state: 'queued',
+      wait: { reason: 'agents', activeCount: 2, activeAgentIds: ['main', 'helper'], since: 123 },
+    })
+
+    store.start(operation.operationId)
+    expect(store.get(operation.operationId)?.wait).toBeNull()
+    store.beginVerifying(operation.operationId)
+    expect(store.get(operation.operationId)).toMatchObject({ state: 'running', progress: { phase: 'verifying' } })
+    expect(store.finish(operation.operationId, 200, { ok: true }, '0.2.25')?.wait).toBeNull()
+  })
+
   it('bounds retained terminal operations without evicting the active task', () => {
     const store = new UpdateOperationStoreV1('boot-limit', Date.now, 2)
     const first = store.create('one', '1.0.0')
@@ -126,6 +149,24 @@ describe('public update API v1 operation model', () => {
       },
     })
     expect(failed).not.toHaveProperty('stderr')
+  })
+
+  it('keeps AGENT_BARRIER_LOST actionable for public callers', () => {
+    const store = new UpdateOperationStoreV1('boot-barrier')
+    const operation = store.create('dsh-loop', '1.0.0')
+    store.start(operation.operationId)
+    const failed = store.finish(operation.operationId, 409, {
+      failureCode: 'AGENT_BARRIER_LOST',
+      error: 'An Agent became active before the file change; nothing was changed.',
+    }, '1.0.0')
+    expect(failed).toMatchObject({
+      state: 'failed',
+      failure: {
+        code: 'AGENT_BARRIER_LOST',
+        message: 'An Agent became active before the file change; nothing was changed.',
+        retryable: true,
+      },
+    })
   })
 
   it('distinguishes release cooling from an unexplained unchanged version', () => {

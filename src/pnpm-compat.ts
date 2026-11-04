@@ -451,9 +451,20 @@ export function classifyPnpmFailure(output: string, exitCode?: number | null): P
   // `setupPolicyHandlers`, which an integration calling the CLI cannot wire,
   // so the only answer is the one-shot override. Classifying it here is what
   // connects it to that retry; without it the raw internal hint was surfaced.
-  if (output.includes('ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION')
+  // ...unless the lockfile is what is actually wrong (#1075). A profile whose
+  // lockfile is missing an entry makes pnpm re-resolve, and the resolver then
+  // applies the fresh-release policy from scratch — so the SAME log carries
+  // the lockfile's own error AND this policy code as collateral. Waiting or
+  // retrying cannot repair a missing lockfile entry, and the one-shot override
+  // this branch exists to trigger only lifts the age window, so classifying
+  // the pair as a wait names the wrong cause and promises a retry that must
+  // fail. The lockfile diagnoses below say what it is and how to repair it.
+  const lockfileContradictsItself = output.includes('ERR_PNPM_OUTDATED_LOCKFILE')
+    || output.includes('ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY')
+    || /Broken lockfile/.test(output)
+  if (!lockfileContradictsItself && (output.includes('ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION')
     || output.includes('ERR_PNPM_NO_MATURE_MATCHING_VERSION')
-    || output.includes('ERR_PNPM_RESOLUTION_POLICY_VIOLATIONS_UNHANDLED')) {
+    || output.includes('ERR_PNPM_RESOLUTION_POLICY_VIOLATIONS_UNHANDLED'))) {
     return {
       code: 'release-age-violation',
       recoverable: false,

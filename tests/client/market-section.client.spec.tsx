@@ -11,7 +11,7 @@ import { resolve } from 'node:path'
 import { StrictMode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MarketSection, OwnerAvatar, resetHostCompatibilityCache, resetMarketPortalHost, resetThemePreviewCache } from '../../src/client/MarketSection.tsx'
+import { GithubRoutedImg, MarketSection, OwnerAvatar, resetHostCompatibilityCache, resetMarketPortalHost, resetThemePreviewCache } from '../../src/client/MarketSection.tsx'
 import css from '../../src/client/Market.module.css'
 import { downloadStatsText } from '../../src/client/download-stats.ts'
 import { createHostNavigation } from '../../src/client/host-navigation.ts'
@@ -20,6 +20,144 @@ import {
   pluginScreenshotCandidates, resetGithubRouting, resetScreenshotsCache, restartHintKey, setGithubRoutes,
 } from '../../src/client/market-data.ts'
 import { en, zh } from '../../src/client/locales.ts'
+
+describe('Issue #991 approval target and queue feedback', () => {
+  describe.each(['en', 'zh'])('visible update explanation in %s', (lang) => {
+    const dict = lang === 'zh' ? zh : en
+    const snapshot = { active: lang }
+    afterEach(() => { vi.restoreAllMocks() })
+    const localizedProps = () => ({ ...props(),
+      t: (key: string) => (dict as Record<string, string>)[key] ?? key,
+      locale: { subscribe: () => () => {}, getSnapshot: () => snapshot },
+    })
+
+    it.each(['known', 'estimated', 'invalid', 'missing', 'mature'])('links the %s latest wait to the exact install target', async (timing) => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-26T00:00:00Z'))
+      const mature = timing === 'mature'
+      const until = timing === 'invalid' ? 'unknown' : timing === 'missing' ? undefined : '2026-10-26T04:30:00Z'
+      stubFetch({
+        '/dsh-market/installed': { profile: 'desktop', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+        '/dsh-market/updates': { updates: { 'dsh-loop': {
+          kind: 'npm', current: '1.0.0', latest: mature ? '1.1.0' : '1.2.0', eligibleVersion: '1.1.0', updateAvailable: true,
+          ...(!mature ? { heldUpdate: { latest: '1.2.0', until, ...(timing === 'estimated' ? { estimated: true } : {}) } } : {}),
+        } } },
+        '/dsh-market/update': { ok: true },
+      })
+      render(<MarketSection {...localizedProps()} />)
+      fireEvent.click(await screen.findByRole('button', { name: new RegExp(dict.tabInstalled) }))
+      const button = await screen.findByRole('button', { name: `${dict.update} v1.1.0` })
+      if (mature) {
+        expect(screen.queryByText(/先更新到|Update to .* for now/)).toBeNull()
+        expect(screen.queryByText(dict.updateHeldTag)).toBeNull()
+      } else {
+        const expected = timing === 'known'
+          ? lang === 'zh' ? '最新版 v1.2.0 刚发布，还要约 5 小时。先更新到 v1.1.0。' : 'Latest v1.2.0 was just released; about 5 hours to wait. Update to v1.1.0 for now.'
+          : lang === 'zh' ? '最新版 v1.2.0 的发布时间暂不确定，还需等待。先更新到 v1.1.0。' : 'The release time of latest v1.2.0 is unknown, so it still needs to wait. Update to v1.1.0 for now.'
+        const explanation = screen.getByText(expected)
+        expect(explanation.getAttribute('title')).toBeNull()
+        expect(explanation.textContent).not.toMatch(/pnpm|NaN|profile|\/latest/)
+        expect(screen.getByText(dict.updateHeldTag)).toBeTruthy()
+        if (timing !== 'known') expect(explanation.textContent).not.toMatch(/\d+\s*(?:hours?|小时)/)
+      }
+      fireEvent.click(button)
+      await waitFor(() => expect(fetchCalls.filter(call => call.path === '/dsh-market/update').map(call => call.body))
+        .toEqual([{ name: 'dsh-loop', eligibleVersion: '1.1.0' }]))
+    })
+
+    it.each(['batch', 'restored queue'])('submits exact eligibleVersion through %s', async (entry) => {
+      if (entry === 'restored queue') localStorage.setItem('dshm-queue-v1', JSON.stringify([
+        { kind: 'update', name: 'dsh-loop', updateOptions: { eligibleVersion: '1.1.0' } },
+      ]))
+      stubFetch({
+        '/dsh-market/installed': { profile: 'desktop', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+        '/dsh-market/updates': { updates: { 'dsh-loop': {
+          kind: 'npm', current: '1.0.0', latest: '1.2.0', eligibleVersion: '1.1.0', updateAvailable: true,
+          heldUpdate: { latest: '1.2.0', until: '2026-10-27T00:00:00Z' },
+        } } },
+        '/dsh-market/update': { ok: true },
+      })
+      render(<MarketSection {...localizedProps()} />)
+      if (entry === 'batch') fireEvent.click(await screen.findByRole('button', { name: new RegExp(dict.updateAll) }))
+      await waitFor(() => expect(fetchCalls.filter(call => call.path === '/dsh-market/update').map(call => call.body))
+        .toEqual([{ name: 'dsh-loop', eligibleVersion: '1.1.0' }]), { timeout: 8000 })
+    })
+  })
+
+  it.each(['banner', 'panel', 'reloaded panel'])('keeps the original approval target through the %s and receives staleTarget 409', async (entry) => {
+    let eligibleVersion = '1.1.0'
+    let attempts = 0
+    let staleReplies = 0
+    stubFetch({
+      '/dsh-market/installed': { profile: 'desktop', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': () => ({ updates: { 'dsh-loop': {
+        kind: 'npm', current: '1.0.0', latest: '1.3.0', eligibleVersion, updateAvailable: true,
+      } } }),
+      '/dsh-market/update': (body: unknown) => {
+        if (++attempts === 1) return { ok: false, ignoredBuilds: ['node-pty'], error: 'blocked by pnpm', __status: 502 }
+        if ((body as { eligibleVersion?: string }).eligibleVersion !== eligibleVersion) {
+          staleReplies++
+          return { ok: false, staleTarget: true, error: 'The eligible update target changed. Refresh and choose again.', __status: 409 }
+        }
+        return { ok: true }
+      },
+      '/dsh-market/approve-builds': { ok: true },
+    })
+    const view = render(<MarketSection {...props()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Installed/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Update v1.1.0' }))
+    await screen.findByText(re(en.buildsSkipped))
+    const original = { force: false, restore: false, eligibleVersion: '1.1.0' }
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('dshm-settled-v1') ?? '[]')
+      expect(saved[0]?.updateOptions).toEqual(original)
+      expect(saved[0]?.blockedBuilds).toEqual(['node-pty'])
+    })
+    eligibleVersion = '1.2.0'
+    if (entry === 'reloaded panel') {
+      view.unmount()
+      render(<MarketSection {...props()} />)
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    await screen.findByRole('button', { name: 'Update v1.2.0' })
+    const refreshes = fetchCalls.filter(call => call.path === '/dsh-market/updates').length
+    if (entry === 'banner') {
+      const banner = screen.getByText(re(en.buildsSkipped)).parentElement!
+      fireEvent.click(within(banner).getByRole('button', { name: en.approveBuilds }))
+    } else {
+      if (!document.querySelector('[class*="opPanel"]')) fireEvent.click(screen.getByRole('button', { name: en.opTitle }))
+      const panel = document.querySelector('[class*="opPanel"]') as HTMLElement
+      fireEvent.click(within(panel).getByRole('button', { name: en.approveBuilds }))
+    }
+    await waitFor(() => {
+      const requests = fetchCalls.filter(call => call.path === '/dsh-market/update')
+      expect(requests).toHaveLength(2)
+      expect(requests[1].body).toEqual({ name: 'dsh-loop', eligibleVersion: '1.1.0' })
+      expect(staleReplies).toBe(1)
+      expect(fetchCalls.filter(call => call.path === '/dsh-market/updates').length).toBeGreaterThan(refreshes)
+      expect(JSON.parse(localStorage.getItem('dshm-settled-v1') ?? '[]').at(-1)).toMatchObject({ state: 'failed' })
+    })
+    expect(screen.getAllByText('The eligible update target changed. Refresh and choose again.').length).toBeGreaterThan(0)
+    expect(localStorage.getItem('dshm-queue-v1')).toBeNull()
+  })
+
+  it.each(['en', 'zh'])('explains a restored queue target change in %s while an update remains available', async (lang) => {
+    localStorage.setItem('dshm-queue-v1', JSON.stringify([{
+      kind: 'update', name: 'dsh-loop', updateOptions: { eligibleVersion: '1.1.0' },
+    }]))
+    stubFetch({
+      '/dsh-market/installed': { profile: 'desktop', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': { kind: 'npm', eligibleVersion: '1.2.0', updateAvailable: true } } },
+    })
+    const dict = lang === 'zh' ? zh : en
+    const localeSnapshot = { active: lang }
+    render(<MarketSection {...props()} t={key => (dict as Record<string, string>)[key] ?? key}
+      locale={{ subscribe: () => () => {}, getSnapshot: () => localeSnapshot }} />)
+    const message = lang === 'zh' ? '更新目标已变化，已跳过。请重新选择更新。' : 'The update target changed, so this task was skipped. Choose the update again.'
+    expect(await screen.findByText(message)).toBeTruthy()
+    expect(screen.queryByText(dict.agentQueueStaleNoUpdate)).toBeNull()
+    expect(fetchCalls.some(call => call.path === '/dsh-market/update')).toBe(false)
+  })
+})
 
 const REGISTRY = {
   updated: '', count: 4,
@@ -201,6 +339,24 @@ describe('WebDAV daily backup (#868)', () => {
     fireEvent.click(screen.getByRole('button', { name: en.webdavUpload }))
     await act(async () => {})
     expect(requests()).toHaveLength(2)
+  })
+
+  it('turns a password-less 401 into a stated condition, not a bare error (#1058)', async () => {
+    // The password is never stored, so after a reload the daily upload runs
+    // with an empty field and the server answers 401. The reporter met this
+    // as an `HTTP 401` banner on every market open, with nothing saying why.
+    localStorage.setItem('dshm-webdav', JSON.stringify(config))
+    stubFetch({ '/dsh-market/webdav': { __status: 401, error: 'WebDAV upload failed: HTTP 401' } })
+    render(<MarketSection {...props()} />)
+    await openBackup()
+
+    expect(await screen.findByText(en.webdavAutoBackupPaused)).toBeTruthy()
+    // The raw status is not repeated on top of the explanation.
+    expect(screen.queryByText(/HTTP 401/u)).toBeNull()
+    // Entering a password retires the note.
+    fireEvent.change(screen.getByPlaceholderText(en.webdavPassword), { target: { value: 'secret' } })
+    await act(async () => {})
+    expect(screen.queryByText(en.webdavAutoBackupPaused)).toBeNull()
   })
 
   it('says what the address field wants, in the words the reporter had to guess (#868)', async () => {
@@ -1099,6 +1255,32 @@ describe('MarketSection (jsdom)', () => {
     })
   })
 
+  it('reads and displays GitHub host requirements, including incompatible-host filtering', async () => {
+    localStorage.setItem('dshm-host-filter', 'all')
+    const url = 'https://github.com/owner/whale/tree/master/packages/host'
+    const range = '0.2.1-rc.2 || 0.2.1-rc.3'
+    stubFetch({
+      '/dsh-market/registry': {
+        hostVersion: '0.2.1-rc.4',
+        registry: { ...REGISTRY, count: 1, plugins: [{ ...REGISTRY.plugins[0], name: 'WhaleMaid', npm: null, url }] },
+      },
+      '/dsh-market/discovery-compatibility': {
+        hostVersion: '0.2.1-rc.4',
+        plugins: { [url]: { status: 'incompatible', basis: 'manifest', requirement: range,
+          declarations: [{ kind: 'engine', range }] } },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('WhaleMaid')
+    const badge = await screen.findByText(en.hostRequirement.replace('{0}', range))
+    expect(badge.getAttribute('data-status')).toBe('incompatible')
+    expect(fetchCalls.some(call => call.path === '/dsh-market/discovery-compatibility'
+      && (call.body as { entries?: string[] }).entries?.includes(url))).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: en.filter }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.hostCompatible.replace('{0}', '0.2.1-rc.4') }))
+    await waitFor(() => expect(screen.queryByText('WhaleMaid')).toBeNull())
+  })
+
   it('labels manifest requirements and filters only confirmed host mismatches', async () => {
     const plugins = [
       { ...REGISTRY.plugins[0], name: 'matches', npm: 'matches', url: 'https://github.com/a/matches' },
@@ -1767,6 +1949,42 @@ describe('MarketSection (jsdom)', () => {
     const second = render(<OwnerAvatar name="dsh-notify" owner="bob" />)
     avatar = second.container.querySelector('img')!
     expect(avatar.src).toContain('https://good.example/https://avatars.githubusercontent.com/bob')
+  })
+
+  it('routes update-notes images through raw candidates instead of connecting directly (#1070)', () => {
+    setGithubRoutes({ raw: ['https://bad.example', 'https://good.example', null], avatar: [null] })
+    const src = 'https://raw.githubusercontent.com/awesome-dsh-plugin/awesome-dsh-plugin/main/shot.png'
+    const first = render(<GithubRoutedImg src={src} alt="shot" />)
+    let img = first.container.querySelector('img')!
+    expect(img.src).toContain(`https://bad.example/${src}`)
+    fireEvent.error(img)
+    img = first.container.querySelector('img')!
+    expect(img.src).toContain(`https://good.example/${src}`)
+    fireEvent.load(img)
+    first.unmount()
+
+    // The raw winner is remembered, so the next notes image starts there.
+    const second = render(<GithubRoutedImg src={src} alt="shot" />)
+    img = second.container.querySelector('img')!
+    expect(img.src).toContain(`https://good.example/${src}`)
+  })
+
+  it('routes the declared icon through raw candidates instead of connecting directly (#1078)', () => {
+    setGithubRoutes({ raw: ['https://bad.example', 'https://good.example', null], avatar: [null] })
+    const icon = 'https://raw.githubusercontent.com/alice/dsh-loop/main/icon.png'
+    const first = render(<OwnerAvatar name="dsh-loop" owner="alice" icon={icon} />)
+    let tile = first.container.querySelector('img')!
+    expect(tile.src).toContain('https://bad.example/https://raw.githubusercontent.com/alice/dsh-loop/main/icon.png')
+    fireEvent.error(tile)
+    tile = first.container.querySelector('img')!
+    expect(tile.src).toContain('https://good.example/https://raw.githubusercontent.com/alice/dsh-loop/main/icon.png')
+    fireEvent.load(tile)
+    first.unmount()
+
+    // The raw winner is remembered, so the next declared icon starts there.
+    const second = render(<OwnerAvatar name="dsh-notify" owner="bob" icon={icon} />)
+    tile = second.container.querySelector('img')!
+    expect(tile.src).toContain('https://good.example/https://raw.githubusercontent.com/alice/dsh-loop/main/icon.png')
   })
 
   it('imports a backup as a grey installed-list preview without restoring it', async () => {
@@ -3095,6 +3313,42 @@ describe('P1-6 structured progress', () => {
   })
 })
 
+describe('an install with no structured phase (the desktop manager)', () => {
+  /** The status the desktop manager reports: one fixed line, no phase. */
+  function runningFor(seconds: number): void {
+    stubFetch({
+      '/dsh-market/status': {
+        active: true, seconds, lastLine: '桌面端的插件管理器正在处理 / The desktop app\'s plugin manager is working on it',
+        installed: {}, pnpm: true, boot: 'boot-1', restart: true,
+      },
+    })
+  }
+
+  it('shows its line in the page language, and only says a wait is normal once it is long (#1011)', async () => {
+    vi.useFakeTimers()
+    try {
+      sessionStorage.setItem('dshm-pending', JSON.stringify({ url: 'https://github.com/alice/dsh-loop' }))
+      runningFor(12)
+      render(<MarketSection {...props()} />)
+      await vi.waitFor(() => { screen.getByText('dsh-loop') })
+      await vi.advanceTimersByTimeAsync(2100)
+      await vi.waitFor(() => {
+        expect(screen.getByText(/The desktop app's plugin manager is working on it \(12s\)$/)).toBeTruthy()
+      })
+      // A short wait is normal and says nothing more.
+      expect(screen.queryByText(re(en.progressSlow))).toBeNull()
+
+      runningFor(412)
+      await vi.advanceTimersByTimeAsync(2100)
+      await vi.waitFor(() => {
+        expect(screen.getByText(re(en.progressSlow))).toBeTruthy()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('P0-2 activation states in the Installed tab', () => {
   it('chips only the states the switch does not already show', async () => {
     stubFetch({
@@ -3666,6 +3920,109 @@ describe('long installed names stay readable (#342, #343)', () => {
   })
 })
 
+describe('card hover does not cover footer actions (#1021)', () => {
+  it('does not open a covering introduction, and comments and favorite still work', async () => {
+    // #996's hover peek portaled a sheet over the card after 420ms. The
+    // title and Install stayed visible; comments and favorite sit in the
+    // footer, under that sheet. Resting on a card must not create the
+    // sheet, and both footer actions must still do their job.
+    render(<MarketSection {...props()} />)
+    const name = await screen.findByText('dsh-loop')
+    const card = name.closest('[class*="card"]') as HTMLElement
+    expect(within(card).getByRole('button', { name: en.favoriteAdd })).toBeTruthy()
+    expect(within(card).getByRole('button', { name: en.comments })).toBeTruthy()
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.pointerEnter(card)
+      await act(async () => { await vi.advanceTimersByTimeAsync(420) })
+      expect(document.querySelector('[class*="introPanel"]')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+
+    fireEvent.click(within(card).getByRole('button', { name: en.favoriteAdd }))
+    await waitFor(() => {
+      const call = fetchCalls.find(c => c.path === '/dsh-market/favorite')
+      expect(call?.body).toEqual({ url: 'https://github.com/alice/dsh-loop', favorited: true })
+    })
+    fireEvent.click(within(card).getByRole('button', { name: en.comments }))
+    await screen.findByRole('dialog', { name: `${en.commentsTitle} — dsh-loop` })
+  })
+})
+
+describe('discover card download count stays compact', () => {
+  it('shows a GitHub-only release count with its source, collection time and pinned version', async () => {
+    const plugin = { ...REGISTRY.plugins[0]!, npm: null, downloads: null, version: '1.3.0',
+      githubReleaseDownloads: 7000, githubReleaseDownloadsCheckedAt: '2026-10-31T08:35:00.000Z',
+      stars: 45, starsCheckedAt: '2026-10-31T08:35:00.000Z' }
+    stubFetch({ '/dsh-market/registry': { hostVersion: '0.2.1-rc.5', registry: { ...REGISTRY, count: 1, plugins: [plugin] } } })
+    render(<MarketSection {...props()} />)
+    const card = (await screen.findByText('dsh-loop')).closest('[class*="card"]') as HTMLElement
+    expect(within(card).getByText('· GitHub ↓ 7k')).toBeTruthy()
+    expect(within(card).getByText('· v1.3.0')).toBeTruthy()
+    expect(within(card).getByLabelText(/GitHub Release asset downloads, all time: 7000.*2026-10-31 08:35 UTC/)).toBeTruthy()
+    expect(within(card).getByLabelText(/GitHub stars: 45.*2026-10-31 08:35 UTC/)).toBeTruthy()
+    expect(within(card).queryByLabelText(/Last 30 days on npm/)).toBeNull()
+  })
+
+  it('shows the count on the card; the period stays in the tooltip', async () => {
+    // #996 put " / 30d" on every byline. That string is already in the
+    // tooltip, and on a two-up card it wraps the author row onto three lines.
+    const plugin = {
+      ...REGISTRY.plugins[0]!,
+      downloads: 182400,
+      downloadsStart: '2026-09-01',
+      downloadsEnd: '2026-09-30',
+      downloadsCheckedAt: '2026-10-01',
+    }
+    stubFetch({
+      '/dsh-market/registry': {
+        source: 'live',
+        hostVersion: '0.1.2-alpha.2',
+        registry: { ...REGISTRY, count: 1, plugins: [plugin] },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    const card = (await screen.findByText('dsh-loop')).closest('[class*="card"]') as HTMLElement
+    expect(within(card).getByText('· ↓ 182.4k')).toBeTruthy()
+    expect(within(card).queryByText(re(en.downloadsPeriod))).toBeNull()
+    const tip = downloadStatsText(plugin, props().t)
+    expect(tip).toBeTruthy()
+    expect(within(card).getByLabelText(tip!)).toBeTruthy()
+  })
+})
+
+describe('catalog card tips match official Discover', () => {
+  it('waits 700ms and opens below the anchor', async () => {
+    render(<MarketSection {...props()} />)
+    const name = await screen.findByText('dsh-loop')
+    const card = name.closest('[class*="card"]') as HTMLElement
+    const fav = within(card).getByRole('button', { name: en.favoriteAdd })
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.mouseEnter(fav)
+      expect(screen.queryByRole('tooltip')).toBeNull()
+      await act(async () => { await vi.advanceTimersByTimeAsync(699) })
+      expect(screen.queryByRole('tooltip')).toBeNull()
+      await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+      const tip = screen.getByRole('tooltip')
+      expect(tip.textContent).toBe(en.favoriteAdd)
+      expect(tip.getAttribute('data-side')).toBe('bottom')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('asks the host Tooltip to portal out of the card, at the recent-strip delay', () => {
+    const source = readFileSync(resolve('src/client/MarketSection.tsx'), 'utf8')
+    expect(source).toMatch(/function CardTip/)
+    expect(source).toMatch(/const HOVER_TIP_DELAY_MS = 700/)
+    expect(source).toMatch(/delayMs=\{HOVER_TIP_DELAY_MS\} portal/)
+  })
+})
+
 describe('favorites (#414)', () => {
   function favoritesStub(initial: string[] = [], installed: Record<string, string> = {}) {
     const state = { favorites: [...initial] }
@@ -4183,6 +4540,32 @@ describe('#60 groups view', () => {
     const row = (await screen.findByText('dsh-shared')).closest('[class*="ungroupedRow"]') as HTMLElement
     expect(within(row).getByText(en.stateLibrary)).toBeTruthy()
     expect(within(row).queryByText(en.groupStateInert)).toBeNull()
+  })
+
+  it('keeps a plugin\'s description beside its name once it is in a group (#1006)', async () => {
+    // Moving a plugin into a group used to drop everything but its name; it
+    // came back only when the plugin was taken out again. The user's own note
+    // wins over the catalog text, as it does in "Ungrouped".
+    stubFetch({
+      '/dsh-market/installed': {
+        profile: 'web', installed: { 'dsh-unlisted': '^1.0.0', 'dsh-notify': '^1.0.0' },
+        live: ['dsh-unlisted', 'dsh-notify'], disabled: [], notes: { 'dsh-notify': 'my own reminder' },
+        groups: { work: ['dsh-unlisted', 'dsh-notify'] }, groupOrder: ['work'],
+        activation: {
+          'dsh-unlisted': { state: 'live', reasons: [], bundle: true, hot: true },
+          'dsh-notify': { state: 'live', reasons: [], bundle: true, hot: true },
+        },
+      },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+    fireEvent.click(screen.getByRole('button', { name: en.tabGroups }))
+
+    const noted = (await screen.findByText('dsh-notify')).closest('[class*="groupMember"]') as HTMLElement
+    expect(within(noted).getByText('my own reminder')).toBeTruthy()
+    // A member with nothing to say stays a bare row rather than growing an empty gap.
+    const bare = screen.getByText('dsh-unlisted').closest('[class*="groupMember"]') as HTMLElement
+    expect(bare.querySelector('[class*="ungroupedDesc"]')).toBeNull()
   })
 
   it('does not offer library switches in a group (#995)', async () => {
@@ -6359,17 +6742,91 @@ describe('per-tab search boxes', () => {
     expect((document.querySelector('[class*="lightboxImg"]') as HTMLImageElement).src).toBe(shotA)
   })
 
+  /**
+   * Theme covers used h=520 PNG, which on a 4-up grid is far above the painted
+   * 16:10 tile and still hundreds of KB (#1060). The lightbox keeps the original.
+   */
+  it('loads a compact webp theme cover, not a 520px PNG or the original (#1060)', async () => {
+    const shotA = 'https://raw.githubusercontent.com/carol/whale-skin/main/assets/light.png'
+    const registry = JSON.parse(JSON.stringify(REGISTRY))
+    registry.plugins[2].screenshots = [shotA]
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry } })
+    const THEME_SNAPSHOT = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...{
+      ...props(),
+      themeStore: { subscribe: () => () => {}, getSnapshot: () => THEME_SNAPSHOT },
+    }} />)
+
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0])
+    const cover = await screen.findByRole('button', { name: `${en.themePreview} whale-skin` })
+    const src = cover.querySelector('img')?.getAttribute('src') ?? ''
+    const encoded = encodeURIComponent(shotA.replace(/^https?:\/\//, ''))
+    expect(src).toBe(`https://images.weserv.nl/?url=${encoded}&h=320&fit=inside&we=1&output=webp`)
+    expect(src).not.toContain('h=520')
+    expect(src).not.toBe(shotA)
+  })
+
+  it('keeps a GIF theme cover on the original format so the animation is not flattened (#1060)', async () => {
+    const shotA = 'https://raw.githubusercontent.com/carol/whale-skin/main/assets/cover.gif'
+    const registry = JSON.parse(JSON.stringify(REGISTRY))
+    registry.plugins[2].screenshots = [shotA]
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry } })
+    const THEME_SNAPSHOT = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...{
+      ...props(),
+      themeStore: { subscribe: () => () => {}, getSnapshot: () => THEME_SNAPSHOT },
+    }} />)
+
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0])
+    const cover = await screen.findByRole('button', { name: `${en.themePreview} whale-skin` })
+    const src = cover.querySelector('img')?.getAttribute('src') ?? ''
+    expect(src).toContain('h=320')
+    expect(src).not.toContain('output=webp')
+  })
+
+  it('does not transcode a GitHub attachment theme cover to webp (#1060)', async () => {
+    const shotA = 'https://github.com/user-attachments/assets/d732b30f-2649-4758-bc7a-c57a1cac6e14'
+    const registry = JSON.parse(JSON.stringify(REGISTRY))
+    registry.plugins[2].screenshots = [shotA]
+    stubFetch({ '/dsh-market/registry': { source: 'live', registry } })
+    const THEME_SNAPSHOT = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...{
+      ...props(),
+      themeStore: { subscribe: () => () => {}, getSnapshot: () => THEME_SNAPSHOT },
+    }} />)
+
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0])
+    const cover = await screen.findByRole('button', { name: `${en.themePreview} whale-skin` })
+    const src = cover.querySelector('img')?.getAttribute('src') ?? ''
+    expect(src).toContain('h=320')
+    expect(src).not.toContain('output=webp')
+  })
+
+  it('asks the theme-cover observer for a short root margin so off-screen rows do not prefetch (#1060)', () => {
+    const source = readFileSync(resolve('src/client/MarketSection.tsx'), 'utf8')
+    expect(source).toMatch(/const THEME_COVER_HEIGHT = 320/)
+    expect(source).toMatch(/const THEME_COVER_ROOT_MARGIN = '80px'/)
+    expect(source).toMatch(/useNearViewport<HTMLButtonElement>\(THEME_COVER_ROOT_MARGIN\)/)
+    expect(source).toMatch(/thumbUrl\(src, THEME_COVER_HEIGHT, \{ webp: true \}\)/)
+    expect(source).toMatch(/const THEME_PREVIEW_PROBE_LIMIT = 3/)
+  })
+
   it('fills a missing theme cover from README and chooses the complete landscape screenshot', async () => {
     const logo = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/assets/logo.png'
     const fragment = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/assets/settings-screenshot.png'
     const complete = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/docs/theme-preview.png'
     const readmeUrl = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/README.md'
+    const extra = [4, 5, 6].map(n => `https://raw.githubusercontent.com/carol/whale-skin/HEAD/docs/extra-${n}.png`)
     const readme = [
       '# whale-skin',
       '![project logo](assets/logo.png)',
       '## Screenshots',
       '![settings screenshot](assets/settings-screenshot.png)',
       '![Full theme preview](docs/theme-preview.png)',
+      ...extra.map((url, i) => `![screenshot extra ${i + 4}](${url})`),
     ].join('\n')
     vi.stubGlobal('fetch', vi.fn((url: string) => {
       const path = String(url).split('?')[0]
@@ -6383,6 +6840,7 @@ describe('per-tab search boxes', () => {
       if (path === readmeUrl) return Promise.resolve(new Response(readme, { status: 200 }))
       return Promise.reject(new Error(`unstubbed fetch: ${String(url)}`))
     }))
+    const probed: string[] = []
     class ProbeImage {
       naturalWidth = 0
       naturalHeight = 0
@@ -6391,6 +6849,7 @@ describe('per-tab search boxes', () => {
       referrerPolicy = ''
       decoding = ''
       set src(value: string) {
+        probed.push(value)
         if (value.includes(encodeURIComponent(fragment.replace(/^https?:\/\//, '')))) {
           this.naturalWidth = 150
           this.naturalHeight = 240
@@ -6399,6 +6858,9 @@ describe('per-tab search boxes', () => {
           this.naturalHeight = 240
         } else if (value.includes(encodeURIComponent(logo.replace(/^https?:\/\//, '')))) {
           this.naturalWidth = 240
+          this.naturalHeight = 240
+        } else {
+          this.naturalWidth = 400
           this.naturalHeight = 240
         }
         queueMicrotask(() => this.onload?.())
@@ -6421,10 +6883,69 @@ describe('per-tab search boxes', () => {
       expect(image?.src).not.toContain(encodeURIComponent(fragment.replace(/^https?:\/\//, '')))
     })
     expect(container.querySelectorAll('[class*="themeCoverEmpty"]').length).toBe(0)
+    expect(probed.length).toBeLessThanOrEqual(3)
 
     fireEvent.click(cover)
     await waitFor(() => expect(document.querySelector('[class*="lightboxImg"]')).toBeTruthy())
     expect((document.querySelector('[class*="lightboxImg"]') as HTMLImageElement).src).toBe(complete)
+  })
+
+  it('still finds a landscape theme cover when the first README probes fail geometry (#1060)', async () => {
+    const portraits = [1, 2, 3].map(n => `https://raw.githubusercontent.com/carol/whale-skin/HEAD/docs/a-${n}.png`)
+    const complete = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/docs/d.png'
+    const readmeUrl = 'https://raw.githubusercontent.com/carol/whale-skin/HEAD/README.md'
+    const readme = [
+      '# whale-skin',
+      '## Screenshots',
+      ...portraits.map((url, i) => `![screenshot ${i + 1}](${url})`),
+      `![screenshot 4](${complete})`,
+    ].join('\n')
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const path = String(url).split('?')[0]
+      const payload =
+        path === '/dsh-market/registry' ? { source: 'live', registry: REGISTRY }
+        : path === '/dsh-market/installed' ? { profile: 'web', installed: {}, live: [], disabled: [] }
+        : path === '/dsh-market/status' ? { active: false, pnpm: true, boot: 'boot-1', installed: {} }
+        : path === '/dsh-market/updates' ? { updates: {} }
+        : null
+      if (payload !== null) return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }))
+      if (path === readmeUrl) return Promise.resolve(new Response(readme, { status: 200 }))
+      return Promise.reject(new Error(`unstubbed fetch: ${String(url)}`))
+    }))
+    const probed: string[] = []
+    class ProbeImage {
+      naturalWidth = 0
+      naturalHeight = 0
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      referrerPolicy = ''
+      decoding = ''
+      set src(value: string) {
+        probed.push(value)
+        if (value.includes(encodeURIComponent(complete.replace(/^https?:\/\//, '')))) {
+          this.naturalWidth = 427
+          this.naturalHeight = 240
+        } else {
+          this.naturalWidth = 150
+          this.naturalHeight = 240
+        }
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('Image', ProbeImage)
+    const THEME_SNAPSHOT = { preference: 'light', themes: [] as Array<{ id: string }> }
+    render(<MarketSection {...{
+      ...props(),
+      themeStore: { subscribe: () => () => {}, getSnapshot: () => THEME_SNAPSHOT },
+    }} />)
+
+    await screen.findByText('dsh-loop')
+    fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0])
+    const cover = await screen.findByRole('button', { name: `${en.themePreview} whale-skin` })
+    await waitFor(() => {
+      expect(cover.querySelector('img')?.src).toContain(encodeURIComponent(complete.replace(/^https?:\/\//, '')))
+    })
+    expect(probed.length).toBe(4)
   })
 
   it('lets the user enter and exit the themes full-screen gallery', async () => {
@@ -7794,24 +8315,24 @@ describe('card thumbnail + lightbox (curated screenshots only)', () => {
     })
     stubFetch({ '/dsh-market/registry': { source: 'live', registry } })
     render(<MarketSection {...props()} />)
-    await screen.findByText('dsh-loop')
-    const count = screen.getByLabelText(/npm rolling 30-day downloads: 4200/)
-    expect(count.textContent).toContain('4.2k / 30d')
+    const tip = downloadStatsText(registry.plugins[0]!, props().t)!
+    // Wait on the labelled mark itself: the name can paint before the
+    // registry fields that feed the tip have been applied to the card.
+    const count = await screen.findByLabelText(tip)
+    expect(count.textContent).toBe('· ↓ 4.2k')
     expect(count.getAttribute('tabindex')).toBe('0')
-    expect(count.getAttribute('aria-label')).toContain('2026-08-25 to 2026-09-23')
-    expect(count.getAttribute('aria-label')).toContain('2026-09-24')
-    let card: HTMLElement | null = screen.getByText('dsh-loop')
+    expect(count.getAttribute('aria-label')).not.toContain('2026-09-24')
+    let card: HTMLElement | null = count
     while (card !== null && within(card).queryAllByRole('button', { name: en.install }).length === 0) card = card.parentElement
     fireEvent.click(within(card!).getAllByRole('button', { name: en.install })[0]!)
     await screen.findByRole('button', { name: en.confirmInstall })
-    // The dialog carries the methodology on its own download mark, not as a
+    // The dialog names the count on its own download mark, not as a
     // second paragraph in the body (#739).
     const dialog = within(screen.getByRole('dialog'))
-    const dialogCount = dialog.getByLabelText(/npm rolling 30-day downloads: 4200/)
+    const dialogCount = dialog.getByLabelText(tip)
     expect(dialogCount.getAttribute('tabindex')).toBe('0')
-    expect(dialogCount.getAttribute('aria-label')?.toLowerCase()).toContain('not lifetime downloads or unique users')
-    expect(dialogCount.getAttribute('aria-label')).toContain('2026-09-24')
-    expect(dialog.queryByText(/Source checked at: 2026-09-24/)).toBeNull()
+    expect(dialogCount.getAttribute('aria-label')).toBe(tip)
+    expect(dialog.queryByText(tip)).toBeNull()
   })
 
   it('shows a scrollable thumbnail strip only on the card with curated screenshots', async () => {
@@ -7826,6 +8347,31 @@ describe('card thumbnail + lightbox (curated screenshots only)', () => {
     expect(shots.length).toBe(2)
     expect(shots[0]?.getAttribute('src')).toBe(cardThumb(SHOT_A))
     expect(shots[1]?.getAttribute('src')).toBe(cardThumb(SHOT_B))
+  })
+
+  it('loads the full-size screenshot through the configured GitHub route (#1070)', async () => {
+    // On a mainland connection raw.githubusercontent.com is the slowest host
+    // on the page, while the avatar beside it already went through the proxy
+    // the user picked. The lightbox is the one place that needs the original
+    // bytes, so it is the one that most needs that proxy.
+    resetMarketPortalHost()
+    stubFetch({
+      '/dsh-market/registry': { source: 'live', registry: registryWithShots() },
+      '/dsh-market/status': { githubRoutes: { raw: ['https://gh-proxy.example'], avatar: [null] }, githubProxy: null },
+    })
+    const { container } = render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    await waitFor(() => expect(fetchCalls.some(call => call.path === '/dsh-market/status')).toBe(true))
+    await act(async () => {})
+
+    fireEvent.click(container.querySelector('img[class*="cardShot"]')!)
+
+    const img = await waitFor(() => {
+      const found = document.querySelector('[class*="lightboxImg"]') as HTMLImageElement | null
+      expect(found).toBeTruthy()
+      return found!
+    })
+    expect(img.getAttribute('src')).toBe(`https://gh-proxy.example/${SHOT_A}`)
   })
 
   it('portals into a container of its own, never straight into document.body (#293)', async () => {
@@ -8252,6 +8798,86 @@ describe('Git to npm source migration (#461)', () => {
   })
 })
 
+describe('npm rename migration (#1012)', () => {
+  // The successor carries the new npm name while the profile still holds the
+  // former one: the host refuses to install it beside that install, because
+  // both would register the same loader rows (#122).
+  const SUCCESSOR = {
+    name: 'dsh-renamed',
+    owner: 'alice',
+    url: 'https://github.com/alice/dsh-renamed',
+    category: ['tools'],
+    npm: '@scope/dsh-renamed',
+    stars: 50,
+    added: '2026-08-01',
+    description: { en: 'Renamed plugin', zh: '改名的插件' },
+    install: '',
+  }
+  const FORMER = 'dsh-renamed-old'
+
+  it('follows an install refusal into the rename dialog and runs the migration', async () => {
+    stubFetch({
+      '/dsh-market/registry': {
+        source: 'live',
+        hostVersion: '0.1.2-alpha.2',
+        registry: { ...REGISTRY, count: 1, plugins: [SUCCESSOR] },
+      },
+      '/dsh-market/installed': {
+        profile: 'web',
+        installed: { [FORMER]: '^0.9.6' },
+        live: [FORMER],
+        disabled: [],
+        groups: {},
+        groupOrder: [],
+        favorites: [],
+        blocked: [],
+      },
+      // What the host answers when the successor would collide with the
+      // install it is meant to replace: not a plain failure, a rename question.
+      '/dsh-market/install': {
+        __status: 409,
+        ok: false,
+        error: 'name conflict',
+        migration: { from: FORMER, target: '@scope/dsh-renamed' },
+      },
+      '/dsh-market/migrate-source': {
+        ok: true,
+        from: { name: FORMER, source: '^0.9.6' },
+        to: { name: '@scope/dsh-renamed', source: 'npm' },
+        activation: {},
+        warnings: [],
+      },
+    })
+
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-renamed')
+    fireEvent.click(screen.getAllByRole('button', { name: en.install })[0]!)
+    fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+
+    // The refusal is a question with one answer: the dialog names both
+    // packages, and its note is reassurance rather than a warning — a rename
+    // cannot touch data the plugin saved itself (#4).
+    const dialog = await screen.findByRole('dialog', { name: re(en.renameTitle) })
+    expect(within(dialog).getByText(`${FORMER}: ^0.9.6`)).toBeTruthy()
+    expect(within(dialog).getByText('@scope/dsh-renamed')).toBeTruthy()
+    const note = within(dialog).getByText(en.renameWarning)
+    expect(note.classList.contains(css.migrationNote)).toBe(true)
+    expect(note.classList.contains(css.migrationWarning)).toBe(false)
+    // Opening the dialog decides nothing; only the confirm button runs the
+    // transaction, which is the whole reason the host refused in the first place.
+    expect(fetchCalls.some(call => call.path === '/dsh-market/migrate-source')).toBe(false)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: en.renameContinue }))
+    await waitFor(() => {
+      expect(fetchCalls).toContainEqual({
+        path: '/dsh-market/migrate-source',
+        method: 'POST',
+        body: { name: FORMER, kind: 'npm-rename', to: '@scope/dsh-renamed' },
+      })
+    })
+  })
+})
+
 describe('restart banner counts only restart-requiring updates (#558)', () => {
   const INSTALLED = { profile: 'web', installed: { 'dsh-loop': '^1.0.0', 'whale-skin': '^1.0.0' }, live: ['dsh-loop', 'whale-skin'], disabled: [], groups: {}, groupOrder: [], favorites: [] }
   const STATUS = { active: false, busy: false, pnpm: true, boot: 'boot-1', restart: true, installed: { 'dsh-loop': '^1.0.0', 'whale-skin': '^1.0.0' } }
@@ -8453,51 +9079,146 @@ describe('recently added Discover row (#780)', () => {
   })
   const recent = () => screen.getByRole('region', { name: en.recentlyAdded })
   const names = (element: HTMLElement) => [...element.querySelectorAll<HTMLAnchorElement>(`.${css.nmLink}`)]
-    .map(link => link.title)
+    .map(link => link.getAttribute('aria-label')?.replace(/ — .*$/, '') ?? '')
   const expectHidden = () => expect(screen.queryByRole('region', { name: en.recentlyAdded })).toBeNull()
 
-  let resizeRecent: (width: number) => void
-  let observedRecent: Element | undefined
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(now)
-    resizeRecent = () => { throw new Error('recent row is not observed') }
-    observedRecent = undefined
-    vi.stubGlobal('ResizeObserver', class {
-      constructor(private callback: ResizeObserverCallback) {}
-      observe(target: Element) {
-        // jsdom has no layout; deliver row widths without resizing CardDesc.
-        if (!target.classList.contains(css.recentRow)) return
-        observedRecent = target
-        resizeRecent = width => this.callback([
-          { target, contentRect: { width } } as ResizeObserverEntry,
-        ], this as unknown as ResizeObserver)
-        resizeRecent(1600)
-      }
-      unobserve() {}
-      disconnect() {}
-    })
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('keeps two cards per row, two rows deep, as the container resizes', async () => {
-    stubFetch({ '/dsh-market/registry': registry() })
+  it('shows recent plugins as one compact strip, not full cards', async () => {
+    const plugins = rows().map(plugin => plugin.name === 'recent-high'
+      ? { ...plugin, screenshots: ['https://example.com/recent-high.png'] }
+      : plugin)
+    stubFetch({ '/dsh-market/registry': registry(plugins) })
     const { container } = render(<MarketSection {...props()} />)
     await screen.findByRole('region', { name: en.recentlyAdded })
     expect(recent().getAttribute('aria-labelledby')).toBe('dshm-recently-added')
     expect(within(recent()).getByRole('heading', { name: en.recentlyAdded }).id).toBe('dshm-recently-added')
-    const main = rankedNames(container)
-    // Two columns at every width that fits two cards (the same 290px card
-    // the grid below uses), and at most two rows of them: three across read
-    // as a different list from the one underneath.
-    for (const [width, count] of [[280, 2], [569, 2], [570, 4], [859, 4], [860, 4], [1150, 4], [1440, 4], [280, 2]] as const) {
-      act(() => resizeRecent(width))
-      expect(names(recent())).toEqual(recentNames.slice(0, count))
-      expect(within(recent()).getAllByRole('button', { name: en.install })).toHaveLength(count)
-      expect(rankedNames(container)).toEqual(main)
-    }
+    // The strip is a teaser, not a second copy of the masonry: equal-height
+    // tiles, no screenshots. Extra entries live in a quiet horizontal scroll
+    // so the block stays one row tall.
+    expect(names(recent())).toEqual(recentNames)
+    expect(within(recent()).getAllByRole('button', { name: en.install })).toHaveLength(recentNames.length)
+    expect(recent().querySelectorAll(`.${css.recentTile}`)).toHaveLength(recentNames.length)
+    expect(recent().querySelector(`.${css.card}`)).toBeNull()
+    expect(recent().querySelector(`.${css.cardShot}`)).toBeNull()
+    expect(within(recent()).queryByRole('button', { name: en.comments })).toBeNull()
+    expect(within(recent()).getByText('recent-high description')).toBeTruthy()
+    expect(rankedNames(container)[0]).toBe('old-high')
+    // A heading plus the strip, not a second catalog row. The scrollbar
+    // is the break; a hairline under it was a second divider.
+    expect(recent().className).toContain(css.recentBlock)
+    expect(within(recent()).queryByText(en.timeWeek)).toBeNull()
   })
 
-  it('observes the replacement row after retrying a failed cached catalog refresh', async () => {
+  it('puts the avatar on the same row as the name, not beside the whole tile', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const tile = recent().querySelector(`.${css.recentTile}`)!
+    const title = tile.querySelector(`.${css.recentTitle}`)!
+    const bottom = tile.querySelector(`.${css.recentBottom}`)!
+    const avatar = tile.querySelector(`.${css.recentAv}`)
+    const name = within(tile).getByRole('link')
+    const install = within(tile).getByRole('button', { name: en.install })
+    const more = within(tile).getByRole('button', { name: en.groupMore })
+    const desc = within(tile).getByText('recent-high description')
+    // Avatar, name and install share the top row so the description can
+    // start at the left edge instead of indenting under the name.
+    expect(title.contains(avatar)).toBe(true)
+    expect(title.contains(name)).toBe(true)
+    expect(title.contains(install)).toBe(true)
+    expect(title.contains(desc)).toBe(false)
+    expect(bottom.contains(desc)).toBe(true)
+    expect(bottom.contains(more)).toBe(true)
+    expect(title.querySelector(`.${css.recentName}`)?.contains(name)).toBe(true)
+  })
+
+  it('keeps install on the title row and the menu on the bottom row when there is no description', async () => {
+    stubFetch({ '/dsh-market/registry': registry([{ ...entry('recent-high', 900, 1), description: { en: '' } }]) })
+    render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const tile = recent().querySelector(`.${css.recentTile}`)!
+    const title = tile.querySelector(`.${css.recentTitle}`)!
+    const bottom = tile.querySelector(`.${css.recentBottom}`)!
+    expect(title.contains(within(tile).getByRole('link'))).toBe(true)
+    expect(title.contains(within(tile).getByRole('button', { name: en.install }))).toBe(true)
+    expect(bottom.contains(within(tile).getByRole('button', { name: en.groupMore }))).toBe(true)
+    expect(tile.querySelector(`.${css.recentDesc}`)).toBeNull()
+  })
+
+  it('keeps the full name and description available on hover', async () => {
+    stubFetch({ '/dsh-market/registry': registry() })
+    render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const first = recent().querySelector(`.${css.recentTile}`)!
+    const name = within(first).getByRole('link')
+    const desc = within(first).getByText('recent-high description')
+    // Native title is the beige system bubble; the host Tooltip is the one
+    // that matches the rest of the page.
+    expect(name.getAttribute('title')).toBeNull()
+    expect(desc.getAttribute('title')).toBeNull()
+    fireEvent.mouseEnter(name)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)) })
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)) })
+    expect(screen.getByRole('tooltip').textContent).toBe('recent-high')
+    fireEvent.mouseLeave(name)
+    fireEvent.mouseEnter(desc)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)) })
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)) })
+    expect(screen.getByRole('tooltip').textContent).toBe('recent-high description')
+    fireEvent.mouseLeave(desc)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
+  it('keeps extra recent tiles on a quiet horizontal scroll, capped at eight', async () => {
+    const extra = Array.from({ length: 10 }, (_, index) => entry(`recent-extra-${index}`, 800 - index, 1))
+    stubFetch({ '/dsh-market/registry': registry([...rows(), ...extra]) })
+    render(<MarketSection {...props()} />)
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    const row = recent().querySelector('#dshm-recent-grid')!
+    // The teaser is one row: overflow, not a second catalog page and not a
+    // width-clipped subset mouse users would never reach. waitFor: a prior
+    // test may have left the module catalog cache at five entries.
+    expect(row.className).toContain(css.recentRow)
+    await waitFor(() => {
+      expect(recent().querySelectorAll(`.${css.recentTile}`)).toHaveLength(8)
+    })
+    expect(names(recent())).toEqual(['recent-high', ...extra.slice(0, 7).map(plugin => plugin.name)])
+  })
+
+  it('keeps extra tiles reachable by a quiet horizontal scroll that still peeks', () => {
+    // jsdom does no layout, so peek and overflow cannot be observed on the
+    // node. The contract lives in the stylesheet: overflow-x auto (not
+    // hidden, not a hidden scrollbar), tiles that do not shrink, and a
+    // 3.25-wide formula so ~800px still shows a sliver of the next card.
+    const sheet = readFileSync(resolve('src/client/Market.module.css'), 'utf8')
+    const rule = (sel: string) => {
+      const escaped = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const match = new RegExp(`^\\.${escaped}\\{([^}]*)\\}`, 'mu').exec(sheet)
+      expect(match, `.${sel} rule not found in Market.module.css`).not.toBeNull()
+      return match![1]!
+    }
+    const row = rule('recentRow')
+    expect(row).toContain('overflow-x:auto')
+    expect(row).not.toContain('overflow:hidden')
+    expect(row).toContain('scrollbar-width:thin')
+    expect(row).not.toContain('scrollbar-width:none')
+    const tiles = rule('recentRow > *')
+    expect(tiles).toContain('flex:0 0 auto')
+    expect(tiles).toContain('/ 3.25)')
+    expect(tiles).toContain('min-width:220px')
+    const collapsed = rule('recentRow.recentCollapsed')
+    expect(collapsed).toContain('overflow:hidden')
+  })
+
+  it('shows the recent strip again after retrying a failed catalog refresh', async () => {
     stubFetch({ '/dsh-market/registry': registry() })
     render(<MarketSection {...props()} />)
     await screen.findByRole('region', { name: en.recentlyAdded })
@@ -8506,14 +9227,10 @@ describe('recently added Discover row (#780)', () => {
     render(<MarketSection {...props()} />)
     await screen.findByText('catalog unavailable')
     expectHidden()
-    const detachedRow = observedRecent
     stubFetch({ '/dsh-market/registry': registry() })
     fireEvent.click(screen.getByRole('button', { name: en.loadRetry }))
     await screen.findByRole('region', { name: en.recentlyAdded })
-    expect(observedRecent).not.toBe(detachedRow)
-    expect(observedRecent?.isConnected).toBe(true)
-    act(() => resizeRecent(280))
-    expect(names(recent())).toEqual(recentNames.slice(0, 2))
+    expect(names(recent())).toEqual(recentNames)
   })
 
   it('opens only one menu for either copy of a recent plugin', async () => {
@@ -8537,7 +9254,7 @@ describe('recently added Discover row (#780)', () => {
     stubFetch({ '/dsh-market/registry': registry() })
     const { container } = render(<MarketSection {...props()} />)
     await screen.findByRole('region', { name: en.recentlyAdded })
-    expect(names(recent())).toEqual(recentNames.slice(0, 4))
+    expect(names(recent())).toEqual(recentNames)
     // Old, future and dateless entries still belong to the all-time main list.
     expect(rankedNames(container)).toEqual([
       'old-high', 'old', 'future', 'undated', 'recent-high', 'cutoff', 'zero', 'github-high', 'github-low',
@@ -8548,7 +9265,10 @@ describe('recently added Discover row (#780)', () => {
       const main = rankedNames(container)
       expect(main.indexOf('cutoff')).toBeLessThan(main.indexOf('recent-high'))
     })
-    expect(names(recent())).toEqual(recentNames.slice(0, 4))
+    // The block is the DEFAULT view's teaser and ignores the sort, so it steps
+    // aside once the user asks for an order: left above the list it hid the
+    // reorder behind a screenful of unchanged cards (#1016).
+    expect(screen.queryByRole('region', { name: en.recentlyAdded })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en.filter }))
   })
 
@@ -8571,6 +9291,12 @@ describe('recently added Discover row (#780)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: en.timeWeek }))
     expectHidden()
     fireEvent.click(screen.getByRole('menuitem', { name: en.timeAll }))
+    await screen.findByRole('region', { name: en.recentlyAdded })
+    // A chosen order is one more narrowing: this block is the default view's
+    // teaser, not a header on a sorted list (#1016).
+    fireEvent.click(screen.getByRole('menuitem', { name: en.sortStars }))
+    expectHidden()
+    fireEvent.click(screen.getByRole('menuitem', { name: en.sortDownloads }))
     await screen.findByRole('region', { name: en.recentlyAdded })
     fireEvent.click(screen.getByRole('button', { name: en.filter }))
     for (const tab of [en.tabThemes, en.tabFavorites, en.tabInstalled, en.tabBlocked, en.tabAdvanced]) {
@@ -8625,7 +9351,6 @@ describe('recently added Discover row (#780)', () => {
     await waitFor(() => {
       expect(fetchCalls.some(call => call.path === '/dsh-market/discovery-compatibility'
         && (call.body as { packages?: string[] } | undefined)?.packages?.includes('off-page-recent'))).toBe(true)
-      expect(within(recent()).getByText(en.hostRequirement.replace('{0}', '^0.1.2-alpha.2'))).toBeTruthy()
     })
     fireEvent.click(within(recent()).getByRole('button', { name: en.install }))
     const dialog = within(await screen.findByRole('dialog'))
@@ -8710,6 +9435,350 @@ describe('empty filter recovery', () => {
   })
 })
 
+describe('Plugins page tab lays out as page content', () => {
+  it('keeps the page heading on the settings and sidebar mounts', async () => {
+    const { container } = render(<MarketSection {...props()} />)
+    expect(await screen.findByRole('heading', { name: en.nav })).toBeTruthy()
+    expect(screen.getByText(en.subtitle)).toBeTruthy()
+    expect(screen.getByRole('link', { name: en.submitPlugin })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.exportLog })).toBeTruthy()
+    expect(container.querySelector('[data-dsh-market-plugins-tab]')).toBeNull()
+  })
+
+  it('drops the page heading and the inner scroller height on the Plugins tab', async () => {
+    const { container } = render(<MarketSection {...props()} surface="plugins" />)
+    await screen.findByText('dsh-loop')
+    expect(screen.queryByRole('heading', { name: en.nav })).toBeNull()
+    expect(screen.queryByText(en.subtitle)).toBeNull()
+    expect(screen.queryByRole('link', { name: en.submitPlugin })).toBeNull()
+    // Export stays on the tab row — install failures ask for a log here.
+    const exportButton = screen.getByRole('button', { name: en.exportLog })
+    expect(exportButton.closest(`.${css.tabs}`)).toBeTruthy()
+    const root = container.querySelector('[data-dsh-market-root]')
+    expect(root?.getAttribute('data-dsh-market-plugins-tab')).toBe('true')
+    expect(root?.getAttribute('style') ?? '').not.toMatch(/height\s*:/)
+    // Empty tabs still fill the viewport under the stuck chrome, so a
+    // switch from Discover does not clamp the host scrollTop to 0.
+    // .empty flex-centers in the visible body slice (--dshm-empty-view-height),
+    // not the full min-height (host title still in flow would push it low).
+    const sheet = readFileSync(resolve(__dirname, '../../src/client/Market.module.css'), 'utf8')
+    expect(sheet).toMatch(
+      /\[data-dsh-market-plugins-tab="true"\]:not\(\[data-dsh-market-fullscreen="true"\]\) \.body\{[^}]*min-height:calc\(100vh - var\(--dshm-host-sticky-top/,
+    )
+    expect(sheet).toMatch(
+      /\[data-dsh-market-plugins-tab="true"\]:not\(\[data-dsh-market-fullscreen="true"\]\) \.body > \.empty\{[^}]*max-height:var\(--dshm-empty-view-height/,
+    )
+  })
+
+  it('keeps Update all on the tab row when the heading is gone', async () => {
+    stubFetch({
+      '/dsh-market/installed': { profile: 'desktop', installed: { 'dsh-loop': '^1.0.0' }, live: [] },
+      '/dsh-market/updates': { updates: { 'dsh-loop': {
+        kind: 'npm', current: '1.0.0', latest: '1.2.0', eligibleVersion: '1.1.0', updateAvailable: true,
+      } } },
+    })
+    render(<MarketSection {...props()} surface="plugins" />)
+    expect(await screen.findByRole('button', { name: new RegExp(en.updateAll) })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: en.nav })).toBeNull()
+  })
+
+  it('offers back-to-top on the host scroller of the Plugins tab', async () => {
+    const box = (top: number, bottom: number): DOMRect => ({
+      top, bottom, height: bottom - top, width: 800, left: 0, right: 800, x: 0, y: top, toJSON() { return {} },
+    })
+    const scroller = document.createElement('div')
+    const header = document.createElement('div')
+    const mount = document.createElement('div')
+    scroller.append(header, mount)
+    document.body.append(scroller)
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 2000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 800 })
+    const realStyle = window.getComputedStyle.bind(window)
+    const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+      const style = realStyle(elt as Element)
+      if (elt === scroller) return new Proxy(style, { get: (target, key) => key === 'overflowY' ? 'auto' : Reflect.get(target, key) })
+      if (elt === header) return new Proxy(style, { get: (target, key) => key === 'position' ? 'sticky' : Reflect.get(target, key) })
+      return style
+    })
+    scroller.getBoundingClientRect = () => box(10, 810)
+    header.getBoundingClientRect = () => box(10, 66)
+    const settlePin = async (): Promise<void> => {
+      fireEvent.scroll(scroller)
+      await act(async () => { await new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }) })
+    }
+    try {
+      const { container } = render(<MarketSection {...props()} surface="plugins" />, { container: mount })
+      await screen.findByText('dsh-loop')
+      const head = container.querySelector(`.${css.head}`) as HTMLElement
+      const cats = container.querySelector(`.${css.cats}`) as HTMLElement
+      // In-flow content Y of the tab row. Pin scrollTop = 120 - hostTop(56) = 64.
+      const headFlowY = 120
+      head.getBoundingClientRect = () => {
+        if (head.style.position === 'static') {
+          const top = 10 + headFlowY - scroller.scrollTop
+          return box(top, top + 44)
+        }
+        return box(66, 110)
+      }
+      cats.getBoundingClientRect = () => box(110, 142)
+
+      scroller.scrollTop = 500
+      await settlePin()
+      expect(screen.getByRole('button', { name: en.backTop })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: en.backTop }))
+      // Parks where the tab row sticks — not the host title at 0.
+      expect(scroller.scrollTop).toBe(64)
+      expect(screen.queryByRole('button', { name: en.backTop })).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
+      expect(scroller.scrollTop).toBe(64)
+    } finally {
+      styleSpy.mockRestore()
+      scroller.remove()
+    }
+  })
+
+  it('appends the next chunk on the Plugins tab and keeps pages everywhere else', async () => {
+    const plugins = Array.from({ length: 30 }, (_, i) => ({
+      name: `plug-${i}`, owner: 'alice', url: `https://github.com/alice/plug-${i}`,
+      category: ['tools'], npm: `plug-${i}`, stars: 1000 - i, added: '2026-08-01',
+      description: { en: `Plugin ${i}`, zh: `插件 ${i}` }, install: '',
+    }))
+    stubFetch({
+      '/dsh-market/registry': { source: 'live', registry: { ...REGISTRY, count: plugins.length, plugins }, hostVersion: '0.1.2-alpha.2' },
+    })
+    const { rerender } = render(<MarketSection {...props()} surface="plugins" />)
+    await screen.findByText('plug-0')
+    expect(screen.queryByText('plug-24')).toBeNull()
+    expect(screen.queryByRole('button', { name: en.nextPage })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.loadMore }))
+    expect(await screen.findByText('plug-24')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.loadMore })).toBeNull()
+
+    rerender(<MarketSection {...props()} />)
+    expect(await screen.findByRole('button', { name: en.nextPage })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.loadMore })).toBeNull()
+    expect(screen.queryByText('plug-24')).toBeNull()
+  })
+
+  it('parks the inner tab row below the host sticky chrome', async () => {
+    const box = (top: number, bottom: number): DOMRect => ({
+      top, bottom, height: bottom - top, width: 800, left: 0, right: 800, x: 0, y: top, toJSON() { return {} },
+    })
+    const scroller = document.createElement('div')
+    const header = document.createElement('div')
+    const mount = document.createElement('div')
+    scroller.append(header, mount)
+    document.body.append(scroller)
+    const realStyle = window.getComputedStyle.bind(window)
+    const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+      const style = realStyle(elt as Element)
+      if (elt === scroller) return new Proxy(style, { get: (target, key) => key === 'overflowY' ? 'auto' : Reflect.get(target, key) })
+      if (elt === header) return new Proxy(style, { get: (target, key) => key === 'position' ? 'sticky' : Reflect.get(target, key) })
+      return style
+    })
+    scroller.getBoundingClientRect = () => box(10, 810)
+    header.getBoundingClientRect = () => box(10, 66)
+    try {
+      const { container, rerender } = render(<MarketSection {...props()} surface="plugins" />, { container: mount })
+      await screen.findByText('dsh-loop')
+      const root = container.querySelector('[data-dsh-market-root]') as HTMLElement
+      const head = container.querySelector(`.${css.head}`) as HTMLElement
+      head.getBoundingClientRect = () => box(66, 110)
+      await act(async () => {
+        window.dispatchEvent(new Event('resize'))
+        await new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) })
+      })
+      expect(root.style.getPropertyValue('--dshm-host-sticky-top')).toBe('56px')
+      expect(root.style.getPropertyValue('--dshm-plugins-head-height')).toBe('44px')
+      expect(container.querySelector(`.${css.cats}`)).toBeTruthy()
+
+      rerender(<MarketSection {...props()} />)
+      await screen.findByRole('heading', { name: en.nav })
+      expect(root.style.getPropertyValue('--dshm-host-sticky-top')).toBe('')
+      expect(root.style.getPropertyValue('--dshm-plugins-head-height')).toBe('')
+      expect(root.style.getPropertyValue('--dshm-empty-view-height')).toBe('')
+    } finally {
+      styleSpy.mockRestore()
+      scroller.remove()
+    }
+  })
+
+  it('sizes empty-state centering to the visible slice on the Plugins tab', async () => {
+    const box = (top: number, bottom: number): DOMRect => ({
+      top, bottom, height: bottom - top, width: 800, left: 0, right: 800, x: 0, y: top, toJSON() { return {} },
+    })
+    const scroller = document.createElement('div')
+    const header = document.createElement('div')
+    const mount = document.createElement('div')
+    scroller.append(header, mount)
+    document.body.append(scroller)
+    const realStyle = window.getComputedStyle.bind(window)
+    const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+      const style = realStyle(elt as Element)
+      if (elt === scroller) return new Proxy(style, { get: (target, key) => key === 'overflowY' ? 'auto' : Reflect.get(target, key) })
+      if (elt === header) return new Proxy(style, { get: (target, key) => key === 'position' ? 'sticky' : Reflect.get(target, key) })
+      return style
+    })
+    scroller.getBoundingClientRect = () => box(10, 810)
+    header.getBoundingClientRect = () => box(10, 66)
+    const settle = async (): Promise<void> => {
+      await act(async () => {
+        window.dispatchEvent(new Event('resize'))
+        await new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) })
+      })
+    }
+    try {
+      const { container } = render(<MarketSection {...props()} surface="plugins" />, { container: mount })
+      await screen.findByText('dsh-loop')
+      const root = container.querySelector('[data-dsh-market-root]') as HTMLElement
+      const body = container.querySelector(`.${css.body}`) as HTMLElement
+
+      // Favorites empty: sole .body > .empty. Title still in flow — body starts
+      // below the host chrome; slice is host.bottom - body.top.
+      fireEvent.click(screen.getByRole('button', { name: re(en.tabFavorites) }))
+      expect(await screen.findByText(en.favoritesEmpty)).toBeTruthy()
+      const favEmpty = body.querySelector(`:scope > .${css.empty}`) as HTMLElement
+      body.getBoundingClientRect = () => box(180, 980)
+      favEmpty.getBoundingClientRect = () => box(180, 980)
+      await settle()
+      expect(root.style.getPropertyValue('--dshm-empty-view-height')).toBe('630px')
+
+      // Scrolled so the empty top is above the scroller — clamp to host.top,
+      // do not inflate past the host viewport (800px).
+      favEmpty.getBoundingClientRect = () => box(-40, 760)
+      body.getBoundingClientRect = () => box(-40, 760)
+      await settle()
+      expect(root.style.getPropertyValue('--dshm-empty-view-height')).toBe('800px')
+
+      // Discover empty keeps search/cats above .empty; measure from empty.top
+      // so max-height does not include that chrome.
+      fireEvent.click(screen.getByRole('button', { name: en.tabDiscover }))
+      await screen.findByText('dsh-loop')
+      const search = screen.getByPlaceholderText(en.searchPh)
+      fireEvent.change(search, { target: { value: 'zzz-no-match' } })
+      fireEvent.keyDown(search, { key: 'Enter' })
+      expect(await screen.findByText(en.empty)).toBeTruthy()
+      const discoverEmpty = body.querySelector(`:scope > .${css.empty}`) as HTMLElement
+      body.getBoundingClientRect = () => box(180, 980)
+      discoverEmpty.getBoundingClientRect = () => box(280, 980)
+      await settle()
+      expect(root.style.getPropertyValue('--dshm-empty-view-height')).toBe('530px')
+    } finally {
+      styleSpy.mockRestore()
+      scroller.remove()
+    }
+  })
+
+  it('keeps the sticky level when switching tabs or categories', async () => {
+    const box = (top: number, bottom: number): DOMRect => ({
+      top, bottom, height: bottom - top, width: 800, left: 0, right: 800, x: 0, y: top, toJSON() { return {} },
+    })
+    const scroller = document.createElement('div')
+    const header = document.createElement('div')
+    const mount = document.createElement('div')
+    scroller.append(header, mount)
+    document.body.append(scroller)
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 2000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 800 })
+    const realStyle = window.getComputedStyle.bind(window)
+    const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+      const style = realStyle(elt as Element)
+      if (elt === scroller) return new Proxy(style, { get: (target, key) => key === 'overflowY' ? 'auto' : Reflect.get(target, key) })
+      if (elt === header) return new Proxy(style, { get: (target, key) => key === 'position' ? 'sticky' : Reflect.get(target, key) })
+      return style
+    })
+    scroller.getBoundingClientRect = () => box(10, 810)
+    header.getBoundingClientRect = () => box(10, 66)
+    const settlePin = async (): Promise<void> => {
+      fireEvent.scroll(scroller)
+      await act(async () => { await new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) }) })
+    }
+    try {
+      const { container } = render(<MarketSection {...props()} surface="plugins" />, { container: mount })
+      await screen.findByText('dsh-loop')
+      const head = container.querySelector(`.${css.head}`) as HTMLElement
+      const cats = container.querySelector(`.${css.cats}`) as HTMLElement
+      head.getBoundingClientRect = () => box(66, 110)
+      cats.getBoundingClientRect = () => box(110, 142)
+
+      scroller.scrollTop = 400
+      await settlePin()
+      // Clamp fires scroll and would wipe pluginsYRef to 0. Restore must
+      // still come from the remembered floor, not the instantaneous y.
+      scroller.scrollTop = 0
+      await settlePin()
+      fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
+      expect(scroller.scrollTop).toBe(400)
+
+      scroller.scrollTop = 400
+      await settlePin()
+      scroller.scrollTop = 0
+      await settlePin()
+      fireEvent.click(screen.getByRole('button', { name: /Installed/ }))
+      // Installed has no category row — fall back to the tab-row floor.
+      expect(scroller.scrollTop).toBe(400)
+    } finally {
+      styleSpy.mockRestore()
+      scroller.remove()
+    }
+  })
+
+  it('scrolls .body again when Themes goes fullscreen on the Plugins tab', async () => {
+    const box = (top: number, bottom: number): DOMRect => ({
+      top, bottom, height: bottom - top, width: 800, left: 0, right: 800, x: 0, y: top, toJSON() { return {} },
+    })
+    const scroller = document.createElement('div')
+    const mount = document.createElement('div')
+    scroller.append(mount)
+    document.body.append(scroller)
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 2000 })
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 800 })
+    const realStyle = window.getComputedStyle.bind(window)
+    const styleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation((elt) => {
+      const style = realStyle(elt as Element)
+      if (elt === scroller) return new Proxy(style, { get: (target, key) => key === 'overflowY' ? 'auto' : Reflect.get(target, key) })
+      return style
+    })
+    scroller.getBoundingClientRect = () => box(0, 800)
+    const themeSnap = { preference: 'light', themes: [] as Array<{ id: string }> }
+    try {
+      const { container } = render(
+        <MarketSection
+          {...props()}
+          surface="plugins"
+          themeStore={{ subscribe: () => () => {}, getSnapshot: () => themeSnap }}
+        />,
+        { container: mount },
+      )
+      await screen.findByText('dsh-loop')
+      const body = container.querySelector('[data-dsh-market-root] > [class*="body"]') as HTMLElement
+      Object.defineProperty(body, 'scrollHeight', { configurable: true, get: () => 2000 })
+      Object.defineProperty(body, 'clientHeight', { configurable: true, get: () => 800 })
+
+      scroller.scrollTop = 320
+      fireEvent.click(screen.getAllByRole('button', { name: en.tabThemes })[0]!)
+      await screen.findByText('whale-skin')
+      // Flattened Plugins tab restores the host scroller, not .body.
+      expect(scroller.scrollTop).toBeGreaterThan(0)
+      expect(body.scrollTop).toBe(0)
+
+      fireEvent.click(screen.getByRole('button', { name: en.themeFullscreen }))
+      expect(container.querySelector('[data-dsh-market-root]')?.getAttribute('data-dsh-market-fullscreen')).toBe('true')
+      body.scrollTop = 260
+      scroller.scrollTop = 320
+      fireEvent.change(screen.getByPlaceholderText(en.searchPh), { target: { value: 'no-such-theme' } })
+      await screen.findByText(en.empty)
+      // Fullscreen must reset the overlay scroller, and leave the host alone.
+      expect(body.scrollTop).toBe(0)
+      expect(scroller.scrollTop).toBe(320)
+    } finally {
+      styleSpy.mockRestore()
+      scroller.remove()
+    }
+  })
+})
+
 describe('sidebar shortcut tip (#846)', () => {
   function fakeSidebar(options: { supported?: boolean; enabled?: boolean; ready?: boolean } = {}): {
     supported(): boolean
@@ -8784,7 +9853,7 @@ describe('sidebar shortcut tip (#846)', () => {
   })
 })
 
-describe('最近收录 collapses and hides without losing its column measurement (#940)', () => {
+describe('最近收录 collapses and hides (#940)', () => {
   // The block only renders for entries added in the last 7 days, so the dates
   // are relative to the run, not fixed literals.
   const today = new Date().toISOString().slice(0, 10)
@@ -8810,8 +9879,8 @@ describe('最近收录 collapses and hides without losing its column measurement
     expect(gridOf(container)).toBeTruthy()
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    // The point of the change: clipped, not unmounted. Unmounting takes the
-    // measured element away from the column-counting ResizeObserver.
+    // Clipped, not unmounted: the strip stays in the tree so expanding it
+    // does not rebuild the tiles.
     expect(gridOf(container)).toBeTruthy()
     expect(gridOf(container)!.className).toContain(css.recentCollapsed)
     expect(localStorage.getItem('dshm-recent-collapsed')).toBe('1')
@@ -8827,46 +9896,53 @@ describe('最近收录 collapses and hides without losing its column measurement
     expect(localStorage.getItem('dshm-recent-hidden')).toBe('0')
   })
 
-  it('remembers both choices across a remount', async () => {
+  it('points the restore row the same way as a collapsed heading', async () => {
+    mount()
+    const toggle = await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
+    const openIcon = toggle.querySelector('svg')!.innerHTML
+    fireEvent.click(toggle)
+    const closedIcon = toggle.querySelector('svg')!.innerHTML
+    expect(closedIcon).not.toBe(openIcon)
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByRole('button', { name: en.recentHide }))
+    // Down is "already open". This row is closed; it must match the
+    // collapsed heading (right), not the expanded one.
+    expect(screen.getByRole('button', { name: en.recentShow }).querySelector('svg')!.innerHTML).toBe(closedIcon)
+  })
+
+  it('opens the tiles when bringing the hidden block back', async () => {
+    const { container } = mount()
+    const toggle = await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
+    fireEvent.click(toggle)
+    expect(gridOf(container)!.className).toContain(css.recentCollapsed)
+    fireEvent.click(screen.getByRole('button', { name: en.recentHide }))
+    fireEvent.click(screen.getByRole('button', { name: en.recentShow }))
+    // "Show recently added" means see the tiles, not land on another
+    // collapsed heading that has to be clicked again.
+    expect(gridOf(container)!.className).not.toContain(css.recentCollapsed)
+    expect(screen.getByRole('button', { name: new RegExp(en.recentlyAdded) }).getAttribute('aria-expanded')).toBe('true')
+    expect(localStorage.getItem('dshm-recent-collapsed')).toBe('0')
+  })
+
+  it('remembers a hidden block across a remount, then opens it', async () => {
     localStorage.setItem('dshm-recent-collapsed', '1')
     localStorage.setItem('dshm-recent-hidden', '1')
     const { container } = mount()
     const restore = await screen.findByRole('button', { name: en.recentShow })
     expect(gridOf(container)).toBeNull()
     fireEvent.click(restore)
-    expect(gridOf(container)!.className).toContain(css.recentCollapsed)
+    expect(gridOf(container)!.className).not.toContain(css.recentCollapsed)
+    expect(localStorage.getItem('dshm-recent-hidden')).toBe('0')
+    expect(localStorage.getItem('dshm-recent-collapsed')).toBe('0')
   })
 
-  it('re-attaches the column observer after the block is hidden and shown again', async () => {
-    // An inert observer that hands the test its callback, so width changes are
-    // delivered on demand — jsdom has no layout.
-    const observers: Array<{ emit: (width: number) => void }> = []
-    class StubObserver {
-      constructor(callback: (entries: Array<{ contentRect: { width: number } }>) => void) {
-        observers.push({ emit: (width: number) => callback([{ contentRect: { width } }]) })
-      }
-      observe() {}
-      disconnect() {}
-    }
-    vi.stubGlobal('ResizeObserver', StubObserver)
-    const emitWidth = async (width: number, list: typeof observers) => {
-      await act(async () => { list.forEach(observer => observer.emit(width)) })
-    }
+  it('keeps a collapsed-only choice across a remount', async () => {
+    localStorage.setItem('dshm-recent-collapsed', '1')
     const { container } = mount()
-    await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
-    const before = observers.length
-    expect(before).toBeGreaterThan(0)
-    await emitWidth(600, observers)
-    expect(gridOf(container)!.getAttribute('style')).toContain('repeat(2')
-    fireEvent.click(screen.getByRole('button', { name: en.recentHide }))
-    fireEvent.click(screen.getByRole('button', { name: en.recentShow }))
-    // Restoring unmounts and remounts the measured element, so the effect has
-    // to run again. Without recentHidden in its deps no new observer appears
-    // and the block stops following a resize from here on.
-    const fresh = observers.slice(before)
-    expect(fresh.length).toBeGreaterThan(0)
-    await emitWidth(300, fresh)
-    expect(gridOf(container)!.getAttribute('style')).toContain('repeat(1')
+    const toggle = await screen.findByRole('button', { name: new RegExp(en.recentlyAdded) })
+    expect(screen.queryByRole('button', { name: en.recentShow })).toBeNull()
+    expect(gridOf(container)!.className).toContain(css.recentCollapsed)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
   })
 })
 
@@ -8944,5 +10020,384 @@ describe('OwnerAvatar icon', () => {
     )
     expect(container.querySelector('img')).toBeNull()
     expect(container.textContent).toBe('L')
+  })
+})
+
+describe('Agent-safe drain mode (#411)', () => {
+  it('shows a Host-owned waiting task, not a failed install, and cancels it by operation id', async () => {
+    const waitingSince = Date.now()
+    const operation = {
+      operationId: 'boot-1-drain-1',
+      kind: 'install',
+      name: 'dsh-loop',
+      url: 'https://github.com/alice/dsh-loop',
+      state: 'draining',
+      createdAt: waitingSince,
+      startedAt: null,
+      finishedAt: null,
+      wait: { reason: 'agents', activeCount: 1, activeAgentIds: ['main'], since: waitingSince },
+      failure: null,
+      outcome: null,
+    }
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: true,
+        drainOperations: [],
+        drainHistory: [],
+      },
+      '/dsh-market/install': {
+        __status: 202,
+        ok: true,
+        accepted: true,
+        operationId: operation.operationId,
+        operation,
+      },
+      '/dsh-market/cancel': { ok: true, cancelled: true, operationId: operation.operationId },
+    })
+    render(<MarketSection {...props()} />)
+    await screen.findByText('dsh-loop')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    fireEvent.click(screen.getAllByRole('button', { name: en.install })[0]!)
+    fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+
+    expect(await screen.findByText(/Waiting for 1 Agent/)).toBeTruthy()
+    const installCall = fetchCalls.find(call => call.path === '/dsh-market/install' && call.method === 'POST')
+    expect(installCall?.body).toMatchObject({ busyPolicy: 'drain' })
+    // The card says it is waiting for Agents, not that the install failed.
+    expect(screen.getAllByText(en.agentDrainBadge).length).toBeGreaterThan(0)
+    // A Host-owned row is not part of the client queue, so "run now" and
+    // "dequeue" must not be offered; only the Host can cancel it.
+    expect(screen.queryByRole('button', { name: en.opRunNow })).toBeNull()
+    // The client drain interval must not re-run the row: the Host owns the
+    // maintenance barrier, and a second POST would bypass it.
+    await new Promise(resolve => setTimeout(resolve, 2200))
+    expect(fetchCalls.filter(call => call.path === '/dsh-market/install' && call.method === 'POST')).toHaveLength(1)
+    fireEvent.click(screen.getAllByRole('button', { name: en.cancelOp }).at(-1)!)
+    await waitFor(() => {
+      expect(fetchCalls.some(call =>
+        call.path === '/dsh-market/cancel'
+        && (call.body as { operationId?: string } | undefined)?.operationId === operation.operationId)).toBe(true)
+    })
+  })
+
+  it('reconstructs a waiting Host task after the page mounts', async () => {
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: true,
+        drainOperations: [{
+          operationId: 'boot-1-drain-2',
+          kind: 'update',
+          name: 'dsh-loop',
+          state: 'draining',
+          createdAt: Date.now(),
+          startedAt: null,
+          finishedAt: null,
+          wait: { reason: 'agents', activeCount: 2, activeAgentIds: ['main', 'helper'], since: Date.now() },
+          failure: null,
+          outcome: null,
+        }],
+        drainHistory: [],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(/Waiting for 2 Agent/)).toBeTruthy()
+    expect(screen.getByText('main')).toBeTruthy()
+    expect(screen.getByText('helper')).toBeTruthy()
+  })
+
+  it('marks an operation from an earlier Host process as cancelled by restart', async () => {
+    localStorage.setItem('dshm-drain-v1', JSON.stringify([
+      { id: 'boot-old-drain-1', kind: 'update', name: 'dsh-loop' },
+    ]))
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: false,
+        drainOperations: [],
+        drainHistory: [],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(en.agentDrainRestarted)).toBeTruthy()
+    expect(localStorage.getItem('dshm-drain-v1')).toBeNull()
+  })
+
+  it('replaces a Host-projected row when the page own 202 arrives', async () => {
+    const operation = {
+      operationId: 'boot-1-drain-6',
+      kind: 'install',
+      name: 'dsh-loop',
+      url: 'https://github.com/alice/dsh-loop',
+      state: 'draining',
+      createdAt: Date.now(),
+      startedAt: null,
+      finishedAt: null,
+      wait: { reason: 'agents', activeCount: 1, activeAgentIds: ['main'], since: Date.now() },
+      failure: null,
+      outcome: null,
+    }
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: true,
+        drainOperations: [operation],
+        drainHistory: [],
+      },
+      '/dsh-market/install': {
+        __status: 202,
+        ok: true,
+        accepted: true,
+        operationId: operation.operationId,
+        operation,
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(/Waiting for 1 Agent/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: en.install })[0]!)
+    fireEvent.click(await screen.findByRole('button', { name: en.confirmInstall }))
+    await waitFor(() => {
+      // One Host operation, one row: the synthetic projection is dropped when
+      // the page's own record adopts the same id.
+      expect(screen.getAllByText(/Waiting for 1 Agent/)).toHaveLength(1)
+    })
+  })
+
+  it('settles a projected Host row from the terminal journal after a restart', async () => {
+    const operationId = 'boot-1-drain-7'
+    const status: Record<string, unknown> = {
+      active: false,
+      pnpm: true,
+      boot: 'boot-1',
+      restart: true,
+      installed: {},
+      agentDrain: true,
+      drainActive: true,
+      drainOperations: [{
+        operationId,
+        kind: 'update',
+        name: 'dsh-loop',
+        state: 'draining',
+        createdAt: Date.now(),
+        startedAt: null,
+        finishedAt: null,
+        wait: { reason: 'agents', activeCount: 1, activeAgentIds: ['main'], since: Date.now() },
+        failure: null,
+        outcome: null,
+      }],
+      drainHistory: [],
+    }
+    stubFetch({ '/dsh-market/status': status })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(/Waiting for 1 Agent/)).toBeTruthy()
+
+    status.boot = 'boot-2'
+    status.drainActive = false
+    status.drainOperations = []
+    status.drainHistory = [{
+      at: Date.now(),
+      id: operationId,
+      kind: 'update',
+      name: 'dsh-loop',
+      state: 'succeeded',
+      agentsAtStart: 1,
+      agentsAtEnd: 0,
+    }]
+    await waitFor(() => expect(screen.queryByText(/Waiting for 1 Agent/)).toBeNull(), { timeout: 3500 })
+    expect(screen.getAllByText(en.opDone).length).toBeGreaterThan(0)
+  })
+
+  it('does not re-add a Host task the user cleared', async () => {
+    const activeId = 'boot-1-drain-8'
+    const doneId = 'boot-1-drain-9'
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: true,
+        drainOperations: [
+          {
+            operationId: activeId,
+            kind: 'update',
+            name: 'dsh-loop',
+            state: 'draining',
+            createdAt: Date.now(),
+            startedAt: null,
+            finishedAt: null,
+            wait: { reason: 'agents', activeCount: 1, activeAgentIds: ['main'], since: Date.now() },
+            failure: null,
+            outcome: null,
+          },
+          {
+            operationId: doneId,
+            kind: 'update',
+            name: 'dsh-other',
+            state: 'succeeded',
+            createdAt: Date.now() - 1000,
+            startedAt: Date.now() - 900,
+            finishedAt: Date.now() - 500,
+            wait: null,
+            failure: null,
+            outcome: { needsRefresh: false, restartRequired: false, activation: null, hot: false },
+          },
+        ],
+        drainHistory: [],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(/Waiting for 1 Agent/)).toBeTruthy()
+    expect(screen.getByText('dsh-other')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.opClear }))
+    await waitFor(() => expect(screen.queryByText('dsh-other')).toBeNull())
+
+    // The active row keeps the status poll alive; the cleared terminal row
+    // must not be projected back by it.
+    await new Promise(resolve => setTimeout(resolve, 2200))
+    expect(screen.queryByText('dsh-other')).toBeNull()
+  })
+
+  it('keeps a same-boot drain marker and only drops the stale one', async () => {
+    localStorage.setItem('dshm-drain-v1', JSON.stringify([
+      { id: 'boot-1-drain-10', kind: 'update', name: 'same-boot' },
+      { id: 'boot-old-drain-11', kind: 'update', name: 'old-boot' },
+    ]))
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: false,
+        drainOperations: [],
+        drainHistory: [],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(en.agentDrainRestarted)).toBeTruthy()
+    expect(JSON.parse(localStorage.getItem('dshm-drain-v1') ?? '[]')).toEqual([
+      { id: 'boot-1-drain-10', kind: 'update', name: 'same-boot' },
+    ])
+  })
+
+  it('keeps the refresh action when the terminal journal settles a done row', async () => {
+    const activeId = 'boot-1-drain-12'
+    const doneId = 'boot-1-drain-13'
+    const status: Record<string, unknown> = {
+      active: false,
+      pnpm: true,
+      boot: 'boot-1',
+      restart: true,
+      installed: {},
+      agentDrain: true,
+      drainActive: true,
+      drainOperations: [
+        {
+          operationId: activeId,
+          kind: 'update',
+          name: 'dsh-loop',
+          state: 'draining',
+          createdAt: Date.now(),
+          startedAt: null,
+          finishedAt: null,
+          wait: { reason: 'agents', activeCount: 1, activeAgentIds: ['main'], since: Date.now() },
+          failure: null,
+          outcome: null,
+        },
+        {
+          operationId: doneId,
+          kind: 'install',
+          name: 'dsh-other',
+          url: 'https://github.com/alice/dsh-other',
+          state: 'succeeded',
+          createdAt: Date.now() - 1000,
+          startedAt: Date.now() - 900,
+          finishedAt: Date.now() - 500,
+          wait: null,
+          failure: null,
+          outcome: { needsRefresh: true, restartRequired: false, activation: 'live', hot: false },
+        },
+      ],
+      drainHistory: [],
+    }
+    stubFetch({ '/dsh-market/status': status })
+    render(<MarketSection {...props()} />)
+    expect(await screen.findByText(/Waiting for 1 Agent/)).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: en.refresh }).length).toBeGreaterThan(0)
+
+    // The live operation is gone; only the journal describes what happened.
+    status.drainOperations = [(status.drainOperations as unknown[])[0]]
+    status.drainHistory = [{
+      at: Date.now(),
+      id: doneId,
+      kind: 'install',
+      name: 'dsh-other',
+      state: 'succeeded',
+      agentsAtStart: 1,
+      agentsAtEnd: 0,
+    }]
+    await new Promise(resolve => setTimeout(resolve, 2200))
+    // The journal has no activation outcome; it must not overwrite the one the
+    // live operation already reported.
+    expect(screen.getAllByRole('button', { name: en.refresh }).length).toBeGreaterThan(0)
+  })
+
+  it('renders a cancelled Host task without the failure treatment', async () => {
+    stubFetch({
+      '/dsh-market/status': {
+        active: false,
+        pnpm: true,
+        boot: 'boot-1',
+        restart: true,
+        installed: {},
+        agentDrain: true,
+        drainActive: false,
+        drainOperations: [{
+          operationId: 'boot-1-drain-3',
+          kind: 'update',
+          name: 'dsh-loop',
+          state: 'cancelled',
+          createdAt: Date.now(),
+          startedAt: null,
+          finishedAt: Date.now(),
+          wait: null,
+          failure: null,
+          outcome: null,
+        }],
+        drainHistory: [],
+      },
+    })
+    render(<MarketSection {...props()} />)
+    fireEvent.click(await screen.findByRole('button', { name: en.opTitle }))
+    expect(await screen.findByText(en.agentDrainCancelled)).toBeTruthy()
+    // A cancelled task is not a failure; the generic retry action belongs to
+    // failed rows only.
+    expect(screen.queryByRole('button', { name: en.opRetry })).toBeNull()
   })
 })

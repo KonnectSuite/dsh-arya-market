@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkUpdates, compareVersions, fetchNpmLatest, isUpgrade } from '../src/updates.ts'
+import { checkUpdates, compareVersions, fetchNpmLatest, isUpgrade, resolveDesktopMatureUpdate } from '../src/updates.ts'
 
 describe('compareVersions', () => {
   it('orders by major, minor, then patch', () => {
@@ -97,23 +97,24 @@ describe('isUpgrade', () => {
  */
 describe('checkUpdates — fresh-release wait (#945)', () => {
   /** An npm-installed plugin in its own profile directory. */
-  function npmProfile(windowMinutes?: number): string {
+  function npmProfile(windowMinutes?: number, name = 'widget'): string {
     const dir = join(mkdtempSync(join(tmpdir(), 'dshm-upd-')), 'profiles', 'web')
-    mkdirSync(join(dir, 'node_modules', 'widget'), { recursive: true })
-    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { widget: '^1.0.0' } }))
-    writeFileSync(join(dir, 'node_modules', 'widget', 'package.json'), JSON.stringify({ name: 'widget', version: '1.0.0', dsh: {} }))
+    mkdirSync(join(dir, 'node_modules', name), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { [name]: '^1.0.0' } }))
+    writeFileSync(join(dir, 'node_modules', name, 'package.json'), JSON.stringify({ name, version: '1.0.0', dsh: {} }))
     writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
-    if (windowMinutes !== undefined) writeFileSync(join(dir, 'pnpm-workspace.yaml'), `minimumReleaseAge: ${String(windowMinutes)}\n`)
+    if (windowMinutes !== undefined) writeFileSync(join(dir, 'pnpm-workspace.yaml'), `minimumReleaseAge: ${String(windowMinutes)}\nminimumReleaseAgeIgnoreMissingTime: false\n`)
     return dir
   }
 
   /** Registry answers: latest 1.1.0, published at `published`. */
-  function registry(published: string): void {
+  function registry(published: string | undefined, name = 'widget'): void {
     vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
       const href = String(url)
-      const body = href.endsWith('/widget/latest')
+      const body = href.endsWith(`/${encodeURIComponent(name)}/latest`)
         ? { version: '1.1.0' }
-        : { time: { '1.0.0': '2026-01-01T00:00:00.000Z', '1.1.0': published } }
+        : { 'dist-tags': { latest: '1.1.0' }, versions: { '1.0.0': {}, '1.1.0': {} },
+            time: { '1.0.0': '2026-01-01T00:00:00.000Z', '1.1.0': published } }
       return new Response(JSON.stringify(body), { status: 200 })
     }))
   }
@@ -164,8 +165,10 @@ describe('checkUpdates — fresh-release wait (#945)', () => {
       if (href.endsWith('/widget/latest')) return new Response(JSON.stringify({ version: '1.1.0' }), { status: 200 })
       packuments++
       const body = packuments === 1
-        ? { time: { '1.0.0': '2026-01-01T00:00:00.000Z' } }
-        : { time: { '1.1.0': hoursAgo(1) } }
+        ? { 'dist-tags': { latest: '1.1.0' }, versions: { '1.0.0': {}, '1.1.0': {} },
+            time: { '1.0.0': '2026-01-01T00:00:00.000Z' } }
+        : { 'dist-tags': { latest: '1.1.0' }, versions: { '1.0.0': {}, '1.1.0': {} },
+            time: { '1.1.0': hoursAgo(1) } }
       return new Response(JSON.stringify(body), { status: 200 })
     }))
     const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
@@ -191,6 +194,312 @@ describe('checkUpdates — fresh-release wait (#945)', () => {
     const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
     expect(result.widget?.updateAvailable).toBe(true)
     expect(result.widget?.heldUpdate).toBeUndefined()
+  })
+
+  it('recomputes a higher candidate when its wait expires, even inside the normal cache TTL', async () => {
+    const dir = npmProfile(1440)
+    let now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+    let packuments = 0
+    const young = new Date(now - 23 * 3_600_000).toISOString()
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      if (String(url).endsWith('/widget/latest')) return new Response(JSON.stringify({ version: '1.2.0' }))
+      packuments++
+      return new Response(JSON.stringify({
+        'dist-tags': { latest: '1.2.0' }, versions: { '1.0.0': {}, '1.1.0': {}, '1.2.0': {} },
+        time: { '1.0.0': '2026-01-01T00:00:00.000Z', '1.1.0': '2026-01-01T00:00:00.000Z', '1.2.0': young },
+      }))
+    }))
+    try {
+      const first = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+      expect(first.widget).toMatchObject({ eligibleVersion: '1.1.0', latest: '1.2.0', updateAvailable: true, heldUpdate: { latest: '1.2.0' } })
+      expect((await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })).widget?.eligibleVersion).toBe('1.1.0')
+      expect(packuments).toBe(1)
+      now += 2 * 3_600_000
+      const second = await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+      expect(second.widget).toMatchObject({ eligibleVersion: '1.2.0', updateAvailable: true })
+      expect(second.widget?.heldUpdate).toBeUndefined()
+      expect(packuments).toBe(2)
+    } finally { clock.mockRestore() }
+  })
+
+  it('offers the market its own mature release even though it follows a channel (#1087)', async () => {
+    // The market is the one package the channel setting is FOR, so it is
+    // always in channelFor — and `desktopStable` used to require
+    // `channel === undefined`, which disabled the mature-release fallback
+    // (#1019) for exactly this row. The market releases about daily, so each
+    // release restarted the age window on `/latest` and the row never offered
+    // a version that was already mature. On the stable channel the resolved
+    // target IS `latest`, so the fallback applies here like anywhere else.
+    const dir = npmProfile(1440, 'dshmarket')
+    const now = Date.now()
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      if (String(url).endsWith('/dshmarket/latest')) return new Response(JSON.stringify({ version: '1.2.0' }))
+      return new Response(JSON.stringify({
+        'dist-tags': { latest: '1.2.0' }, versions: { '1.0.0': {}, '1.1.0': {}, '1.2.0': {} },
+        time: {
+          '1.0.0': '2026-01-01T00:00:00.000Z',
+          // Mature: 48 hours old, past the 24-hour window.
+          '1.1.0': new Date(now - 48 * 3_600_000).toISOString(),
+          // The newest release: one hour old, inside the window.
+          '1.2.0': new Date(now - 3_600_000).toISOString(),
+        },
+      }))
+    }))
+    const channelFor = new Map([['dshmarket', 'stable' as const]])
+    const result = await checkUpdates('web', true, dir, channelFor, new Map(), new Map(), { holdYoungReleases: true })
+    // Before the fix: `updateAvailable: false`, no candidate, held on 1.2.0.
+    expect(result.dshmarket).toMatchObject({
+      latest: '1.2.0', eligibleVersion: '1.1.0', updateAvailable: true, heldUpdate: { latest: '1.2.0' },
+    })
+  })
+
+  it('accepts only a verified exact-version exemption and fails closed on unknown exclusion syntax', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(1))
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: false\nminimumReleaseAgeExclude:\n  - widget@1.1.0\n')
+    const allowed = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(allowed.widget?.eligibleVersion).toBe('1.1.0')
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: false\nminimumReleaseAgeExclude:\n  - widget@^1.1.0\n')
+    const refused = await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(refused.widget?.eligibleVersion).toBeUndefined()
+    expect(refused.widget?.updateAvailable).toBe(false)
+  })
+
+  it('recognizes pnpm 11 scope wildcard exclusions for a scoped plugin', async () => {
+    const name = '@dsh991/widget'
+    const dir = npmProfile(1440, name)
+    registry(hoursAgo(1), name)
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), "minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: false\nminimumReleaseAgeExclude:\n  - '@dsh991/*'\n")
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result[name]?.eligibleVersion).toBe('1.1.0')
+  })
+
+  it('applies pnpm 11 first matching rule: a package exemption wins over later version rules', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(1))
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: false\nminimumReleaseAgeExclude:\n  - widget\n  - widget@1.0.0\n')
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.eligibleVersion).toBe('1.1.0')
+  })
+
+  it.each([
+    ['minimumReleaseAgeStrict: false\n', 'strict false allows pnpm 11 to auto-write age exclusions'],
+    ['minimumReleaseAgeIgnoreMissingTime: true\n', 'missing time bypass affects transitive dependencies'],
+  ])('accepts native transitive policy %s (%s) (#991 approved)', async (extra) => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(48))
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), `minimumReleaseAge: 1440\n${extra}`)
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.eligibleVersion).toBe('1.1.0')
+    expect(result.widget?.updateAvailable).toBe(true)
+  })
+
+  it('follows a wider environment window over the profile and invalidates the cached target (#1053)', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(48))
+    const before = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(before.widget?.eligibleVersion).toBe('1.1.0')
+    // A week, in minutes: the release below is two hours old, so this holds
+    // it — not because the value is unreadable (that was #1053) but because
+    // it is a real wait pnpm would also apply.
+    vi.stubEnv('PNPM_CONFIG_MINIMUM_RELEASE_AGE', '10080')
+    try {
+      const after = await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+      expect(after.widget?.eligibleVersion).toBeUndefined()
+      expect(after.widget?.updateAvailable).toBe(false)
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it.each(['minimum-release-age-strict', 'minimumReleaseAgeStrict', 'minimum-release-age-ignore-missing-time'])(
+    'accepts native transitive npmrc policy %s without changing the top-level wait (#991 approved)', async key => {
+      const dir = npmProfile(1440)
+      registry(hoursAgo(48))
+      writeFileSync(join(dir, '.npmrc'), key + '=false\n')
+      const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+      expect(resolved.candidate).toBe('1.1.0')
+      registry(undefined)
+      expect((await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')).candidate).toBeNull()
+    },
+  )
+
+  it('follows a numeric .npmrc window instead of holding every update forever (#1048)', async () => {
+    // No workspace file, so the .npmrc key IS the window — the shape the
+    // reporter had (`minimum-release-age=0`). install.ts already reads this key
+    // as the profile's window; the listing must not call it unverifiable.
+    const dir = npmProfile()
+    writeFileSync(join(dir, '.npmrc'), 'minimum-release-age=0\n')
+    registry(hoursAgo(1))
+    const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+    expect(resolved.reason).not.toBe('policy-unknown')
+    expect(resolved.candidate).toBe('1.1.0')
+    expect(resolved.heldUpdate).toBeUndefined()
+  })
+
+  it('still refuses a .npmrc window that is not a number', async () => {
+    // Accepted spellings have to be ones this plugin can reproduce; a value it
+    // cannot read stays unverifiable rather than guessed.
+    const dir = npmProfile()
+    writeFileSync(join(dir, '.npmrc'), 'minimum-release-age=soon\n')
+    registry(hoursAgo(48))
+    expect((await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')).reason).toBe('policy-unknown')
+  })
+
+  it.each(['PNPM_CONFIG_MINIMUM_RELEASE_AGE_STRICT', 'npm_config_minimumReleaseAgeIgnoreMissingTime'])(
+    'accepts native transitive environment policy %s and still requires top-level time (#991 approved)', async key => {
+      const dir = npmProfile(1440)
+      registry(hoursAgo(48))
+      expect((await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })).widget?.eligibleVersion).toBe('1.1.0')
+      vi.stubEnv(key, 'true')
+      try {
+        expect((await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })).widget?.eligibleVersion).toBe('1.1.0')
+        registry(undefined)
+        expect((await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')).candidate).toBeNull()
+      } finally { vi.unstubAllEnvs() }
+    },
+  )
+
+  it('treats a numeric environment window as a known policy instead of holding every update forever (#1053)', async () => {
+    // DSH Desktop sets PNPM_CONFIG_MINIMUM_RELEASE_AGE=0 for every pnpm call.
+    // The environment branch scanned before any file read turned that into
+    // policy-unknown, so every desktop user saw "新版等待中" forever.
+    const dir = npmProfile()
+    registry(hoursAgo(1))
+    vi.stubEnv('PNPM_CONFIG_MINIMUM_RELEASE_AGE', '0')
+    try {
+      const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+      expect(resolved.reason).not.toBe('policy-unknown')
+      expect(resolved.candidate).toBe('1.1.0')
+      expect(resolved.heldUpdate).toBeUndefined()
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('uses a positive integer environment window as the wait (#1053)', async () => {
+    // 60 minutes covers a two-hour-old release, so the env value (not pnpm's
+    // 1440-minute default) decides. An unread numeric env is the bug; a read
+    // one must also carry its value or the window stays the wrong length.
+    const dir = npmProfile()
+    registry(hoursAgo(2))
+    vi.stubEnv('PNPM_CONFIG_MINIMUM_RELEASE_AGE', '60')
+    try {
+      const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+      expect(resolved.reason).toBe('eligible')
+      expect(resolved.candidate).toBe('1.1.0')
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('still refuses an environment window that is not a number (#1053)', async () => {
+    const dir = npmProfile()
+    registry(hoursAgo(48))
+    vi.stubEnv('PNPM_CONFIG_MINIMUM_RELEASE_AGE', 'soon')
+    try {
+      expect((await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')).reason).toBe('policy-unknown')
+    } finally { vi.unstubAllEnvs() }
+  })
+
+  it('keeps the profile window when no environment window is set (#1053)', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(1))
+    const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+    expect(resolved.reason).not.toBe('policy-unknown')
+    expect(resolved.heldUpdate?.latest).toBe('1.1.0')
+  })
+
+  it.each(['minimum-release-age-exclude=widget', 'minimumReleaseAgeExclude[]=widget', 'minimum-release-age-exclude[]=widget', 'minimum-release-age-unknown=true', 'minimum-release-age-strict=invalid'])(
+    'refuses unverified external npmrc policy %s (#991 approved)', async policy => {
+      const dir = npmProfile(1440)
+      registry(hoursAgo(48))
+      writeFileSync(join(dir, '.npmrc'), policy + '\n')
+      expect((await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')).reason).toBe('policy-unknown')
+    },
+  )
+
+  it('offers a mature top-level version with the implicit pnpm 11 default (#991 approved)', async () => {
+    const dir = npmProfile()
+    registry(hoursAgo(48))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.eligibleVersion).toBe('1.1.0')
+    expect(result.widget?.updateAvailable).toBe(true)
+  })
+
+  it.each([
+    'minimumReleaseAge: 1440\n',
+    'minimumReleaseAge: 1440\nminimumReleaseAgeStrict: true\n',
+    'minimumReleaseAgeStrict: true\n',
+  ])('accepts native missing-time handling with a known mature top-level timestamp: %s (#991 review)', async yaml => {
+    const dir = npmProfile()
+    registry(hoursAgo(48))
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), yaml)
+    const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+    expect(resolved.reason).toBe('eligible')
+    expect(resolved.candidate).toBe('1.1.0')
+    const listed = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(listed.widget?.updateAvailable).toBe(true)
+    expect(listed.widget?.eligibleVersion).toBe('1.1.0')
+  })
+
+  it('retains the mature target when only transitive missing-time handling changes (#991 review)', async () => {
+    const dir = npmProfile(1440)
+    registry(hoursAgo(48))
+    expect((await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })).widget?.eligibleVersion).toBe('1.1.0')
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\n')
+    const listed = await checkUpdates('web', false, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(listed.widget?.updateAvailable).toBe(true)
+    expect(listed.widget?.eligibleVersion).toBe('1.1.0')
+  })
+
+  it.each([
+    ['implicit policy', 'packages:\n  - .\n'],
+    ['explicit non-strict policy', 'minimumReleaseAge: 1440\nminimumReleaseAgeStrict: false\n'],
+    ['missing-time policy', 'minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: true\n'],
+  ])('authorizes a known mature top-level version under native policy: %s (#991)', async (_label, yaml) => {
+    const dir = npmProfile()
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), yaml)
+    registry(hoursAgo(48))
+    const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+    expect(resolved.reason).toBe('eligible')
+    expect(resolved.candidate).toBe('1.1.0')
+    const listed = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(listed.widget?.updateAvailable).toBe(true)
+    expect(listed.widget?.eligibleVersion).toBe('1.1.0')
+  })
+
+  it.each(['', 'minimumReleaseAgeStrict: false\n', 'minimumReleaseAgeIgnoreMissingTime: true\n'])(
+    'refuses unknown top-level time under native policy %s (#991 approved)', async yaml => {
+      const dir = npmProfile()
+      writeFileSync(join(dir, 'pnpm-workspace.yaml'), yaml)
+      registry(undefined)
+      const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+      expect(resolved.candidate).toBeNull()
+      const listed = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+      expect(listed.widget?.updateAvailable).toBe(false)
+      expect(listed.widget?.eligibleVersion).toBeUndefined()
+    },
+  )
+
+  it.each([
+    ['unparseable YAML', 'minimumReleaseAge: [invalid\n'],
+    ['invalid strict value', 'minimumReleaseAge: 1440\nminimumReleaseAgeStrict: "false"\n'],
+    ['invalid missing-time value', 'minimumReleaseAge: 1440\nminimumReleaseAgeIgnoreMissingTime: "true"\n'],
+  ])('keeps unreadable policy unknown and blocked: %s (#991)', async (_label, yaml) => {
+    const dir = npmProfile()
+    writeFileSync(join(dir, 'pnpm-workspace.yaml'), yaml)
+    const resolved = await resolveDesktopMatureUpdate('widget', '1.0.0', 'web', dir, '1.1.0')
+    expect(resolved.reason).toBe('policy-unknown')
+    expect(resolved.candidate).toBeNull()
+  })
+
+  it('rejects a registry latest mismatch without offering a verified candidate', async () => {
+    const dir = npmProfile(1440)
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => new Response(JSON.stringify(
+      String(url).endsWith('/widget/latest') ? { version: '1.2.0' } : {
+        'dist-tags': { latest: '1.1.0' }, versions: { '1.0.0': {}, '1.1.0': {} },
+        time: { '1.0.0': hoursAgo(72), '1.1.0': hoursAgo(72) },
+      },
+    ))))
+    const result = await checkUpdates('web', true, dir, new Map(), new Map(), new Map(), { holdYoungReleases: true })
+    expect(result.widget?.eligibleVersion).toBeUndefined()
+    expect(result.widget?.updateAvailable).toBe(false)
   })
 })
 

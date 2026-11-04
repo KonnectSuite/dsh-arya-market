@@ -119,7 +119,7 @@ the install-time half of the same policy:
 
 ```powershell
 cd $env:USERPROFILE\.aryacode\profiles\desktop
-node "$env:LOCALAPPDATA\Programs\AryaCode\resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs" add @aryacode/dsh-arya-market@1.70.1-arya.0.5 @aryacode/dsh-engineering@0.85.3 @aryacode/dsh-aryacode-polish@0.115.0 --save-exact --config.minimum-release-age=0
+node "$env:LOCALAPPDATA\Programs\AryaCode\resources\runtime\primary-runtime\dependencies\pnpm\bin\pnpm.mjs" add @aryacode/dsh-arya-market@1.73.10-arya.0.1 @aryacode/dsh-engineering@0.85.3 @aryacode/dsh-aryacode-polish@0.117.0 --save-exact --config.minimum-release-age=0
 ```
 
 Then restart AryaCode (host code) and reload the window (client bundle). After

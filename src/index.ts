@@ -10,8 +10,10 @@ import { createDesktopPluginRuntime, setHostPackageManager, type DesktopPnpmLike
 import { createOfficialDesktopRuntime, type OfficialPluginManagerLike } from './official-desktop.ts'
 import { isDshProfileName } from './profile.ts'
 import { setRequestGateSource, setTrustedHostsSource } from './http.ts'
+import { setLauncherInstallAnchorSource } from './dsh-install.ts'
 import { mountMarketRoutes, type HostPluginActivation, type MarketConfig, type MarketHost } from './routes.ts'
 import { installDesktopMarketSettings, installMarketSettings } from './settings.ts'
+import { MAX_AUTO_REPAIR_ATTEMPTS } from './pending-updates.ts'
 import type { AgentsServiceLike } from './agents.ts'
 
 export const name = 'dsh-market'
@@ -217,11 +219,43 @@ export function useTrustedHosts(ctx: Context): () => void {
   }
 }
 
+/**
+ * Feed host detection the install anchor the launcher published.
+ *
+ * The CLI is located by walking `process.argv[1]` up to its package, and the
+ * official Desktop by Electron's resources directory. An embedded host — a
+ * packaged app that boots the dsh core tree in-process — has neither, so
+ * `dshHostInfo()` answered null there and every host-version surface read
+ * "unknown": Discover's compatibility filter (#473), the pre-install refusal
+ * (#404), and the exported log's `dsh host:` line (#426). The launcher does
+ * publish where its runtime is (`profileContext.installAnchor`), so hand
+ * that to detection. Read through a live source, not a mount-time copy:
+ * launchers may provide `profileContext` after the market mounts (the same
+ * timing problem the origins above handle), and a frozen value would answer
+ * "unknown" for the whole session on exactly those hosts.
+ *
+ * Exported for the specs that cover this wiring.
+ * @returns a restore function for the effect that installed it.
+ */
+export function useLauncherInstallAnchor(ctx: Context): () => void {
+  const previous = setLauncherInstallAnchorSource(() => {
+    const profileContext = ctx.get('profileContext') as ProfileContextLike | undefined
+    const anchor = profileContext?.installAnchor
+    return typeof anchor === 'string' ? anchor : null
+  })
+  return () => {
+    setLauncherInstallAnchorSource(previous)
+  }
+}
+
 export function apply(ctx: Context, config?: Config): void {
   validateCatalogUrl(config?.catalogUrl ?? ARYA_CATALOG_URL)
   resolveAryaDownloadLimits(config ?? {})
   ctx.inject(['webServer', 'loader'], (hostCtx: Context) => {
     const host = hostCtx as unknown as MarketEffectHost
+    // Before any branch mounts: every host-version surface reads detection
+    // through the anchor, so it has to be in place before those exist.
+    host.effect(() => useLauncherInstallAnchor(ctx), 'dsh-market: launcher install anchor')
     const desktopProfiles = ctx.get('desktopProfiles') as DesktopProfilesLike | undefined
     if (desktopProfiles === undefined) {
       // An explicit `profile:` in cordis.yml is the operator speaking and
@@ -303,7 +337,10 @@ export function apply(ctx: Context, config?: Config): void {
           const repairTimer = setTimeout(() => {
             void runtime.repairPendingUpdates().then(report => {
               if (report.reinstalled.length === 0 && report.failed.length === 0) return
-              console.warn(`dsh-market: ${report.reinstalled.length} interrupted update(s) reinstalled, ${report.failed.length} still pending`)
+              const abandoned = report.abandoned.length === 0
+                ? ''
+                : `, ${String(report.abandoned.length)} given up on after ${String(MAX_AUTO_REPAIR_ATTEMPTS)} starts — reinstall from Settings → Plugins: ${report.abandoned.join(', ')}`
+              console.warn(`dsh-market: ${String(report.reinstalled.length)} interrupted update(s) reinstalled, ${String(report.failed.length)} still pending${abandoned}`)
             })
           }, PENDING_UPDATE_REPAIR_DELAY_MS)
           repairTimer.unref?.()

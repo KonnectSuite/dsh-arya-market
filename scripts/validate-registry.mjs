@@ -19,14 +19,17 @@
  *       github:owner/repo[+ #path:], or a release archive under that same repo)
  *   E11 no duplicate install identity (same repo+subpath, or same npm package)
  *   E12 top-level `count` matches plugins.length
+ *   E13 previousNpm (#1012) is a non-empty list of valid npm names, none of
+ *       them still live in the catalog, each claimed by one successor only
  *
  * Network existence probes (does the npm package / github repo actually exist)
  * are intentionally out of scope: they need network, are slow, and are flaky in
  * CI. They belong in a separate `--probe` maintainer tool, not the merge gate.
  *
- * Exit code: 0 when there are no hard errors, 1 otherwise. Warnings never fail
- * the run — they surface informational signal (display-name collisions across
- * distinct authors/monorepos are permitted by design).
+ * Exit code: 0 when there are no hard errors, 1 otherwise. Warnings never
+ * fail the run. DSHM_REGISTRY_ADVISORY=1 is CI-only and only excuses the
+ * listed (entry, code) pairs below — a new E10 or any other code still
+ * fails the merge. A local draft (no env) always fails on every error.
  */
 
 import fs from 'node:fs'
@@ -48,10 +51,11 @@ import { fileURLToPath } from 'node:url'
  * CI guard that exists because it had happened before).
  *
  * Now the gate reads what users actually get. A local file still wins when
- * present, so an offline run works by dropping one in.
+ * present, so an offline run works by dropping one in (or by pointing
+ * DSHM_REGISTRY_FILE at a draft).
  */
 const CATALOG_URL = process.env.DSHM_REGISTRY_URL ?? 'https://awesome-dsh-plugin.com/plugins.json'
-const LOCAL = fileURLToPath(new URL('../data/registry-snapshot.json', import.meta.url))
+const LOCAL = process.env.DSHM_REGISTRY_FILE ?? fileURLToPath(new URL('../data/registry-snapshot.json', import.meta.url))
 
 /** The catalog and where it came from, or null when neither source answers. */
 async function loadCatalog() {
@@ -105,6 +109,16 @@ function releaseTargetRepo(target) {
 function fail(errors, entry, code, msg) {
   errors.push({ entry: entry && entry.name ? entry.name : '<unknown>', code, msg })
 }
+
+/**
+ * Live catalog rows this repository cannot edit that have been failing
+ * every unrelated PR since 1.71.0. Empty the set and drop the CI env when
+ * the catalog itself is clean again.
+ */
+const KNOWN_LIVE_DRIFT = new Set([
+  'dsh-quick-restart:E10',
+  'dsh-gitui:E10',
+])
 
 async function main() {
   const errors = []
@@ -270,10 +284,68 @@ async function main() {
       identSeen.set(identity, p.name)
     }
 
+    // E13 — previousNpm (#1012): a renamed package's former npm names. Shape
+    // only here; the cross-entry rules run after the loop, once every live
+    // package name in the catalog is known.
+    //
+    // The field name is matched exactly. `PreviousNpm` is not a typo the gate
+    // may forgive: both this script and the runtime read the exact key, so a
+    // miscased one is silently ignored and the rename simply never appears.
+    for (const key of Object.keys(p)) {
+      if (key !== 'previousNpm' && key.toLowerCase() === 'previousnpm') {
+        fail(errors, p, 'E13', `key "${key}" is not the rename field; spell it "previousNpm" exactly`)
+      }
+    }
+    if (p.previousNpm !== undefined) {
+      if (!Array.isArray(p.previousNpm) || p.previousNpm.length === 0) {
+        fail(errors, p, 'E13', 'previousNpm must be a non-empty array of npm package names when present')
+      } else {
+        for (const old of p.previousNpm) {
+          if (typeof old !== 'string' || !NPM_NAME_RE.test(old)) {
+            // npm names are always lowercase, so a value that would be valid
+            // after lowercasing is a case mistake, not a syntax one (#1012).
+            const miscased = typeof old === 'string' && NPM_NAME_RE.test(old.toLowerCase())
+            fail(errors, p, 'E13', miscased
+              ? `previousNpm entry ${JSON.stringify(old)} must be lowercase`
+              : `previousNpm entry ${JSON.stringify(old)} is not a valid npm package name`)
+          }
+        }
+      }
+    }
+
     // W1 — display-name collision (allowed across distinct authors / monorepos)
     const seen = nameToEntries.get(p.name)
     if (seen) seen.push(p.owner)
     else nameToEntries.set(p.name, [p.owner])
+  }
+
+  // E13 — previousNpm cross-entry rules (#1012). A former name that is still a
+  // live package elsewhere in the catalog would make one name mean two
+  // plugins, so it is refused; and one former name may have exactly one
+  // successor, or discovery is ambiguous and the market would silently offer
+  // nothing.
+  const liveNames = new Map()
+  for (const p of plugins) {
+    for (const n of [p.name, p.npm]) {
+      if (typeof n === 'string' && n !== '') liveNames.set(n.toLowerCase(), p.name)
+    }
+  }
+  const declaredFormer = new Map()
+  for (const p of plugins) {
+    if (!Array.isArray(p.previousNpm)) continue
+    for (const old of p.previousNpm) {
+      if (typeof old !== 'string' || !NPM_NAME_RE.test(old)) continue
+      const key = old.toLowerCase()
+      if (liveNames.has(key)) {
+        fail(errors, p, 'E13', `previousNpm "${old}" is still a live package name in the catalog ("${liveNames.get(key)}")`)
+        continue
+      }
+      if (declaredFormer.has(key)) {
+        fail(errors, p, 'E13', `previousNpm "${old}" is already declared by "${declaredFormer.get(key)}"; one former name can only have one successor`)
+      } else {
+        declaredFormer.set(key, p.name)
+      }
+    }
   }
 
   // E12 — count integrity
@@ -307,6 +379,11 @@ async function main() {
       console.error(`   [${e.code}] ${e.entry}: ${e.msg}`)
     }
     console.log(`\n  warnings: ${warnings.length} (display-name collisions: ${nameCollisionGroups}, stars=0: ${stars0})`)
+    const unexpected = errors.filter((e) => !KNOWN_LIVE_DRIFT.has(`${e.entry}:${e.code}`))
+    if (process.env.DSHM_REGISTRY_ADVISORY === '1' && unexpected.length === 0) {
+      console.log('\n  advisory: known live-catalog drift only; not failing this repo\'s merge')
+      return
+    }
     process.exit(1)
   }
 
@@ -318,3 +395,4 @@ async function main() {
 }
 
 await main()
+

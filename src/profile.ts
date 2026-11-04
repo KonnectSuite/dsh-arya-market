@@ -1035,15 +1035,78 @@ export function bundlePatchInsertedIds(dir: string): string[] {
  * conventional root cordis.patch.yml a package may ship instead.
  */
 export function bundleOptOutRowIds(dir: string): string[] {
+  return declaredPatchRowIds(dir, 'disabledIds')
+}
+
+/**
+ * Row ids a package's own patch sources decide with an EXPRESSION rather
+ * than a literal — `disabled: !!js …` (#1043). The bundle's default for
+ * these rows is whatever the condition evaluates to on the host that
+ * composes the profile, so no literal the market writes above the bundle
+ * layer can stand in for the user: force-writing `disabled: false` switches
+ * on a row the environment keeps off (a TUI row on a Desktop without the TUI
+ * services), which then holds the package pending at activation and fails
+ * the next install's check.
+ *
+ * Reads the same two patch sources as `bundleOptOutRowIds` above.
+ */
+export function bundleExpressionRowIds(dir: string): string[] {
+  return declaredPatchRowIds(dir, 'expressionIds')
+}
+
+/**
+ * Row ids a package's own patch sources declare for one role — the loop the
+ * two readers above and below share.
+ *
+ * They read the same two sources: every declared `dsh.bundle.patch` (one file,
+ * or an ordered list of them, #792) and the conventional root
+ * `cordis.patch.yml` a package may ship instead. Keeping that loop in one place
+ * is the point — `bundlePatchInsertedIds` above is declared-files-only, and a
+ * copy of this scan that forgot the root file is exactly how the two sides of
+ * one question drift apart.
+ *
+ * A source that cannot be read contributes nothing rather than throwing: this
+ * answers "what does the package say it ships", and a file that is not there
+ * says nothing. That is the tolerant half of the family by design — the strict
+ * one (`readBundlePatchRows`) refuses the whole declaration, because the host
+ * loads none of a patch it cannot read completely.
+ */
+function declaredPatchRowIds(dir: string, role: 'insertedIds' | 'disabledIds' | 'expressionIds'): string[] {
   const ids = new Set<string>()
   const read = (file: string): void => {
     try {
-      for (const id of parsePatchRows(readFileSync(file, 'utf8')).disabledIds) ids.add(id)
-    } catch { /* no such patch — nothing shipped off through it */ }
+      for (const id of parsePatchRows(readFileSync(file, 'utf8'))[role]) ids.add(id)
+    } catch { /* no such patch — nothing declared through it */ }
   }
   for (const file of declaredBundlePatchFiles(dir)) read(file)
   read(join(dir, 'cordis.patch.yml'))
   return [...ids]
+}
+
+/**
+ * Row ids the installed copy of a package DECLARES it inserts (#1012).
+ *
+ * The evidence half of `rowIdsForPackage`: the same two patch sources (the
+ * declared `dsh.bundle.patch`, one file or an ordered list, and the
+ * conventional root `cordis.patch.yml`), insert rows only, and — unlike that
+ * reader — no live loader rows.
+ *
+ * Live rows are exactly what this cannot use. A rename transaction asks the
+ * question twice: of the old package just before it is removed (whose rows are
+ * still live, but whose patch files are about to be the only copy left) and of
+ * the new package right after its first install (which has never been booted,
+ * so the loader has never heard of it). Only the package's own declaration can
+ * answer for both.
+ *
+ * That is the same question, and the same parser, as `renamePredecessor` asks
+ * on the install path — an install never boots the package either, so it
+ * compares declarations too and the two refusals agree on what "one plugin"
+ * means (#1012). Where they differ is the root `cordis.patch.yml`: see
+ * `declaredPatchRowIds` for why this reader covers it and that gate's
+ * declared-only reader does not.
+ */
+export function shippedInsertedRowIds(dir: string): string[] {
+  return declaredPatchRowIds(dir, 'insertedIds')
 }
 
 /**
@@ -1058,13 +1121,17 @@ export function bundleOptOutRowIds(dir: string): string[] {
  * rows, but for "what does this bundle bring in" any row counts. `insertedIds`
  * is the subset under an `insert:` key (#147) — and "under `insert:`" is not
  * the same as "deeper than it", because a row's `config:` carries its payload
- * (#841).
+ * (#841). `expressionIds` (#1043) is the subset whose `disabled` is decided
+ * by an expression rather than a literal — a row the market must never
+ * answer with a literal of its own, because the host re-evaluates the
+ * condition on every compose and no user-layer value can stand in for it.
  */
-export function parsePatchRows(text: string): { names: string[]; ids: string[]; insertedIds: string[]; disabledIds: string[] } {
+export function parsePatchRows(text: string): { names: string[]; ids: string[]; insertedIds: string[]; disabledIds: string[]; expressionIds: string[] } {
   const names: string[] = []
   const ids: string[] = []
   const insertedIds: string[] = []
   const disabledIds: string[] = []
+  const expressionIds: string[] = []
   {
     // CRLF too, for consistency with the hot-mount parser, which a
     // Windows-authored patch genuinely broke. Here it changes no outcome
@@ -1161,6 +1228,35 @@ export function parsePatchRows(text: string): { names: string[]; ids: string[]; 
     }
 
     /**
+     * Whether the row holding the `id:` at `from` declares `disabled` with
+     * a value that is not the literal `true` or `false` — an expression such
+     * as `disabled: !!js …`, or anything else the market cannot read (#1043).
+     * The bundle's own default for such a row is decided by the host at
+     * compose time, so a literal written above it never speaks for the user:
+     * force-enabling it switches on a row the environment keeps off. A row
+     * with NO `disabled` key is not decided at all and stays out — its
+     * default is plain "on".
+     *
+     * Same row span as `rowDeclaresDisabled`, and for the same reason: the
+     * marker line and the row's own keys at the key column, never a nested
+     * block.
+     */
+    const rowDeclaresExpressionDisabled = (from: number): boolean => {
+      const start = rowStart(from)
+      if (start === -1) return false
+      const markerIndent = rows[start].indent
+      const col = keyCol(start)
+      for (let j = start; j < rows.length; j++) {
+        const row = rows[j]
+        if (j > start && row.indent <= markerIndent) break
+        if (j > start && (row.indent !== col || isDash(j))) continue
+        const value = /^\s*-?\s*disabled:\s*(.*)$/u.exec(row.line)
+        if (value !== null && !/^(?:true|false)\s*$/u.test(value[1])) return true
+      }
+      return false
+    }
+
+    /**
      * Whether the key at `keyIndent` holds a block sequence. YAML lets that
      * sequence sit at the key's own column (`config:` then `- id:` without
      * further indent), so a `- ` there is the value, not a sibling.
@@ -1210,6 +1306,9 @@ export function parsePatchRows(text: string): { names: string[]; ids: string[]; 
         // decided (#876) — see bundleOptOutRowIds. Payload ids (#841) are not
         // rows and never land here.
         if (payloadIndent === null && rowDeclaresDisabled(i) && !disabledIds.includes(id[1])) disabledIds.push(id[1])
+        // An expression-decided row is the third shape: neither opt-in nor
+        // plain, and the market must not write over it (#1043).
+        if (payloadIndent === null && rowDeclaresExpressionDisabled(i) && !expressionIds.includes(id[1])) expressionIds.push(id[1])
         // A top-level `- id:` row closes any open insert block: it is a
         // sibling of `- insert:`, not a member of it.
         if (insertIndent !== null && indent > insertIndent) {
@@ -1220,7 +1319,7 @@ export function parsePatchRows(text: string): { names: string[]; ids: string[]; 
       }
     }
   }
-  return { names, ids, insertedIds, disabledIds }
+  return { names, ids, insertedIds, disabledIds, expressionIds }
 }
 
 /**
@@ -1418,6 +1517,14 @@ export function hasLoadableEntry(profileDirectory: string, name: string, hostDir
   // just, correctly, installed.
   const workspaceRoot = dirname(profileDirectory)
   const targets = bundlePatchTargets(dir).filter(target => target !== name)
+  // #1091: a pure patch carrier may mount its OWN subpaths rather than other
+  // packages — `@wufeng0105/dsh-enhance/auto-approve/index.js`, `./ui/index.js`.
+  // Every probe below treats a target as a package directory, so those became
+  // `<dir>/auto-approve/index.js/package.json` and could never resolve: pnpm
+  // installed a carrier that shipped complete, and validateAddedPlugins
+  // reported it broken and removed it right afterwards. A target that lives
+  // inside this package names a file, and that is all this check needs to see.
+  if (targets.some(target => selfTargetExists(dir, name, target))) return true
   if (targets.some(target => entryArtifactExists(join(profileDirectory, 'node_modules', target))
     || entryArtifactExists(join(dir, 'node_modules', target))
     || entryArtifactExists(join(workspaceRoot, 'node_modules', target)))) return true
@@ -1438,6 +1545,29 @@ export function hasLoadableEntry(profileDirectory: string, name: string, hostDir
   const packaged = /[/\\]app\.asar[/\\]/iu.test(host)
   return targets.some(target => packaged && target.startsWith('@deepseek-ai/')
     || packageResolvableFrom(join(host, 'package.json'), target))
+}
+
+/**
+ * Whether a patch target names a file INSIDE the carrier itself (#1091).
+ *
+ * Two spellings are in use: the package's own name as a prefix
+ * (`@scope/enhance/auto-approve/index.js`) and a relative path
+ * (`./ui/index.js`). A relative path that climbs out of the package is
+ * refused rather than followed — the point is a file this package ships.
+ */
+function selfTargetExists(dir: string, name: string, target: string): boolean {
+  const relative = target.startsWith(`${name}/`)
+    ? target.slice(name.length + 1)
+    : target.startsWith('./') ? target.slice(2) : null
+  if (relative === null || relative === '') return false
+  if (relative.split('/').includes('..')) return false
+  try {
+    return statSync(join(dir, relative)).isFile()
+  } catch {
+    // Missing or unreadable: this target says nothing, and the package-dir
+    // probes below still get their chance.
+    return false
+  }
 }
 
 /** Whether `target` resolves from the host's own dependency tree. */
@@ -1595,6 +1725,11 @@ export function setAllowBuilds(profile: string, packages: string[], explicitDir?
   const SEG = '[A-Za-z0-9_-][A-Za-z0-9_.-]*'
   const NAME = '[A-Za-z0-9@/_.-]+'
   const SHA = '[0-9a-f]{40}'
+  // A dependency pnpm resolved from a BRANCH keys its decision by the ref,
+  // not by a commit: `name@https://codeload.github.com/o/r/tar.gz/refs/heads/main`
+  // (#1034). The ref is path segments only — no `.`/`..`, no empty piece —
+  // so it cannot walk out of the URL it is written into.
+  const REF = `refs/(?:heads|tags)/${SEG}(?:/${SEG})*`
   // pnpm's exact monorepo key includes the selected directory; dropping it
   // makes approve-and-retry write only a bare name that git builds ignore.
   const DIR = '(?!\\.{1,2}(?:/|$))[A-Za-z0-9_.-]+'
@@ -1619,9 +1754,9 @@ export function setAllowBuilds(profile: string, packages: string[], explicitDir?
   // exact path shape.
   const ARCHIVE_KEY_RE = new RegExp(
     `^${NAME}@https://(?:`
-    + `codeload\\.github\\.com/${SEG}/${SEG}/tar\\.gz/${SHA}`
-    + `|bitbucket\\.org/${SEG}/${SEG}/get/${SHA}\\.tar\\.gz`
-    + `|gitlab\\.com/${SEG}(?:/${SEG})+/-/archive/${SHA}/${SEG}-${SHA}\\.tar\\.gz`
+    + `codeload\\.github\\.com/${SEG}/${SEG}/tar\\.gz/(?:${SHA}|${REF})`
+    + `|bitbucket\\.org/${SEG}/${SEG}/get/(?:${SHA}|${REF})\\.tar\\.gz`
+    + `|gitlab\\.com/${SEG}(?:/${SEG})+/-/archive/(?:${SHA}|${REF})/${SEG}-(?:${SHA}|${REF})\\.tar\\.gz`
     + `)(?:#${SUBPATH})?$`,
   )
   for (const pkg of packages) {
@@ -1716,6 +1851,95 @@ function isPackageName(name: string): boolean {
 }
 
 /**
+ * The parsed `minimumReleaseAgeExclude` block of a profile workspace file.
+ *
+ * Both the #732 merge and the uninstall cleanup (#1093) rewrite this block, and
+ * both must leave every shape they cannot read exactly alone: an unreadable
+ * entry is skipped, never rewritten from a guess.
+ */
+interface ReleaseAgeBlock {
+  file: string
+  yaml: string
+  blockRe: RegExp
+  eol: string
+  indent: string
+  items: ReleaseAgeItem[]
+}
+
+/** One parsed block line. */
+type ReleaseAgeItem =
+  | { kind: 'comment'; line: string }
+  | { kind: 'entry'; rule: ReleaseAgeExcludeRule; quoted: boolean; original: string; comment: string | null }
+
+function readReleaseAgeBlock(file: string): ReleaseAgeBlock | null {
+  let yaml: string
+  try { yaml = readFileSync(file, 'utf8') } catch { return null }
+  // Block form only: `minimumReleaseAgeExclude:` then INDENTED lines — `- <entry>`
+  // entries, comment lines among them, and the continuations of a folded entry.
+  // Two shapes used to end the block early, each truncating the entry cut by it:
+  // a comment line inside the block (#816), and a folded entry — pnpm wrapping a
+  // long `||` union across two lines — whose continuation is indented but does
+  // not start with `-` (#820). The truncated first line is still a legal
+  // single-line match, so nothing downstream noticed: its unterminated quote
+  // read as a package name, and the repair rewrote the line it had misread, once
+  // per run. The boundary now spans every indented line, so those shapes are
+  // seen whole. Blank lines must not truncate a block either: otherwise an
+  // unreadable continuation below one could escape validation before a write.
+  const blockRe = /^minimumReleaseAgeExclude:[ \t]*\r?\n((?:(?:[ \t]+[^\r\n]*|[ \t]*#[^\r\n]*)\r?\n?|\r?\n)*)/m
+  const block = blockRe.exec(yaml)
+  if (block === null) return null
+  const eol = /\r\n/.test(yaml) ? '\r\n' : '\n'
+  const indentMatch = /^([ \t]+)-/m.exec(block[1])
+  const indent = indentMatch === null ? '  ' : indentMatch[1]
+
+  /**
+   * The block in its original order. Comment lines are kept verbatim; an
+   * entry keeps its trailing ` # …` comment, which YAML only recognises after
+   * whitespace. A `#` anywhere else in an entry is not something this can
+   * read exactly, so the file is left alone.
+   */
+  const items: ReleaseAgeItem[] = []
+  const physical = block[1].split(/\r?\n/)
+  if (physical[physical.length - 1] === '') physical.pop()
+  for (let i = 0; i < physical.length; i++) {
+    const line = physical[i]
+    if (line.trim() === '' || /^[ \t]*#/.test(line)) {
+      items.push({ kind: 'comment', line })
+      continue
+    }
+    const m = /^([ ]+)-[ ]+(\S.*)$/.exec(line)
+    if (m === null || m[1] !== indent || !/^[A-Za-z0-9._~@'"-]/.test(m[2])) return null
+    const raw = [line]
+    // Only uninterrupted, more-indented continuation lines are supported.
+    // The YAML parser, rather than a string join, determines folding/escapes.
+    while (i + 1 < physical.length) {
+      const next = physical[i + 1]
+      if (next.trim() === '' || /^[ \t]*#/.test(next)) break
+      const spaces = /^ +/.exec(next)?.[0].length ?? 0
+      if (spaces <= indent.length) break
+      raw.push(next)
+      i++
+    }
+    let value: unknown
+    try {
+      // Keep the pre-existing repair of single-line, unquoted scoped names
+      // (#732). YAML itself forbids a plain scalar starting with `@`.
+      value = m[2].startsWith('@') && raw.length === 1
+        ? m[2].replace(/[ \t]+#.*$/, '').trimEnd()
+        : load(raw.join('\n'), { schema: JSON_SCHEMA })
+      if (Array.isArray(value) && value.length === 1) value = value[0]
+    } catch { return null }
+    if (typeof value !== 'string') return null
+    const rule = splitReleaseAgeExclude(value)
+    if (rule === null) return null
+    const comment = /[ \t]+(#[^\r\n]*)$/.exec(raw[raw.length - 1])?.[1] ?? null
+    items.push({ kind: 'entry', rule, quoted: /^['"]/.test(m[2]), original: raw.join(eol), comment })
+  }
+
+  return { file, yaml, blockRe, eol, indent, items }
+}
+
+/**
  * Make a profile's `minimumReleaseAgeExclude` readable again (#732).
  *
  * pnpm appends a second rule for a package that already has one, while its
@@ -1754,73 +1978,50 @@ function isPackageName(name: string): boolean {
  *   needed no repair or could not be repaired, in which case it is left
  *   byte-for-byte as it was.
  */
-export function mergeDuplicateReleaseAgeExcludes(profile: string, explicitDir?: string): string[] {
-  const file = join(profileDir(profile, explicitDir), 'pnpm-workspace.yaml')
-  let yaml: string
-  try { yaml = readFileSync(file, 'utf8') } catch { return [] }
-  // Block form only: `minimumReleaseAgeExclude:` then INDENTED lines — `- <entry>`
-  // entries, comment lines among them, and the continuations of a folded entry.
-  // Two shapes used to end the block early, each truncating the entry cut by it:
-  // a comment line inside the block (#816), and a folded entry — pnpm wrapping a
-  // long `||` union across two lines — whose continuation is indented but does
-  // not start with `-` (#820). The truncated first line is still a legal
-  // single-line match, so nothing downstream noticed: its unterminated quote
-  // read as a package name, and the repair rewrote the line it had misread, once
-  // per run. The boundary now spans every indented line, so those shapes are
-  // seen whole. Blank lines must not truncate a block either: otherwise an
-  // unreadable continuation below one could escape validation before a write.
-  const blockRe = /^minimumReleaseAgeExclude:[ \t]*\r?\n((?:(?:[ \t]+[^\r\n]*|[ \t]*#[^\r\n]*)\r?\n?|\r?\n)*)/m
-  const block = blockRe.exec(yaml)
+/**
+ * Remove one package's `minimumReleaseAgeExclude` rows (#1093).
+ *
+ * pnpm writes this key itself when it installs a version still inside the
+ * fresh-release wait, and it writes one row for the package plus one per
+ * platform subpackage. Uninstalling took the dependency out of the manifest
+ * and the lockfile but left those rows behind, pinned to versions of a package
+ * the profile no longer has. They are not only noise: they read as live policy
+ * to anyone diagnosing a release-age refusal months later.
+ *
+ * Only rows naming this package are dropped. A platform subpackage
+ * (`@typescript/typescript-darwin-arm64`) is a DIFFERENT package name, and
+ * nothing in the file says which main package it belongs to — guessing would
+ * delete policy that may still be in effect for something installed.
+ *
+ * @returns the entries removed, for the caller to log; empty when there is no
+ *   such block, no such row, or the file cannot be read exactly (in which case
+ *   it is left byte-for-byte as it was).
+ */
+export function dropReleaseAgeExcludes(profile: string, name: string, explicitDir?: string): string[] {
+  const block = readReleaseAgeBlock(join(profileDir(profile, explicitDir), 'pnpm-workspace.yaml'))
   if (block === null) return []
-  const eol = /\r\n/.test(yaml) ? '\r\n' : '\n'
-  const indentMatch = /^([ \t]+)-/m.exec(block[1])
-  const indent = indentMatch === null ? '  ' : indentMatch[1]
-  /**
-   * The block in its original order. Comment lines are kept verbatim; an
-   * entry keeps its trailing ` # …` comment, which YAML only recognises after
-   * whitespace. A `#` anywhere else in an entry is not something this can
-   * read exactly, so the file is left alone.
-   */
-  type Item =
-    | { kind: 'comment'; line: string }
-    | { kind: 'entry'; rule: ReleaseAgeExcludeRule; quoted: boolean; original: string; comment: string | null }
-  const items: Item[] = []
-  const physical = block[1].split(/\r?\n/)
-  if (physical[physical.length - 1] === '') physical.pop()
-  for (let i = 0; i < physical.length; i++) {
-    const line = physical[i]
-    if (line.trim() === '' || /^[ \t]*#/.test(line)) {
-      items.push({ kind: 'comment', line })
-      continue
-    }
-    const m = /^([ ]+)-[ ]+(\S.*)$/.exec(line)
-    if (m === null || m[1] !== indent || !/^[A-Za-z0-9._~@'"-]/.test(m[2])) return []
-    const raw = [line]
-    // Only uninterrupted, more-indented continuation lines are supported.
-    // The YAML parser, rather than a string join, determines folding/escapes.
-    while (i + 1 < physical.length) {
-      const next = physical[i + 1]
-      if (next.trim() === '' || /^[ \t]*#/.test(next)) break
-      const spaces = /^ +/.exec(next)?.[0].length ?? 0
-      if (spaces <= indent.length) break
-      raw.push(next)
-      i++
-    }
-    let value: unknown
-    try {
-      // Keep the pre-existing repair of single-line, unquoted scoped names
-      // (#732). YAML itself forbids a plain scalar starting with `@`.
-      value = m[2].startsWith('@') && raw.length === 1
-        ? m[2].replace(/[ \t]+#.*$/, '').trimEnd()
-        : load(raw.join('\n'), { schema: JSON_SCHEMA })
-      if (Array.isArray(value) && value.length === 1) value = value[0]
-    } catch { return [] }
-    if (typeof value !== 'string') return []
-    const rule = splitReleaseAgeExclude(value)
-    if (rule === null) return []
-    const comment = /[ \t]+(#[^\r\n]*)$/.exec(raw[raw.length - 1])?.[1] ?? null
-    items.push({ kind: 'entry', rule, quoted: /^['"]/.test(m[2]), original: raw.join(eol), comment })
-  }
+  const { file, yaml, blockRe, eol, items } = block
+  const dropped: string[] = []
+  const lines = items.flatMap(item => {
+    if (item.kind === 'comment') return [item.line]
+    if (item.rule.name !== name) return [item.original]
+    dropped.push(item.rule.selector === null ? item.rule.name : `${item.rule.name}@${item.rule.selector}`)
+    return []
+  })
+  if (dropped.length === 0) return []
+  // Nothing left but comments: the key itself goes. `minimumReleaseAgeExclude:`
+  // with no rows is a null value, and pnpm rejects the file rather than
+  // reading it as an empty list.
+  const empty = lines.every(line => line.trim() === '' || /^\s*#/.test(line))
+  const replacement = empty ? '' : `minimumReleaseAgeExclude:${eol}${lines.join(eol)}${eol}`
+  writeFileSync(file, yaml.replace(blockRe, () => replacement))
+  return dropped
+}
+
+export function mergeDuplicateReleaseAgeExcludes(profile: string, explicitDir?: string): string[] {
+  const block = readReleaseAgeBlock(join(profileDir(profile, explicitDir), 'pnpm-workspace.yaml'))
+  if (block === null) return []
+  const { file, yaml, blockRe, eol, indent, items } = block
   const entries = items.flatMap(item => item.kind === 'entry' ? [item] : [])
   const byName = new Map<string, {
     selectors: Set<string>

@@ -78,10 +78,41 @@ describe('routesFor', () => {
     expect(sources[1]).toEqual({ kind: 'npm', registry: DEFAULT_NPM_REGISTRY, pkg: 'dsh-plugin-catalog' })
   })
 
-  it('changes nothing for a region whose list already carries the package (#891)', () => {
+  it('keeps the package first for a region whose list already carries it (#891)', () => {
     // China names it first, so appending it again would be a second attempt
     // at a source that has just failed.
-    expect(catalogSourcesFor('china')).toEqual(routesFor('china', {}).catalog)
+    const sources = catalogSourcesFor('china')
+    expect(sources[0]).toEqual(routesFor('china', {}).catalog[0])
+    expect(sources.filter(source => source.kind === 'npm' && source.registry === routesFor('china', {}).npmRegistry)).toHaveLength(1)
+  })
+
+  it('names a second China mirror before the origin (#1051)', () => {
+    // One mirror and one origin was the whole list, so a network that refused
+    // the mirror (measured: HTTP 522/525 through a corporate egress proxy)
+    // left the origin — the host the China line exists to avoid — as the only
+    // way to the catalog. The package is on npm proper and npmmirror carries
+    // the same file.
+    const sources = catalogSourcesFor('china')
+    expect(sources).toEqual([
+      { kind: 'npm', registry: 'https://mirrors.cloud.tencent.com/npm', pkg: 'dsh-plugin-catalog' },
+      { kind: 'npm', registry: 'https://registry.npmmirror.com', pkg: 'dsh-plugin-catalog' },
+      { kind: 'url', url: expect.stringContaining('awesome-dsh-plugin.com') },
+    ])
+  })
+
+  it('does not fall back to a public mirror when the operator named their own (#1051)', () => {
+    // A run pointed at an internal registry is a statement about the network
+    // it runs on; adding a public mirror behind their back would be the same
+    // mistake as ignoring DSHM_NPM_MIRROR itself.
+    process.env.DSHM_NPM_MIRROR = 'https://npm.internal'
+    try {
+      const registries = catalogSourcesFor('china')
+        .filter(source => source.kind === 'npm')
+        .map(source => source.registry)
+      expect(registries).toEqual(['https://npm.internal'])
+    } finally {
+      delete process.env.DSHM_NPM_MIRROR
+    }
   })
 
   it('follows the environment override, so the fallback rides the registry in use (#891)', () => {

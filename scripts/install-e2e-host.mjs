@@ -100,12 +100,24 @@ writeFileSync(join(root, 'pnpm-workspace.yaml'), [
   '',
 ].join('\n'))
 
-const install = spawnSync('pnpm', ['install', '--no-frozen-lockfile'], {
+const attempt = () => spawnSync('pnpm', ['install', '--no-frozen-lockfile'], {
   cwd: root,
   stdio: 'inherit',
   // pnpm is a .cmd shim on Windows, which spawn only finds through a shell.
   shell: process.platform === 'win32',
 })
+let install = attempt()
+if (install.status !== 0) {
+  // A registry race upstream is not this repository's failure. Measured
+  // 2026-10-28: `@aws-sdk/middleware-websocket` named `@aws-sdk/core@^3.978.7`
+  // before core 3.978.7 was published, and every web-e2e job went red with
+  // `ERR_PNPM_NO_MATCHING_VERSION` for about two minutes until it landed.
+  // One retry after the wave settles turns that into a slower pass instead of
+  // a red lane someone has to re-read.
+  console.error('host install failed; retrying once in 20s in case the registry was racing a publish')
+  await new Promise(resolve => setTimeout(resolve, 20_000))
+  install = attempt()
+}
 if (install.status !== 0) process.exit(install.status ?? 1)
 
 const bin = join(root, 'node_modules', '.bin')

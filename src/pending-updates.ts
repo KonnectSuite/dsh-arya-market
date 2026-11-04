@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { logEvent } from './log.ts'
-import { readInstalledVersion, readManifestDeps, readProfileBundles } from './profile.ts'
+import { readInstalledManifest, readInstalledVersion, readManifestDeps, readProfileBundles } from './profile.ts'
 
 /** One removal that has not been answered by a settled install. */
 export interface PendingUpdate {
@@ -223,9 +223,30 @@ export interface RepairReport {
   /** Records that needed no work: the profile already held a settled version. */
   finished: string[]
   failed: Array<{ name: string; reason: string }>
+  /** Packages the market has stopped retrying by itself (see MAX_AUTO_REPAIR_ATTEMPTS). */
+  abandoned: string[]
 }
 
 export const REPAIR_INSTALL_TIMEOUT_MS = 300_000
+
+/**
+ * How many starts may each spend up to REPAIR_INSTALL_TIMEOUT_MS trying to put
+ * one package back before the market stops trying by itself.
+ *
+ * Retrying is right while the cause might be transient (offline, a registry
+ * briefly down, the host still shutting down). It stops being right when every
+ * start pays the full timeout for a spec that will never install — the shape a
+ * reporter lived through on the Desktop host (#1061: five days of failing
+ * reinstalls on every boot, all of it invisible). The record is kept, so the
+ * package is not forgotten; only the automatic attempt stops, and the user is
+ * told where to act.
+ */
+export const MAX_AUTO_REPAIR_ATTEMPTS = 3
+
+/** What the user is told once the cap is reached: what, why, and what to do. */
+function gaveUpCopy(name: string, attempts: number): string {
+  return `${name} 还没装回来：之前 ${String(attempts)} 次启动都没能装好，市场不再自动重试。请到「设置 → 插件」重新安装它 / ${name} is still missing: ${String(attempts)} starts could not reinstall it, so the market stopped retrying — reinstall it from Settings → Plugins`
+}
 
 function managerSucceeded(result: { application: string }): boolean {
   return result.application === 'applied'
@@ -234,14 +255,28 @@ function managerSucceeded(result: { application: string }): boolean {
 }
 
 /**
- * Whether this profile still wants the package: declared in its manifest, or
- * listed as a bundle. `readInstalledVersion` only looks at node_modules, and
- * the half-removed state #928 describes is exactly "still on disk, no longer
- * declared" — treating that as settled cleared the record while the plugin
- * was not composed at all (#949 review).
+ * Whether this profile is actually composed with the package.
+ *
+ * `readInstalledVersion` only looks at node_modules, and the half-removed
+ * state #928 describes is exactly "still on disk, no longer declared" —
+ * treating that as settled cleared the record while the plugin was not
+ * composed at all (#949 review). Being declared is necessary but not
+ * sufficient: a package that loads through the bundle layer is composed only
+ * when the profile lists it in `dsh.profile.bundles`, and the desktop manager
+ * can fail at its application stage AFTER writing the build and the
+ * dependency but BEFORE that row (#928) — the reporter's restart restored
+ * files and dependencies, left `dsh.profile.bundles` without the name, and
+ * the record said "recorded as finished".
+ *
+ * The row is required only of a package that declares `dsh.bundle`: a
+ * client-only package has no bundle layer to be listed in, and demanding the
+ * row of one would reinstall it on every start.
  */
-function profileStillWants(profile: string, profileDirectory: string, name: string): boolean {
-  if (Object.hasOwn(readManifestDeps(profile, profileDirectory), name)) return true
+function composed(profile: string, profileDirectory: string, name: string): boolean {
+  if (!Object.hasOwn(readManifestDeps(profile, profileDirectory), name)) return false
+  const manifest = readInstalledManifest(profile, name, profileDirectory)
+  const dsh = (manifest as { dsh?: { bundle?: unknown } } | null)?.dsh
+  if (dsh?.bundle === undefined) return true
   return readProfileBundles(profileDirectory).includes(name)
 }
 
@@ -293,25 +328,36 @@ export function clearStaleProfileLock(profileDirectory: string): boolean {
  */
 export async function repairInterruptedUpdates(options: RepairOptions): Promise<RepairReport> {
   const journal = options.journal ?? PendingUpdateJournal.forProfile(options.profileDirectory)
-  const report: RepairReport = { reinstalled: [], finished: [], failed: [] }
+  const report: RepairReport = { reinstalled: [], finished: [], failed: [], abandoned: [] }
   const pending = journal.list().filter(entry => entry.profile === options.profile)
   for (const entry of pending) {
     const installed = readInstalledVersion(options.profile, entry.name, options.profileDirectory)
-    const wanted = profileStillWants(options.profile, options.profileDirectory, entry.name)
-    // Settled means BOTH halves agree: the build is on disk AND the profile
-    // still declares it. "On disk but no longer declared" is the interrupted
-    // removal itself, so it falls through to the reinstall.
-    if (installed !== null && wanted && (entry.to === '' || installed === entry.to || installed === entry.from)) {
+    const settled = composed(options.profile, options.profileDirectory, entry.name)
+    // Settled means every half agrees: the build is on disk, the profile
+    // declares it, and a bundle-layer package is listed as one. "On disk but
+    // no longer composed" is the interrupted removal itself, so it falls
+    // through to the reinstall.
+    if (installed !== null && settled && (entry.to === '' || installed === entry.to || installed === entry.from)) {
       journal.finish(entry.id)
       report.finished.push(entry.name)
       continue
     }
-    if (installed !== null && wanted) {
+    if (installed !== null && settled) {
       journal.bump(entry.id)
       report.failed.push({
         name: entry.name,
         reason: `installed version ${installed} is neither ${entry.from || 'the previous build'} nor ${entry.to || 'the requested build'}`,
       })
+      continue
+    }
+    if (entry.attempts >= MAX_AUTO_REPAIR_ATTEMPTS) {
+      // Not bumped: the count is already the reason this start does nothing,
+      // and growing it would re-log the same sentence on every boot.
+      if (entry.attempts === MAX_AUTO_REPAIR_ATTEMPTS) {
+        logEvent('error', 'update-repair', gaveUpCopy(entry.name, entry.attempts))
+      }
+      report.failed.push({ name: entry.name, reason: gaveUpCopy(entry.name, entry.attempts) })
+      report.abandoned.push(entry.name)
       continue
     }
     const spec = entry.to === '' ? entry.spec : `${entry.name}@${entry.to}`
@@ -333,6 +379,13 @@ export async function repairInterruptedUpdates(options: RepairOptions): Promise<
         const after = readInstalledVersion(options.profile, entry.name, options.profileDirectory)
         if (after === null || (entry.to !== '' && after !== entry.to)) {
           throw new Error(`the desktop app refused the reinstall (${result.application})`)
+        }
+        // The files landing is not the same answer as the plugin loading:
+        // this manager failed at the application stage, which is the step
+        // that writes `dsh.profile.bundles` (#928). Finishing here cleared
+        // the record for a package the host still would not compose.
+        if (!composed(options.profile, options.profileDirectory, entry.name)) {
+          throw new Error(`the desktop app wrote ${after} but did not compose it — no dsh.profile.bundles row`)
         }
         journal.finish(entry.id)
         report.reinstalled.push(entry.name)

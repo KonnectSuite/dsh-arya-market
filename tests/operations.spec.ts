@@ -267,3 +267,23 @@ describe('finished rows across a page load', () => {
     expect(restored[0]?.name).toBe('first')
   })
 })
+
+describe('Host-owned drain rows (#411)', () => {
+  it('never writes a Host-owned row to the client settled history', () => {
+    const serialized = serializeSettled([
+      rec('client-done', 'done'),
+      rec('host-done', 'done', { hostOperationId: 'boot-1-drain-1' }),
+    ])
+    expect(serialized.map(row => row.id)).toEqual(['client-done'])
+  })
+
+  it('never restores a Host-owned row from the client settled history', () => {
+    expect(restoreSettled([{
+      id: 'host-done',
+      kind: 'update',
+      name: 'dsh-loop',
+      state: 'done',
+      hostOperationId: 'boot-1-drain-1',
+    }])).toEqual([])
+  })
+})

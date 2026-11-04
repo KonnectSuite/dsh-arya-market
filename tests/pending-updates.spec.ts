@@ -17,6 +17,7 @@ import {
   PendingUpdateJournal,
   clearStaleProfileLock,
   pendingUpdatesFile,
+  MAX_AUTO_REPAIR_ATTEMPTS,
   repairInterruptedUpdates,
   withDeadline,
 } from '../src/pending-updates.ts'
@@ -36,10 +37,23 @@ function declare(dir: string, name: string, range = '^1.0.0'): void {
 }
 
 /** Put a package in the profile's node_modules, the way pnpm would have. */
-function install(dir: string, name: string, version: string): void {
+function install(dir: string, name: string, version: string, dsh?: Record<string, unknown>): void {
   const packageDir = join(dir, 'node_modules', name)
   mkdirSync(packageDir, { recursive: true })
-  writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name, version }))
+  writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name, version, ...(dsh === undefined ? {} : { dsh }) }))
+}
+
+/** Add a package to `dsh.profile.bundles`, the way the host's manager would. */
+function bundle(dir: string, name: string): void {
+  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>; dsh?: { profile?: { bundles?: string[] } }
+  }
+  manifest.dsh ??= {}
+  manifest.dsh.profile ??= {}
+  const bundles = manifest.dsh.profile.bundles ?? []
+  if (!bundles.includes(name)) bundles.push(name)
+  manifest.dsh.profile.bundles = bundles
+  writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
 }
 
 function manager(installBundle: (spec: string) => Promise<{ application: string }>): {
@@ -156,13 +170,79 @@ describe('repairing an update a previous start interrupted', () => {
     journal.begin({ profile: 'desktop', name: 'example', from: '1.0.0', to: '2.0.0', spec: 'example@2.0.0' })
 
     const service = manager(async () => {
+      // A pnpm add writes the manifest and the files together; only a
+      // package with a BUNDLE layer can be written without being composed,
+      // which is the case the next test covers.
       install(dir, 'example', '2.0.0')
+      declare(dir, 'example')
       return { application: 'failed' }
     })
     const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
 
     expect(report.reinstalled).toEqual(['example'])
     expect(report.failed).toEqual([])
+    expect(journal.list()).toEqual([])
+  })
+
+  it('keeps the record when the app wrote the files but not the bundle declaration (#928)', async () => {
+    // The reporter's second state, reproduced through the manager: the build
+    // lands on disk and the dependency is written, but `dsh.profile.bundles`
+    // never gets the name — so the host composes nothing. Reading "a version
+    // is on disk" as settled cleared the record and logged "recorded as
+    // finished" while the plugin still did not load, leaving nothing to
+    // repair it on the next start.
+    const dir = profile()
+    install(dir, 'example', '2.0.0', { bundle: { patch: './cordis.patch.yml' } })
+    const journal = new PendingUpdateJournal(pendingUpdatesFile(dir))
+    journal.begin({ profile: 'desktop', name: 'example', from: '1.0.0', to: '2.0.0', spec: 'example@2.0.0' })
+
+    const service = manager(async () => {
+      declare(dir, 'example')
+      return { application: 'failed' }
+    })
+    const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+
+    expect(report.finished).toEqual([])
+    expect(report.failed).toHaveLength(1)
+    expect(journal.list()).toMatchObject([{ name: 'example', attempts: 1 }])
+  })
+
+  it('repairs a bundle-layer package whose row went missing even though the files are right (#928)', async () => {
+    // The other half of the same rule: the settled check itself has to look
+    // at the composition, not only at node_modules. Files at the requested
+    // version plus a dependency, but no bundle row, is not a loaded plugin.
+    const dir = profile()
+    install(dir, 'example', '2.0.0', { bundle: { patch: './cordis.patch.yml' } })
+    declare(dir, 'example')
+    const journal = new PendingUpdateJournal(pendingUpdatesFile(dir))
+    journal.begin({ profile: 'desktop', name: 'example', from: '1.0.0', to: '2.0.0', spec: 'example@2.0.0' })
+
+    const service = manager(async () => {
+      bundle(dir, 'example')
+      return { application: 'applied' }
+    })
+    const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+
+    expect(service.installBundle).toHaveBeenCalledTimes(1)
+    expect(report.reinstalled).toEqual(['example'])
+    expect(journal.list()).toEqual([])
+  })
+
+  it('leaves a client-only package settled without a bundle row (#928)', async () => {
+    // Only the bundle layer composes through `dsh.profile.bundles`; requiring
+    // the row for every package would reinstall client-only plugins on every
+    // start.
+    const dir = profile()
+    install(dir, 'example', '2.0.0', { client: { inject: [] } })
+    declare(dir, 'example')
+    const journal = new PendingUpdateJournal(pendingUpdatesFile(dir))
+    journal.begin({ profile: 'desktop', name: 'example', from: '1.0.0', to: '2.0.0', spec: 'example@2.0.0' })
+
+    const service = manager(async () => ({ application: 'applied' }))
+    const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+
+    expect(service.installBundle).not.toHaveBeenCalled()
+    expect(report.finished).toEqual(['example'])
     expect(journal.list()).toEqual([])
   })
 
@@ -233,6 +313,34 @@ describe('repairing an update a previous start interrupted', () => {
     expect(service.installBundle).not.toHaveBeenCalled()
     expect(report.failed).toMatchObject([{ name: 'example', reason: expect.stringContaining('1.5.0') }])
     expect(journal.list()).toHaveLength(1)
+  })
+
+  it('stops retrying a package that failed on every start, and keeps the record (#1061)', async () => {
+    // Each attempt may spend the full REPAIR_INSTALL_TIMEOUT_MS (5 min) before
+    // giving up, on every boot, for a spec that will never install. The
+    // reporter's machine paid that cost on the Desktop host's behalf for five
+    // days without ever being told; the market's own record must not do the
+    // same. Two failed starts keep retrying, the third ends it with a sentence
+    // that says where to act.
+    const dir = profile()
+    const journal = new PendingUpdateJournal(pendingUpdatesFile(dir))
+    journal.begin({ profile: 'desktop', name: 'example', from: '1.0.0', to: '2.0.0', spec: 'example@2.0.0' })
+    const service = manager(async () => ({ application: 'failed' }))
+
+    for (let start = 0; start < MAX_AUTO_REPAIR_ATTEMPTS - 1; start += 1) {
+      const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+      expect(report.failed).toHaveLength(1)
+    }
+    // The start that reaches the cap still tried.
+    await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+    expect(service.installBundle).toHaveBeenCalledTimes(MAX_AUTO_REPAIR_ATTEMPTS)
+
+    service.installBundle.mockClear()
+    const report = await repairInterruptedUpdates({ profile: 'desktop', profileDirectory: dir, manager: service })
+
+    expect(service.installBundle).not.toHaveBeenCalled()
+    expect(report.failed).toMatchObject([{ name: 'example', reason: expect.stringContaining('重新安装') }])
+    expect(journal.list()).toMatchObject([{ name: 'example', attempts: MAX_AUTO_REPAIR_ATTEMPTS }])
   })
 })
 

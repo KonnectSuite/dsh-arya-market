@@ -382,15 +382,24 @@ export async function openMarketPage(
  * page opens from the sidebar row (#846), off by default — so this turns it
  * on the way a user would.
  *
- * Also clears 0.2.1's "Get started" gate: it covers the whole app on a fresh
- * profile, Escape does not close it, and every click behind it is swallowed.
+ * Also clears the gates 0.2.1 puts in front of the app on a fresh profile —
+ * the testing notice, the API-key prompt and the preview notes. Each covers
+ * the whole app, Escape closes none of them, and every click behind them is
+ * swallowed, so a gate this loop does not recognise stays up and the market
+ * never opens (#1033).
  */
+const START_GATE_BUTTONS = /^(Close|关闭|Continue|继续|Configure later|稍后配置)$/
+
 export async function dismissStartGate(page: Page): Promise<void> {
-  for (let round = 0; round < 3; round++) {
-    const close = page.getByRole('button', { name: /^(Close|关闭)$/ }).first()
+  for (let round = 0; round < 5; round++) {
+    const gate = page.getByRole('button', { name: START_GATE_BUTTONS }).first()
     try {
-      await close.waitFor({ timeout: round === 0 ? 2000 : 800 })
-      await close.click()
+      // One gate mounts after the one before it is dismissed, so the tail has
+      // to outlast that hand-off: at 800 ms this gave up before the preview
+      // notes appeared and left their mask up. The e2e specs' own inline copy
+      // of this loop already used 3000.
+      await gate.waitFor({ timeout: round === 0 ? 2000 : 3000 })
+      await gate.click()
     } catch { break }
   }
 }
@@ -398,7 +407,9 @@ export async function dismissStartGate(page: Page): Promise<void> {
 export async function openMarketUi(page: Page): Promise<void> {
   await dismissStartGate(page)
   const settings = page.getByRole('button', { name: /^(设置|Settings)$/ }).first()
-  const account = page.getByRole('button', { name: /^(Account menu|账户菜单)$/ }).first()
+  // A Chinese UI renders this entry as 账号菜单, not 账户菜单: counting
+  // role=button on 0.2.1-rc.2 gave 1 and 0 respectively (#1033).
+  const account = page.getByRole('button', { name: /^(Account menu|账号菜单)$/ }).first()
   // Wait for whichever door this host version actually mounts — a bare
   // isVisible() on a still-painting shell raced into the wrong branch and
   // left the market never opened (then the catalog wait timed out on empty).
@@ -423,6 +434,24 @@ export async function openMarketUi(page: Page): Promise<void> {
     .then(() => true).catch(() => false)
   const scope = dialogVisible ? dialog : page
   await scope.getByRole('button', { name: /插件市场|Plugin Market/ }).first().click()
+  // That click is the first one a leftover gate swallows: the entry never
+  // opens, and the failure lands later as an empty-catalog wait that reads
+  // like the market is broken. Fail at the door instead (#1033). Scoped to the
+  // container the click used — an earlier market instance can still sit in the
+  // page underneath, and a page-wide locator would be satisfied by it without
+  // anything having opened.
+  // Presence only: the error boundary renders this attribute too, so a mounted
+  // root says the market opened, not that its catalog loaded.
+  const mounted = await scope.locator('[data-dsh-market-root]').first()
+    .waitFor({ state: 'attached', timeout: 15_000 })
+    .then(() => true).catch(() => false)
+  if (!mounted) {
+    const gateUp = await page.getByRole('button', { name: START_GATE_BUTTONS })
+      .first().isVisible().catch(() => false)
+    throw new Error(gateUp
+      ? 'market root never mounted: a start gate is still up, so the click was swallowed (#1033)'
+      : 'market root never mounted: the Plugin Market entry did not open the market')
+  }
 }
 
 /**
