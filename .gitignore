@@ -1,5 +1,8 @@
 node_modules/
-lib/
+# Build output at the package root only. An unanchored `lib/` also swallowed
+# `scripts/lib/`, which is source: the reconciler silently lost its shared
+# module and CI would have failed on a clean checkout.
+/lib/
 research/
 *.tgz
 .DS_Store

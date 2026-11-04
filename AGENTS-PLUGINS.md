@@ -153,18 +153,33 @@ not. Do not publish a second version on the strength of an earlier approval, and
 
 ## 6. Gate 4 — publication
 
-Run from `C:\Users\KNPhu\.arya\github\KonnectSuite\dsh-arya-market`. One command does the whole gate:
+**Adding a release is not a step a person performs any more.** The catalog reconciles itself against
+npm every 15 minutes (`catalogue-sync.yml`), so an author's whole job is:
+
+1. bump the version in the plugin repository;
+2. commit, push, `npm publish`.
+
+That is it. The sync downloads the published tarball, runs the installability guard, pins its
+`sha256`, and pushes the `catalog` branch. If a release must appear immediately, run the same job by
+hand:
 
 ```powershell
-# 0. in the PLUGIN repository: bump the version, commit, push, npm publish
-#    (or push the v* tag and let that repository's release workflow do it)
-
-# 1. record it, publish it, and prove it landed
-node scripts/publish-arya-release.mjs --npm 0.2.8 --source KonnectSuite/dsh-native-window --push
+npm run catalogue:sync        # in this repository, with gh authenticated
 ```
 
-`--push` exits 0 only when the `catalog` branch serves that version with that digest. Anything else
-is a release users cannot see, and the command says so instead of returning quietly.
+It is idempotent and safe to run at any time. `npm run catalogue:check` prints what it would record
+without writing anything.
+
+What it refuses, and reports instead of recording: an archive with no `dsh.bundle.patch`, a
+`workspace:` / `link:` / `file:` dependency, credentials, or bytes that differ from a version already
+listed. A refusal on a package the catalog **already lists** fails the run — that is a release users
+are waiting for. A refusal on a package only the manifest names is reported and does not fail it.
+
+### The manual command, when the sync cannot be used
+
+`node scripts/publish-arya-release.mjs --npm <version> --source <repo> --push` records one release
+directly. It does the same work for one package, and is the way to backfill a first-time entry.
+`--push` exits 0 only when the `catalog` branch serves that version with that digest.
 
 First-time entry — `--name` and both descriptions are required:
 
@@ -176,19 +191,17 @@ node scripts/publish-arya-release.mjs --npm 0.2.8 --source KonnectSuite/dsh-nati
   --push
 ```
 
-### What that command does, in order
+### What the recording does, in order
 
 Each step is a way a release has gone missing, which is why they are one command and not five:
 
-1. **`publish-arya-catalog.mjs --pull`** — the catalog lives on its own branch and the local file is
-   only a cache. Recording onto a stale copy pushes an entry missing everything that landed since;
-   recording onto an absent one pushes only this plugin and deletes the rest. That is why `--push`
-   pulls first, and why recording with no local copy at all is now refused instead of writing a
-   one-plugin catalog.
+1. **Read the branch** — the catalog lives on its own branch and the local file is only a cache.
+   Recording onto a stale copy pushes an entry missing everything that landed since; recording onto
+   an absent one pushes only this plugin and deletes the rest.
 2. **Record** — download the published tarball, refuse it unless it carries `dsh.bundle.patch` and no
    `workspace:` / `link:` / `file:` dependency and no credentials, and pin its `sha256`. A published
    version whose bytes differ is refused: bump the version, never rewrite the entry.
-3. **`--push`** — rewrite the branch through the API, then poll it until the entry, its version and
+3. **Push** — rewrite the branch through the API, then poll it until the entry, its version and
    its `sha256` are all present.
 4. **Report** — `the branch serves <name>@<version>`, and separately whether the CDN in front of the
    raw URL is already serving it. The branch is the authority; the CDN is minutes.
@@ -240,6 +253,18 @@ So the entry is not documentation of a release. It is the delivery path that wor
 day, on every machine, whatever that machine's `minimumReleaseAge` says. When an agent reports "npm
 only allows an update every 24 hours", it is describing the npm path; recording the release in the
 catalogue is the way around it, and `--push` is what makes that real.
+
+### When `npm publish` looks like it failed
+
+- **409 "Cannot publish over previously staged version"** almost always means the version IS
+  published and the registry has not caught up yet. Check
+  `npm view <package>@<version> version` before doing anything. Never bump the version to work around
+  it: the version number is what the market, the profile pins and the recorded digest all agree on,
+  and a needless bump publishes a second release nobody asked for.
+- **Do not hand-edit `data/arya-plugins.json`.** It is generated data on a branch; the sync owns it.
+- **Build output is stale-prone.** `tsc` does not delete the output of a deleted source file, so a
+  tarball can carry dead modules after a removal. Clean the output directory before packing, or the
+  registry gets a release that contains code the repository no longer has.
 
 ### What the catalogue enforces
 

@@ -38,6 +38,8 @@
     "publish:arya": "npm run build && node scripts/publish-arya-release.mjs",
     "publish:arya:batch": "node scripts/publish-arya-batch.mjs",
     "publish:arya:catalog": "node scripts/publish-arya-catalog.mjs --push",
+    "catalogue:sync": "node scripts/reconcile-catalogue.mjs",
+    "catalogue:check": "node scripts/reconcile-catalogue.mjs --dry-run",
     "check:parity": "node scripts/check-catalogue-parity.mjs"
   },
   "dependencies": {

@@ -1,0 +1,65 @@
+name: Catalogue sync
+
+# Publishing a plugin is two writes in two places: `npm publish` in the plugin
+# repository, and the catalog entry the market reads. The second one is the
+# step everybody forgets — and a forgotten entry does not merely go
+# unannounced, it HIDES the release: the market answers from `releases[0]`, so
+# a newer npm version reads as "up to date" to every user, for as long as the
+# entry stays stale.
+#
+# This runs the reconciliation on a schedule so nobody has to remember. It is
+# idempotent: a catalog that already matches npm costs one request per package
+# and writes nothing.
+#
+# Manual run when a release must appear immediately:
+#   npm run catalogue:sync          (locally, with gh authenticated)
+#   or `gh workflow run catalogue-sync.yml`
+#
+# A plugin repository can also fire this the moment it publishes, with a
+# repository_dispatch to KonnectSuite/dsh-arya-market of type `plugin-published`.
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub's scheduler can be late, which is why the market
+    # also reports a stale entry as drift instead of hiding it.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [plugin-published]
+
+permissions:
+  contents: write # records releases onto the `catalog` branch through the API
+
+concurrency:
+  group: catalogue-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # The reconciler imports the market's own validators, so the build is part
+      # of the job: a catalog written by rules the market does not enforce would
+      # fail at read time, in front of users, instead of here.
+      - run: npm ci --ignore-scripts
+      - run: npx tsc -p tsconfig.json
+
+      - name: record every npm release the catalog is missing
+        env:
+          # `gh api` reads this and writes the `catalog` branch.
+          GH_TOKEN: ${{ secrets.CATALOG_GH_TOKEN || github.token }}
+        run: node scripts/reconcile-catalogue.mjs
+
+      - name: name what could not be recorded
+        if: failure()
+        run: |
+          echo "The catalog did not converge with npm. Every line above names a" \
+               "package and why it was refused; a refusal on a package the" \
+               "catalogue already lists is a hidden update and fails the job." \
+               >> "$GITHUB_STEP_SUMMARY"
