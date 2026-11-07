@@ -1,6 +1,6 @@
 {
-  "updated": "2026-11-07T20:26:26.483Z",
-  "count": 6,
+  "updated": "2026-11-07T23:39:12.199Z",
+  "count": 7,
   "categories": {
     "arya": {
       "en": "Arya",
@@ -1262,6 +1262,29 @@
       ],
       "version": "0.19.1",
       "tarball": "https://registry.npmjs.org/dsh-arya-image-gen/-/dsh-arya-image-gen-0.19.1.tgz"
+    },
+    {
+      "name": "@aryacode/dsh-plugin-arya-computer-use",
+      "owner": "KonnectSuite",
+      "url": "https://github.com/KonnectSuite/dsh-arya-computer-use",
+      "category": "arya",
+      "description": {
+        "en": "Computer use for Windows: drives apps through accessibility controls instead of pixels, frames the window it is driving, marks each action with a ghost cursor, and stops on Esc; a browser lane adds sign-in profiles and attach-to-my-Chrome.",
+        "zh": "Windows 电脑操控：用辅助功能接口而不是像素驱动应用，只框住正在操作的窗口，用虚拟光标标出每步动作，按 Esc 立即停止；另有一条浏览器通道，支持登录配置与接入你自己的 Chrome。"
+      },
+      "added": "2026-11-07",
+      "install": "",
+      "arya": true,
+      "releases": [
+        {
+          "version": "1.0.2",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.2.tgz",
+          "sha256": "9132cd0745e2dc7b82daaa726d9c77784b2e98d345d5ad240d4553fe21f8fa32",
+          "releasedAt": "2026-11-07T23:39:12.199Z"
+        }
+      ],
+      "version": "1.0.2",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.2.tgz"
     }
   ]
 }
