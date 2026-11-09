@@ -14,6 +14,17 @@
 - 确认的话就一句：「这是要给 dsh-arya-market 做的吗？」——别照着字面执行；
 - 拿不准的路径一律不动，宁可多问一次，也不要顺手改到隔壁去。
 
+**唯一的例外：发布一个插件。** 一个插件版本要到达用户，必须经过本仓库的目录
+（`arya-plugins.json` → `data/arya-sources.json` → `catalog` 分支）。所以当一个插件
+仓库里的任务做完、版本已发布到 npm 之后，允许**执行**本仓库的两条命令：
+
+    node dsh-arya-market/scripts/release-plugin.mjs --dir ../<plugin>
+    node dsh-arya-market/scripts/arya-release-status.mjs
+
+这不是「跨范围改别的插件」：命令只读写 `dsh-arya-market` 自己的文件（目录条目、生成的
+sources、`catalog` 分支），插件仓库只作为输入。除此以外仍然照旧：不读不该读的路径，
+不改别的仓库的文件，拿不准就问。
+
 ## 一、三条根本原则
 
 ### 1. 自然 —— 从用户的意图出发，不从实现出发

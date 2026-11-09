@@ -262,7 +262,17 @@ const catalogOnly = sourceNames.size === 0 ? [] : [...catalogNames].filter(name 
 async function npmProbe(name) {
   try {
     const document = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)
-    return { state: 'published', version: typeof document.version === 'string' ? document.version : null }
+    // A published manifest still carrying a monorepo spec cannot be installed from the
+    // market: the archive's dependency does not resolve in someone else's profile, so
+    // the recording step refuses it. Known here for free, and worth knowing — the
+    // alternative is advice that sends the reader at a command guaranteed to say no.
+    const dependencies = {
+      ...(document.dependencies ?? {}),
+      ...(document.optionalDependencies ?? {}),
+      ...(document.peerDependencies ?? {}),
+    }
+    const unlistable = Object.values(dependencies).some(value => typeof value === 'string' && /^(?:workspace|link|file):/.test(value))
+    return { state: 'published', version: typeof document.version === 'string' ? document.version : null, unlistable }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     return /HTTP 404/.test(detail) ? { state: 'unpublished' } : { state: 'unknown', detail }
@@ -298,10 +308,12 @@ if (values.json || manifestOnly.length > 0) {
       // A gap nobody here can close is still worth stating, but stating it as
       // "record it" when the source is gone sends the reader at a command that
       // is guaranteed to refuse (unresolvable workspace peers, or a 404).
-      const detail = declaredState === false
-        ? `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, and the repository data/arya-sources.json names for it (${String(declared)}) does not exist. Nothing here can record it: it needs a real repository and a republished archive before the market can offer it.`
-        : `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, so it cannot be installed or updated from the market, only by name. Record it: node scripts/publish-arya-release.mjs --npm ${probe.version ?? '<version>'} --source ${String(declared ?? '<repo>')} --push`
-      warnings.push({ kind: 'published-not-listed', package: name, detail })
+      const detail = probe.unlistable === true
+        ? `${name}@${probe.version ?? '?'} is on npm and cannot be listed: its published manifest carries a workspace:/link:/file: dependency, which does not resolve in another profile, so recording it would be refused. Publish real version ranges and republish, or move it out of the market channel in arya-plugins.json.`
+        : declaredState === false
+          ? `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, and the repository data/arya-sources.json names for it (${String(declared)}) does not exist. Nothing here can record it: it needs a real repository and a republished archive before the market can offer it.`
+          : `${name}@${probe.version ?? '?'} is on npm but has no catalog entry, so it cannot be installed or updated from the market, only by name. Record it: node scripts/publish-arya-release.mjs --npm ${probe.version ?? '<version>'} --source ${String(declared ?? '<repo>')} --push`
+      warnings.push({ kind: probe.unlistable === true ? 'published-unlistable' : 'published-not-listed', package: name, detail })
     } else if (probe.state === 'unpublished') {
       planned.push(name)
     } else {

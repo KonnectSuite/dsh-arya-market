@@ -40,6 +40,10 @@
     "publish:arya:catalog": "node scripts/publish-arya-catalog.mjs --push",
     "catalogue:sync": "node scripts/reconcile-catalogue.mjs",
     "catalogue:check": "node scripts/reconcile-catalogue.mjs --dry-run",
+    "sources:sync": "node scripts/sync-arya-sources.mjs",
+    "sources:check": "node scripts/sync-arya-sources.mjs --check",
+    "release:plugin": "node scripts/release-plugin.mjs",
+    "status:arya": "node scripts/arya-release-status.mjs",
     "check:parity": "node scripts/check-catalogue-parity.mjs"
   },
   "dependencies": {

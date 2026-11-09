@@ -51,6 +51,13 @@ minutes. Ask for approval once, with evidence.
 - Keep the archive small. The market downloads the tarball, verifies it and stages it into the
   profile, with **64 MiB / 120 s** defaults (`maxReleaseBytes`, `releaseDownloadTimeoutMs`). A
   package that needs to be bigger needs a host-side decision, not a bigger archive.
+- **A repository that should reach users needs one entry in `arya-plugins.json` at the root of this
+  repository.** That file is the list: `data/arya-sources.json` is *generated* from it by
+  `node scripts/sync-arya-sources.mjs`, and is never edited by hand. An entry carries `name`,
+  `channel: "market"`, `repo`, both descriptions, and either `workspace` (the directory is checked
+  out beside this repository) or `clone` (where it is when it is not). A package npm serves that no
+  manifest names cannot be catalogued — `reconcile-catalogue.mjs` refuses to invent its metadata —
+  which is the silent way a release stops existing for users.
 
 ---
 
@@ -160,8 +167,20 @@ npm every 15 minutes (`catalogue-sync.yml`), so an author's whole job is:
 2. commit, push, `npm publish`.
 
 That is it. The sync downloads the published tarball, runs the installability guard, pins its
-`sha256`, and pushes the `catalog` branch. If a release must appear immediately, run the same job by
-hand:
+`sha256`, and pushes the `catalog` branch. One command does that whole gate in that order, at the
+moment of publication rather than up to fifteen minutes later:
+
+```powershell
+node scripts/release-plugin.mjs --dir ../<plugin>
+```
+
+It publishes, waits for the registry to serve the version, reconciles the catalogue, verifies the
+branch serves that version with that digest, and ends with the parity check — one receipt line, and
+nothing to remember. `--dry-run` prints everything it would do and writes nothing;
+`node scripts/arya-release-status.mjs` prints the repo / npm / catalogue / verdict table for every
+plugin at any time, which is the question "is my update actually out there?" answered directly.
+
+If a release must appear immediately, run the same job by hand:
 
 ```powershell
 npm run catalogue:sync        # in this repository, with gh authenticated
@@ -354,6 +373,8 @@ engineering bundle and Better Sidebar). The seed and the catalogue are different
 **Before publishing**
 
 - [ ] Approval exists for this exact version.
+- [ ] `node scripts/release-plugin.mjs --dir ../<plugin>` ended with a green receipt — or the manual
+      steps below did the same work and each one is accounted for.
 - [ ] `npm publish` succeeded and `latest` on the registry shows it.
 - [ ] `node scripts/check-catalogue-parity.mjs` exits 0 — no entry is on npm but missing from the
       catalogue, and every pinned `sha256` matches the archive it points at.
@@ -371,6 +392,10 @@ engineering bundle and Better Sidebar). The seed and the catalogue are different
 
 | Thing | Location |
 | --- | --- |
+| **The list of plug-ins** | `arya-plugins.json` at the root of this repository — edit this one |
+| Generated projection | `data/arya-sources.json` (`node scripts/sync-arya-sources.mjs`; CI runs `--check`) |
+| One-command release | `scripts/release-plugin.mjs` (`--dir ../<plugin>`, `--dry-run`, `--register`) |
+| Status table | `scripts/arya-release-status.mjs` (`npm run status:arya`) |
 | Catalogue document | `KonnectSuite/dsh-arya-market`, branch `catalog`, `data/arya-plugins.json` |
 | Live catalogue URL | `https://raw.githubusercontent.com/KonnectSuite/dsh-arya-market/catalog/data/arya-plugins.json` |
 | Validation rules | `lib/arya.js` (`validateAryaRegistry`, `stageAryaRelease`) |

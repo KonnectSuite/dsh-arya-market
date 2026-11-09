@@ -54,6 +54,14 @@ jobs:
       # when package.json and the lockfile disagree, instead of silently
       # resolving something new.
       - run: npm ci
+      # `arya-plugins.json` is the one list an author edits; `data/arya-sources.json`
+      # is its projection and nothing reviews it by hand. A hand-edited projection
+      # and a manifest are the same list in two places, which is how a plugin ends up
+      # in one and not the other — and how "the update is not in the market" happens
+      # with every script in the repo still green. Cheap, runs before the build.
+      - name: the generated plugin sources match the manifest
+        shell: bash
+        run: node scripts/sync-arya-sources.mjs --check
       - run: npm run check
       # The committed client bundle must be reproducible from the committed
       # source (#472, and the review-noise half of the same problem: a

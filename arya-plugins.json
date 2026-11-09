@@ -1,0 +1,189 @@
+{
+  "legacyNames": [
+    "dsh-factorytalk-view-use",
+    "dsh-motionworks-iec-use",
+    "dsh-tool-motionworks-iec"
+  ],
+  "plugins": [
+    {
+      "name": "@aryacode/dsh-arya-maildesk",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-arya-maildesk",
+      "clone": "KonnectSuite/dsh-arya-maildesk",
+      "description": {
+        "en": "A real mail panel for the Outlook you are already signed into: folders, multi-select, a safe HTML reading pane, replies that stay drafts in the harness, a draft card in the chat and a draft tab beside it. No Azure app registration, no admin consent.",
+        "zh": "为已登录的 Outlook 装上真正的邮件面板：文件夹、多选列表、安全的 HTML 阅读、留在 harness 里的回复草稿、聊天中的草稿卡片，以及并排的草稿侧栏。无需 Azure 应用注册，无需管理员授权。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-aryacode-polish",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-aryacode-polish",
+      "workspace": "dsh-aryacode-polish",
+      "description": {
+        "en": "AryaCode Polish: one install for the small things that make AryaCode feel finished. One Plugins row, one switch per quality-of-life feature.",
+        "zh": "AryaCode 润色：一次安装，补齐让 AryaCode 更顺手的小细节。一个插件行，每个体验功能一个开关。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-clear-light",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-clear-light",
+      "clone": "KonnectSuite/dsh-clear-light",
+      "description": {
+        "en": "Clearer navigation, surfaces, selections and text",
+        "zh": "更清晰的导航、界面、选中状态与文字"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-deepseek-chat",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-deepseek-chat",
+      "clone": "KonnectSuite/dsh-client-ui-deepseek-chat",
+      "description": {
+        "en": "Optional DeepSeek Chat desktop page",
+        "zh": "可选的 DeepSeek 对话桌面页面"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-googleremotedesktop",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-googleremotedesktop",
+      "clone": "KonnectSuite/dsh-client-ui-googleremotedesktop",
+      "description": {
+        "en": "Google Remote Desktop sidebar page with a persistent sign-in",
+        "zh": "带持久登录的 Google 远程桌面侧边栏页面"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-images",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-images",
+      "clone": "KonnectSuite/dsh-client-ui-images",
+      "description": {
+        "en": "ComfyUI image generation and the local gallery",
+        "zh": "ComfyUI 图像生成与本地画廊"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-mobile",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-mobile",
+      "clone": "KonnectSuite/dsh-client-ui-mobile",
+      "description": {
+        "en": "Phone shell and the Mobile & Remote pairing popover",
+        "zh": "手机外壳与移动端配对面板"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-no-repo",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-no-repo",
+      "clone": "KonnectSuite/dsh-client-ui-no-repo",
+      "description": {
+        "en": "Sidebar group for chats not attached to a workspace",
+        "zh": "未关联工作区的会话分组"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-release-notes",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-release-notes",
+      "clone": "KonnectSuite/dsh-client-ui-release-notes",
+      "description": {
+        "en": "Settings page listing AryaAI version history",
+        "zh": "列出 AryaAI 版本历史的设置页面"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-rockwell-resources",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-rockwell-resources",
+      "clone": "KonnectSuite/dsh-client-ui-rockwell-resources",
+      "description": {
+        "en": "Optional Rockwell Resources desktop page with a retained sign-in",
+        "zh": "可选 Rockwell 资源桌面页面，保留登录状态"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-client-ui-skills-mcp",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-client-ui-skills-mcp",
+      "clone": "KonnectSuite/dsh-client-ui-skills-mcp",
+      "description": {
+        "en": "Manage skills and MCP servers, and add public MCP servers from a catalog",
+        "zh": "管理技能与 MCP 服务器，并从目录添加公共 MCP 服务器"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-engineering",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-engineering",
+      "workspace": "dsh-engineering",
+      "description": {
+        "en": "Studio 5000 L5X, FactoryTalk View ME, MotionWorks IEC and FactoryTalk Optix behind one install, with HMI-to-PLC cross-references, standards checks, and ladder and display previews drawn as diagrams.",
+        "zh": "在一个安装中提供 Studio 5000 L5X、FactoryTalk View ME、MotionWorks IEC 与 FactoryTalk Optix 工程工具，并含 HMI 与 PLC 交叉引用、规范检查以及梯形图与画面预览。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-github",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-github",
+      "clone": "KonnectSuite/dsh-github",
+      "description": {
+        "en": "Sign in to GitHub, list repositories, and clone one as a workspace",
+        "zh": "登录 GitHub、列出仓库并克隆为工作区"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-local-llm",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-local-llm",
+      "workspace": "dsh-local-llm",
+      "description": {
+        "en": "AryaStrata local model controls and monitoring",
+        "zh": "AryaStrata 本地模型控制与监控"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-native-window",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-native-window",
+      "clone": "KonnectSuite/dsh-native-window",
+      "description": {
+        "en": "Dock native Windows applications inside Arya",
+        "zh": "在 Arya 中嵌入 Windows 本地应用"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-plugin-arya-computer-use",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-arya-computer-use",
+      "workspace": "dsh-arya-computer-use",
+      "description": {
+        "en": "Computer use for Windows: drives apps through accessibility controls instead of pixels, frames the window it is driving, marks each action with a ghost cursor, and stops on Esc; a browser lane adds sign-in profiles and attach-to-my-Chrome.",
+        "zh": "Windows 电脑操控：用辅助功能接口而不是像素驱动应用，只框住正在操作的窗口，用虚拟光标标出每步动作，按 Esc 立即停止；另有一条浏览器通道，支持登录配置与接入你自己的 Chrome。"
+      }
+    },
+    {
+      "name": "@aryacode/dsh-projects",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-projects",
+      "clone": "KonnectSuite/dsh-projects",
+      "description": {
+        "en": "Give one workspace several folders",
+        "zh": "为一个工作区提供多个文件夹"
+      }
+    },
+    {
+      "name": "dsh-arya-image-gen",
+      "channel": "market",
+      "repo": "KonnectSuite/dsh-arya-image-gen",
+      "workspace": "dsh-arya-image-gen",
+      "description": {
+        "en": "ComfyUI-native image generation for DeepSeek Harness: chat tools, infinite canvas, Studio workbench, workflow comparison, and built-in ComfyUI server control.",
+        "zh": "面向 DeepSeek Harness 的 ComfyUI 原生图像生成插件：对话生图、无限画布、Studio 工作台、工作流对比与内置 ComfyUI 服务控制。"
+      }
+    }
+  ]
+}
