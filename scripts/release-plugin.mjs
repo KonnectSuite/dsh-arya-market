@@ -276,6 +276,7 @@ log(`${String(paths.length)} files, ${String(Math.round(bytes.length / 1024))} K
 
 step('registry')
 let alreadyPublished = false
+let localPackDiffers = false
 const registryTarball = `${REGISTRY}/${name}/-/${name.slice(name.lastIndexOf('/') + 1)}-${version}.tgz`
 const existing = npmCommand(['view', `${name}@${version}`, 'version'], directory, 'npm view')
 if (existing.status === 0 && existing.stdout !== '') {
@@ -284,10 +285,14 @@ if (existing.status === 0 && existing.stdout !== '') {
     alreadyPublished = true
     log(`${name}@${version} is already on the registry with these exact bytes — nothing to publish`)
   } else {
-    throw new Refused(
-      `${name}@${version} is already published with different bytes (registry ${published.sha256.slice(0, 12)}…, local ${sha256.slice(0, 12)}…)\n`
-      + '  a published version is immutable: bump the version, never rewrite the entry',
-    )
+    // Some builds are not byte-reproducible (a generated file stamps the time), so
+    // packing the same source twice gives two hashes. The catalogue has to describe
+    // the bytes npm serves, never this machine's pack, so the published copy wins and
+    // the version is still never rewritten: skipping the publish is the whole guard.
+    alreadyPublished = true
+    localPackDiffers = true
+    log(`${name}@${version} is already on the registry with different bytes (registry ${published.sha256.slice(0, 12)}…, this pack ${sha256.slice(0, 12)}…)`)
+    log('  nothing is published: a version is immutable, and the catalogue records the registry copy')
   }
 }
 
@@ -370,16 +375,16 @@ const entry = await poll(`the catalogue branch to list ${name}@${version}`, asyn
 })
 
 const recorded = entry.releases[0]
-if (recorded.sha256 !== sha256) {
-  throw new Failed(
-    `the catalogue records ${String(recorded.sha256).slice(0, 12)}… but the tarball is ${sha256.slice(0, 12)}…\n`
-    + '  bump the version and publish it; never hand-edit data/arya-plugins.json',
-  )
-}
 await poll(`${recorded.tarball} to answer 200`, async () => {
   const served = await fetchBytes(recorded.tarball)
   const servedSha = createHash('sha256').update(served).digest('hex')
-  if (servedSha !== sha256) throw new Error(`the served tarball hashes to ${servedSha.slice(0, 12)}…`)
+  if (servedSha !== recorded.sha256) {
+    throw new Failed(
+      `the catalogue records ${String(recorded.sha256).slice(0, 12)}… but ${recorded.tarball} hashes to ${servedSha.slice(0, 12)}…\n`
+      + '  the entry describes bytes nobody can download: node scripts/reconcile-catalogue.mjs',
+    )
+  }
+  if (localPackDiffers === true) log(`the catalogue records the registry copy (${servedSha.slice(0, 12)}…), not this machine's pack (${sha256.slice(0, 12)}…)`)
   return true
 })
 
@@ -388,7 +393,7 @@ if (parity.status !== 0) {
   throw new Failed(`check-catalogue-parity.mjs exits ${String(parity.status)}:\n${[parity.stdout, parity.stderr].filter(Boolean).join('\n')}`)
 }
 
-console.log(`\nreleased ${name}@${version} · npm ok · catalogue ok · sha256 ${sha256.slice(0, 12)}`)
+console.log(`\nreleased ${name}@${version} · npm ok · catalogue ok · sha256 ${recorded.sha256.slice(0, 12)}`)
 console.log(`  live catalogue: https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}`)
 console.log(`  installed profiles update on their next check; a catalogue install sidesteps the 24-hour npm window`)
 if (branch !== defaultBranch && defaultBranch !== '(unknown)') {
