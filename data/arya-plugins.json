@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-10T12:34:03.518Z",
+  "updated": "2026-11-10T15:45:11.699Z",
   "count": 7,
   "categories": {
     "arya": {
@@ -21,6 +21,11 @@
       "install": "",
       "arya": true,
       "releases": [
+        {
+          "version": "0.21.1",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.21.1.tgz",
+          "sha256": "afa81ad670a9d6ca08b94ad40c225fd81dde32e883fb17057658c532584c1c4c"
+        },
         {
           "version": "0.21.0",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.21.0.tgz",
@@ -241,8 +246,8 @@
           "sha256": "9aa375ac6858d116b38847faf0e862787c683156a32c50048bbb9ea19275d740"
         }
       ],
-      "version": "0.21.0",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.21.0.tgz"
+      "version": "0.21.1",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-local-llm/-/dsh-local-llm-0.21.1.tgz"
     },
     {
       "name": "@aryacode/dsh-engineering",
