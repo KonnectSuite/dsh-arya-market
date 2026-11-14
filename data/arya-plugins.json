@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-14T20:33:40.272Z",
+  "updated": "2026-11-14T20:53:34.489Z",
   "count": 7,
   "categories": {
     "arya": {
@@ -1367,6 +1367,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "1.0.9",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.9.tgz",
+          "sha256": "71b44064fce00413e54b4bac93d5639c47a91736bd0f7e2695beb2506a95a123"
+        },
+        {
           "version": "1.0.8",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.8.tgz",
           "sha256": "58a2a53253c562031277b3c1268476724e2c27acc3f2a51dafd54511632d7dae"
@@ -1403,8 +1408,8 @@
           "releasedAt": "2026-11-07T23:39:12.199Z"
         }
       ],
-      "version": "1.0.8",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.8.tgz"
+      "version": "1.0.9",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.9.tgz"
     }
   ]
 }
