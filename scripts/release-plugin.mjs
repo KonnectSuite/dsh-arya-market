@@ -20,6 +20,7 @@
  *   node ../dsh-arya-market/scripts/release-plugin.mjs --dry-run
  *   node ../dsh-arya-market/scripts/release-plugin.mjs --dir ../dsh-local-llm
  *   node ../dsh-arya-market/scripts/release-plugin.mjs --allow-dirty --skip-tests
+ *   node ../dsh-arya-market/scripts/release-plugin.mjs --no-github
  *   node ../dsh-arya-market/scripts/release-plugin.mjs --register --description-zh '…'
  *
  * Exit codes: 0 released and verified, 1 a gate failed, 2 refused before doing
@@ -73,6 +74,7 @@ try {
     'skip-build': { type: 'boolean', default: false },
     'skip-tests': { type: 'boolean', default: false },
     'no-sync': { type: 'boolean', default: false },
+    'no-github': { type: 'boolean', default: false },
     register: { type: 'boolean', default: false },
     'description-zh': { type: 'string' },
     'dist-tag': { type: 'string', default: 'latest' },
@@ -116,6 +118,20 @@ function gh(args) {
   const result = command(['gh', ...args], ROOT)
   if (result.status !== 0) throw new Failed(`gh ${args[0] ?? ''} failed: ${result.stderr}`)
   return result.stdout
+}
+
+/** The release notes are the CHANGELOG entry for this version, when it exists. */
+function releaseNotes(directory, version) {
+  const changelog = join(directory, 'CHANGELOG.md')
+  if (existsSync(changelog) === false) return `Published ${version}.\n`
+  const lines = readFileSync(changelog, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)
+  const start = lines.findIndex(line => line === `## ${version}` || line.startsWith(`## ${version} `))
+  if (start === -1) return `Published ${version}.\n`
+  let end = lines.length
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (lines[i].startsWith('## ')) { end = i; break }
+  }
+  return `${lines.slice(start, end).join('\n').trim()}\n`
 }
 
 /**
@@ -307,6 +323,48 @@ if (alreadyPublished === false) {
       return true
     }, { everyMs: 2500 })
     log(`registry serves ${name}@${version}`)
+  }
+}
+
+// ------------------------------------------------------------------- github
+//
+// npm and the catalogue are the release; the tag and the GitHub release are its
+// public record. The tag is cut AFTER the market index is regenerated and
+// committed, because a plugin that self-registers a listing pins it at a
+// tag-pinned jsDelivr URL: a tag whose tree carries the old index.json serves
+// the old listing for good. The step is advisory — a missing gh, an offline
+// push, a release that already exists must not undo a published npm version.
+
+if (options['no-github'] === true) {
+  log('github tag and release skipped (--no-github)')
+} else if (dryRun) {
+  log(`would run: node scripts/sync-market-index.mjs (when present), commit index.json, tag v${version}, push, gh release create v${version}`)
+} else {
+  step('github')
+  try {
+    const syncScript = join(directory, 'scripts', 'sync-market-index.mjs')
+    if (existsSync(syncScript)) {
+      interactive(['node', join('scripts', 'sync-market-index.mjs')], directory, 'sync-market-index')
+    }
+    if (command(['git', 'status', '--porcelain'], directory).stdout !== '') {
+      must(['git', 'add', 'index.json'], directory, 'git add index.json')
+      must(['git', 'commit', '-m', `index.json: ${version}`], directory, 'git commit')
+      log('committed the regenerated market index')
+    }
+    must(['git', 'push', 'origin', 'HEAD'], directory, 'git push')
+    const tag = `v${version}`
+    if (command(['git', 'tag', '-l', tag], directory).stdout === '') {
+      must(['git', 'tag', tag], directory, 'git tag')
+    }
+    const tagPush = command(['git', 'push', 'origin', tag], directory)
+    if (tagPush.status !== 0) throw new Failed(`git push origin ${tag}: ${tagPush.stderr.split(/\r?\n/)[0]}`)
+    const notesFile = join(scratch, 'release-notes.md')
+    writeFileSync(notesFile, releaseNotes(directory, version), 'utf8')
+    const created = gh(['release', 'create', tag, '--repo', sourceRepo, '--title', tag, '--notes-file', notesFile, '--latest=false'])
+    log(`release ${tag}: ${created.trim().split(/\r?\n/).at(-1)}`)
+  } catch (error) {
+    log(`warning: the github step stopped (${error instanceof Error ? error.message : String(error)})`)
+    log('  npm and the catalogue are released; tag the commit and create the release by hand when gh is reachable')
   }
 }
 

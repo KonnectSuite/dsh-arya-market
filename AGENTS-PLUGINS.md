@@ -81,7 +81,12 @@ minutes. Ask for approval once, with evidence.
   If the repository has a docs/locale parity test, it must pass.
 - A `HANDOFF.md` (or an equivalent state section) recording: current version, the commit it was
   built from, the published tarball digest, what was verified and where, and the known gaps.
-- A `CHANGELOG.md` or release notes: one entry per published version, newest first.
+- A `CHANGELOG.md` or release notes: one entry per published version, newest first. The entry for the
+  version being released becomes the notes of its GitHub release, so it states what a user gains.
+- A plugin that self-registers a market listing (`index.json` served from its own repository) must
+  regenerate that listing at every release — a hand-kept `index.json` drifts, and a pinned listing
+  serves the tag's tree forever. `scripts/sync-market-index.mjs` (rebuild it from npm's publish
+  times) is run by the release command; see gate 4.
 - No placeholder copy, no `TODO`, no "coming soon" in anything that ships.
 
 The reviewer's test: could someone who has never seen this repository install it from the market,
@@ -174,9 +179,14 @@ moment of publication rather than up to fifteen minutes later:
 node scripts/release-plugin.mjs --dir ../<plugin>
 ```
 
-It publishes, waits for the registry to serve the version, reconciles the catalogue, verifies the
-branch serves that version with that digest, and ends with the parity check — one receipt line, and
-nothing to remember. `--dry-run` prints everything it would do and writes nothing;
+It publishes, waits for the registry to serve the version, regenerates the plugin's `index.json`
+when the plugin ships `scripts/sync-market-index.mjs`, commits it, cuts the `v<version>` tag **after**
+that commit (a tag-pinned jsDelivr URL serves the tag's tree for good, so the tag must carry the
+fresh listing), pushes, creates the GitHub release with the `CHANGELOG.md` entry as its notes,
+reconciles the catalogue, verifies the branch serves that version with that digest, and ends with the
+parity check — one receipt line, and nothing to remember. The GitHub step is advisory: a missing `gh`
+or an offline push warns and continues, because npm and the catalogue are the release; `--no-github`
+skips it. `--dry-run` prints everything it would do and writes nothing;
 `node scripts/arya-release-status.mjs` prints the repo / npm / catalogue / verdict table for every
 plugin at any time, which is the question "is my update actually out there?" answered directly.
 
