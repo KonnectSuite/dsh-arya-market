@@ -2,7 +2,8 @@
   "legacyNames": [
     "dsh-factorytalk-view-use",
     "dsh-motionworks-iec-use",
-    "dsh-tool-motionworks-iec"
+    "dsh-tool-motionworks-iec",
+    "dsh-arya-image-gen"
   ],
   "plugins": [
     {
@@ -176,7 +177,7 @@
       }
     },
     {
-      "name": "dsh-arya-image-gen",
+      "name": "@aryacode/dsh-arya-image-gen",
       "channel": "market",
       "repo": "KonnectSuite/dsh-arya-image-gen",
       "workspace": "dsh-arya-image-gen",

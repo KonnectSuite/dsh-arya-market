@@ -3,7 +3,8 @@
   "legacyNames": [
     "dsh-factorytalk-view-use",
     "dsh-motionworks-iec-use",
-    "dsh-tool-motionworks-iec"
+    "dsh-tool-motionworks-iec",
+    "dsh-arya-image-gen"
   ],
   "plugins": [
     {
@@ -143,7 +144,7 @@
       }
     },
     {
-      "name": "dsh-arya-image-gen",
+      "name": "@aryacode/dsh-arya-image-gen",
       "source": "KonnectSuite/dsh-arya-image-gen",
       "description": {
         "en": "ComfyUI-native image generation for DeepSeek Harness: chat tools, infinite canvas, Studio workbench, workflow comparison, and built-in ComfyUI server control.",
