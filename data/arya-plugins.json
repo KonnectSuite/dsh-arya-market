@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-23T13:23:39.668Z",
+  "updated": "2026-11-23T22:46:43.876Z",
   "count": 7,
   "categories": {
     "arya": {
@@ -1281,6 +1281,11 @@
       "arya": true,
       "releases": [
         {
+          "version": "1.0.15",
+          "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.15.tgz",
+          "sha256": "0330519063e7b08a270cef507bfca09bf9a563191bf87d2bf32c0dc830be9bbf"
+        },
+        {
           "version": "1.0.14",
           "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.14.tgz",
           "sha256": "3ba878acd09496e0545eb87627509411e2051f227ae547b921a6115928131cb8"
@@ -1342,8 +1347,8 @@
           "releasedAt": "2026-11-07T23:39:12.199Z"
         }
       ],
-      "version": "1.0.14",
-      "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.14.tgz"
+      "version": "1.0.15",
+      "tarball": "https://registry.npmjs.org/@aryacode/dsh-plugin-arya-computer-use/-/dsh-plugin-arya-computer-use-1.0.15.tgz"
     },
     {
       "name": "@aryacode/dsh-arya-image-gen",
