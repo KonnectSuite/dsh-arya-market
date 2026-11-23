@@ -12,6 +12,7 @@ import { findDshInstallDir } from './dsh-install.ts'
 import { classifyPnpmFailure, HOST_NAMESPACE_RE, isTransientPnpmFailure } from './pnpm-compat.ts'
 import { conflictingEntryIds, dropFromManifest, hasDshManifest, hasLoadableEntry, mergeDuplicateReleaseAgeExcludes, pluginSubdirs, profileDir, readGitResolutionCommit, readInstalled, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, dropUnparseableBuildKeys } from './profile.ts'
 import { logEvent } from './log.ts'
+import { releaseLockedImages } from './locked-images.ts'
 import { registryNameOf } from './official-desktop.ts'
 import { hostedRepoKey } from './sources.ts'
 import { cleanOrphanedIgnored, cleanOrphanedStore } from './store.ts'
@@ -140,6 +141,8 @@ export async function withHoistRecovery(
   const repairProfilePolicy = options.preserveProfilePolicy !== true
   /** The option a recovery step needed and this host does not accept (#732). */
   let unavailableOption: string | null = null
+  /** The engine images this run moved aside so its swap could proceed. */
+  let releasedAside: { pid: number, name: string, path: string }[] = []
   // Before the FIRST run, not after a failure: the shadowed duplicate rule
   // (#732) hurts pnpm while it RESOLVES the dependency graph, so merging it
   // first is what keeps the command from failing at all — and it costs one
@@ -234,6 +237,38 @@ export async function withHoistRecovery(
       } else {
         logEvent('warn', 'install', `${failure.pkg ?? 'a host package'} is a peer the runtime provides and npm does not carry (#289) — retrying once with ${AUTO_INSTALL_PEERS_OFF}`)
         result = await run(profile, [pluginArgs[0], AUTO_INSTALL_PEERS_OFF, ...pluginArgs.slice(1)])
+      }
+    } else if (failure?.code === 'windows-file-locked' && process.platform === 'win32' && profileDirectory) {
+      // The classifier deliberately does NOT retry this case, and for the shape
+      // it was written for that is right: a `.node` loaded INTO the host process
+      // cannot be released by anything short of exiting, so a retry only turns
+      // one clear failure into several slow ones.
+      //
+      // There is a second shape under the same error text, and it IS fixable in
+      // place: the locked file is the executable IMAGE of a standalone engine a
+      // plugin runs as its own process — the desktop-automation and browser
+      // engines ship `*-win32-x64.exe` inside their package. Windows refuses to
+      // delete such an image while its process runs, but it does allow RENAMING
+      // it: the running process keeps its mapping, and the name is free the
+      // moment the file is moved. Measured on the reporter's own profile
+      // (agent-browser-win32-x64.exe, two failed 1.0.14 updates, ~64 s of pnpm
+      // each): renaming the image aside and copying it back under its original
+      // name let the same `pnpm add` complete on the next attempt.
+      //
+      // So scan for exactly that shape and act only when it is found. Nothing
+      // is killed: the user's running engine keeps running, and the copy-back
+      // means the plugin can still start a fresh one while pnpm works. When the
+      // scan finds nothing the failure is the loaded-module shape, and the
+      // classifier's advice (quit the app) is the honest answer — no retry.
+      const released = await releaseLockedImages(profileDirectory)
+      if (released.length > 0) {
+        releasedAside = released
+        logEvent(
+          'warn',
+          'install',
+          `pnpm's swap was blocked by a plugin's own running engine image (${released.map(r => `${r.name} pid ${r.pid}`).join(', ')}) — moved each image aside and put it back under its original name, then retrying the same command (nothing was stopped)`,
+        )
+        result = await run(profile, pluginArgs)
       }
     } else if (failure?.code === 'profile-file-locked') {
       // #786 follow-up: the profile's own file was momentarily held, so the
@@ -401,6 +436,16 @@ export async function withHoistRecovery(
       note = `这台宿主（官方桌面端）自己执行安装，不接受市场附加的 pnpm 参数（${unavailableOption}），所以这一步没有自动重试。 / This host (the official desktop app) runs the install itself and takes no pnpm options from the market (${unavailableOption}), so that automatic retry could not be attempted.`
     }
     result = { ...result, stderr: `${result.stderr}\n\n${note}` }
+  }
+  if (releasedAside.length > 0 && !ok(result) && !result.cancelled) {
+    // The rename-aside was attempted and the swap still failed, so the
+    // classified text above — written for the case where nothing at all could
+    // be released — would now read as if the market had only advised quitting.
+    // Say what was tried, and that the block is therefore wider than one engine.
+    result = {
+      ...result,
+      stderr: `${result.stderr}\n\n市场已经试过更进一步的自救：把上面被占用的引擎程序（${releasedAside.map(r => `${r.name}，进程 ${r.pid}`).join('、')}）改名挪出包目录，并在原名下放回同一份文件——没有停止任何进程——然后重跑同一条命令，仍然失败。这说明占住目录的不只那一个引擎。可行的做法：完全退出 DeepSeek Harness（不是刷新页面）再重开，然后再更新一次；若还是失败，先在「设置 → 插件」停用会启动这个引擎的插件，重启后再更新，成功后重新启用它。 / The market went further than advising a restart: it moved the blocked engine image (${releasedAside.map(r => `${r.name} (pid ${r.pid})`).join(', ')}) out of the package directory and put the same bytes back under its original name — no process was stopped — and ran the same command again, and the swap still failed. So something besides that engine is holding the directory. What works: quit DeepSeek Harness completely (not a page refresh), start it again, and update once more; if it still fails, disable the plugin that starts this engine in Settings → Plugins, restart, update, then re-enable it.`,
+    }
   }
   // pnpm can append a second rule even on success (#883, #878), including
   // after a recovery retry or an official Desktop manager install. Repair

@@ -5,7 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { InstallResult } from '../src/dsh-cli.ts'
@@ -15,6 +16,7 @@ import {
   parsePrepareNotAllowed, pnpmNeverStarted, pnpmRefusedYoungRelease, refusedReleaseAgePackage, removeDanglingHostBridge,
   retargetCollections, RELEASE_AGE_OVERRIDE, updateApplied, validateAddedPlugins, withHoistRecovery,
 } from '../src/install.ts'
+import { findLockedImagesUnder } from '../src/locked-images.ts'
 import { dropUnparseableBuildKeys, profileDir } from '../src/profile.ts'
 import * as profileHelpers from '../src/profile.ts'
 import { canCreateSymlink } from './symlink-support.ts'
@@ -670,6 +672,157 @@ describe('withHoistRecovery', () => {
       const result = await withHoistRecovery(failing, 'desktop', ['add', spec], undefined, { marketFlags: false })
       expect(result.stderr).not.toContain('设置 → 插件')
       expect(result.stderr).not.toContain("the \"run it from the command line\" option above is not available here")
+    })
+  })
+
+  describe('a package whose own engine image is running (the desktop engines, update-in-place)', () => {
+    // The desktop-automation and browser engines ship a standalone
+    // *-win32-x64.exe inside their own package, and the plugin starts that
+    // engine per call. Windows refuses to delete such an image while its
+    // process runs, and pnpm's swap does exactly that — it stages the new
+    // version in <name>_tmp_<n> and then removes the old directory — so
+    // updating those plugins failed with ERR_PNPM_EPERM twice ~64s apart on
+    // the reporter's own profile while the plugin itself worked fine. A
+    // running image CAN be renamed, so the repair moves it aside, puts the
+    // same bytes back under the original name, and reruns the same command.
+    // Nothing here is faked: the fixture starts a real process from a real
+    // copy of a real .exe inside a real node_modules, because the assertion
+    // that matters is a Windows one and no fake runner can make it.
+    const SYSTEM_PING = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'ping.exe')
+    const engineIt = process.platform === 'win32' && existsSync(SYSTEM_PING) ? it : it.skip
+
+    function engineProfile(): { profileDirectory: string, pkg: string, image: string } {
+      const profileDirectory = mkdtempSync(join(tmpdir(), 'dshm-engine-profile-'))
+      const pkg = join(profileDirectory, 'node_modules', 'arya-engine')
+      const image = join(pkg, 'bin', 'arya-probe-engine.exe')
+      mkdirSync(join(pkg, 'bin'), { recursive: true })
+      copyFileSync(SYSTEM_PING, image)
+      return { profileDirectory, pkg, image }
+    }
+
+    // The signature pnpm prints when the rename-over is refused, built from
+    // the fixture's own path so the classifier names the same package the
+    // repair is looking at.
+    const lockedSignature = (pkg: string) => String.raw`[ERR_PNPM_EPERM] [importPackage ${pkg}] EPERM: operation not permitted, rename '${pkg}_tmp_26500_6' -> '${pkg}'`
+
+    // The repair only runs when the process scan can see the engine, so the
+    // fixture waits for that instead of sleeping and hoping.
+    async function engineIsVisible(profileDirectory: string, pid: number | undefined): Promise<boolean> {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (findLockedImagesUnder(profileDirectory).some(row => row.pid === pid)) return true
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      return false
+    }
+
+    // The repair's own cleanup contract: the image it moved aside is
+    // delete-pending while the engine lives, so the temp profile cannot be
+    // removed until the process is reaped. Polling process.kill(pid, 0) is not
+    // enough on Windows — a terminated process the parent has not reaped yet
+    // still answers OpenProcess — so this waits on the exit event.
+    async function stopEngine(child: ChildProcess): Promise<void> {
+      const alreadyGone = child.exitCode !== null || child.signalCode !== null
+      child.kill()
+      if (!alreadyGone) {
+        await new Promise<void>(resolve => {
+          child.once('exit', () => resolve())
+          setTimeout(resolve, 5000)
+        })
+      }
+      // The pending delete completes a moment after the exit event, not at it.
+      await new Promise(resolve => setTimeout(resolve, 400))
+    }
+
+    engineIt('retries the same command once the running image is moved aside, without stopping anything', async () => {
+      const { profileDirectory, pkg, image } = engineProfile()
+      const child = spawn(image, ['-n', '60', '127.0.0.1'], { stdio: 'ignore', windowsHide: true })
+      try {
+        expect(await engineIsVisible(profileDirectory, child.pid)).toBe(true)
+        const calls: string[][] = []
+        let failFirst = true
+        const run = async (_profile: string, args: string[]): Promise<InstallResult> => {
+          calls.push(args)
+          if (failFirst) {
+            failFirst = false
+            return { exitCode: 1, timedOut: false, stdout: '', stderr: lockedSignature(pkg), cancelled: false }
+          }
+          return ok
+        }
+        const argv = ['add', 'arya-engine@1.0.14']
+        const result = await withHoistRecovery(run, 'desktop', argv, profileDirectory, { marketFlags: false })
+        expect(result.exitCode).toBe(0)
+        // The same argv, no option added: the official desktop bridge takes
+        // none, and none is needed — which is why this retry works there too
+        // (#732).
+        expect(calls).toEqual([argv, argv])
+        // A success reports nothing extra: the route's open-file rollback never
+        // runs, and the user sees a clean update.
+        expect(result.stderr).toBe('')
+        // The engine was never stopped, and its file is back under its own name.
+        const pid = child.pid as number
+        expect(() => process.kill(pid, 0)).not.toThrow()
+        expect(existsSync(image)).toBe(true)
+        // The package directory can now be removed while the process still
+        // lives: that removal IS the swap pnpm was refused.
+        expect(() => rmSync(pkg, { recursive: true })).not.toThrow()
+      } finally {
+        // The repair leaves a renamed, delete-pending image behind while the
+        // process lives, so cleanup waits for the exit instead of racing it.
+        await stopEngine(child)
+        rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+      }
+    })
+
+    engineIt('retries nothing when no image inside the package is running (#798 stays honest)', async () => {
+      // The same locked signature and the same profile directory, but nothing
+      // is running out of it. That is the loaded-module shape — a .node addon
+      // the host itself holds — where no image here can be freed, so a retry
+      // cannot win and the advice to quit the app is the honest answer.
+      const { profileDirectory, pkg } = engineProfile()
+      try {
+        const calls: string[][] = []
+        const run = async (_profile: string, args: string[]): Promise<InstallResult> => {
+          calls.push(args)
+          return { exitCode: 1, timedOut: false, stdout: '', stderr: lockedSignature(pkg), cancelled: false }
+        }
+        const argv = ['add', 'arya-engine@1.0.14']
+        const result = await withHoistRecovery(run, 'desktop', argv, profileDirectory, { marketFlags: false })
+        expect(result.exitCode).toBe(1)
+        // The one command, then only the orphan-store probe — never a retry.
+        expect(calls).toEqual([argv, ['store', 'path']])
+        expect(result.stderr).toContain('设置 → 插件')
+        expect(result.stderr).not.toContain('市场已经试过更进一步的自救')
+      } finally {
+        rmSync(profileDirectory, { recursive: true, force: true })
+      }
+    })
+
+    engineIt('says what it already tried when the retry still fails, so the next step is not the same button', async () => {
+      const { profileDirectory, pkg, image } = engineProfile()
+      const child = spawn(image, ['-n', '60', '127.0.0.1'], { stdio: 'ignore', windowsHide: true })
+      try {
+        expect(await engineIsVisible(profileDirectory, child.pid)).toBe(true)
+        const calls: string[][] = []
+        const run = async (_profile: string, args: string[]): Promise<InstallResult> => {
+          calls.push(args)
+          return { exitCode: 1, timedOut: false, stdout: '', stderr: lockedSignature(pkg), cancelled: false }
+        }
+        const argv = ['add', 'arya-engine@1.0.14']
+        const result = await withHoistRecovery(run, 'desktop', argv, profileDirectory, { marketFlags: false })
+        // The locked command, the retry, then the orphan-store probe.
+        expect(calls).toEqual([argv, argv, ['store', 'path']])
+        // A user has to be able to tell this apart from a plain locked-file
+        // failure: the market already did the extra step, so the next thing to
+        // try is a full restart or disabling the plugin, not the same Update
+        // button pressed a third time.
+        expect(result.stderr).toContain('市场已经试过更进一步的自救')
+        expect(result.stderr).toContain('The market went further than advising a restart')
+      } finally {
+        // The repair leaves a renamed, delete-pending image behind while the
+        // process lives, so cleanup waits for the exit instead of racing it.
+        await stopEngine(child)
+        rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+      }
     })
   })
 
